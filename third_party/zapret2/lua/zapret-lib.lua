@@ -1290,7 +1290,7 @@ function rawsend_payload_segmented(desync, payload, seq, options)
 end
 
 
--- check if desync.outgoing complies with arg.dir or def if it's not present or "out" if they are not present both. dir can be "in","out","any"
+-- check if desync.outgoing comply with arg.dir or def if it's not present or "out" of they are not present both. dir can be "in","out","any"
 function direction_check(desync, def)
 	local dir = desync.arg.dir or def or "out"
 	return desync.outgoing and dir~="in" or not desync.outgoing and dir~="out"
@@ -1314,7 +1314,7 @@ function payload_match_filter(l7payload, l7payload_filter, def)
 	local pl = neg and string.sub(argpl,2) or argpl
 	return neg ~= (in_list(pl, "all") or in_list(pl, l7payload) or in_list(pl, "known") and l7payload~="unknown" and l7payload~="empty")
 end
--- check if desync payload type complies with payload type list in arg.payload
+-- check if desync payload type comply with payload type list in arg.payload
 -- if arg.payload is not present - check for known payload - not empty and not unknown (nfqws1 behavior without "--desync-any-protocol" option)
 -- if arg.payload is prefixed with '~' - it means negation
 function payload_check(desync, def)
@@ -1863,7 +1863,7 @@ function dissect_url(url)
 		creds = string.sub(url,p1,pend-1)
 		p1 = pend+1
 	end
-	pstart,pend = string.find(url,"[/?#]",p1)
+	pstart,pend = string.find(url,"/",p1,true)
 	if pend then
 		if pend==pb then
 			uri = string.sub(url,pb)
@@ -2281,32 +2281,21 @@ function quic_tvb(data, offset)
 		return bitand(u32(data,offset),0x3FFFFFFF), 4
 	elseif size==3 then
 		if (offset+7)>#data then return end
-		-- only lua 5.3+ has 64-bit integer type. others can't store 64-bit integers. return raw string if the value cannot fit.
-		local msb = bitand(u32(data,offset),0x3FFFFFFF)
-		-- lua 5.3+ has math.type function, older lua and luajit - don't
-		if math.type==nil and msb>0x1FFFFF then
-			return string.sub(data,offset,offset+7), 8
-		else
-			return msb * 0x100000000 + u32(data,offset+4), 8
-		end
+		-- only lua 5.3+ can handle this. others can't store 64-bit integers
+		return bitand(u32(data,offset),0x3FFFFFFF) * 0x100000000 + u32(data,offset+4), 8
 	end
 end
 -- quic-style tvb reconstruct
 function bquic_tvb(v)
-	if type(v)=="string" then
-		-- raw string. do not do anything, just return it
-		return v
-	else
-		if v<0x40 then
-			return bu8(v)
-		elseif v<0x4000 then
-			return bu16(v + 0x4000)
-		elseif v<0x40000000 then
-			return bu32(v + 0x80000000)
-		elseif v<0x4000000000000000 then
-			-- only lua 5.3+ can handle 64-bit int !
-			return bu32(divint(v, 0x100000000) + 0xC0000000) .. bu32(v % 0x100000000)
-		end
+	if v<0x40 then
+		return bu8(v)
+	elseif v<0x4000 then
+		return bu16(v + 0x4000)
+	elseif v<0x40000000 then
+		return bu32(v + 0x80000000)
+	elseif v<0x4000000000000000 then
+		-- only lua 5.3+ can handle 64-bit int !
+		return bu32(divint(v, 0x100000000) + 0xC0000000) .. bu32(v % 0x100000000)
 	end
 end
 
@@ -2430,7 +2419,7 @@ function tls_dissect_ext(ext)
 			off = off + size
 			left = left - size
 			len, size = quic_tvb(ext.data, off)
-			if type(len)~="number" then return end
+			if not len then return end
 			off = off + size
 			left = left - size
 			if len > left then return end

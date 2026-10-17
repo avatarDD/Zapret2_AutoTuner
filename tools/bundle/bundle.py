@@ -122,6 +122,16 @@ def main():
         log(f"downloading {name} from {lock['repo']} {lock['tag']}")
         data = http_get(asset["browser_download_url"])
         digest = (asset.get("digest") or "").removeprefix("sha256:") or None
+        sums = [a for a in rel.get("assets", []) if a["name"] == "sha256sum.txt"]
+        if sums:
+            listed = None
+            for line in http_get(sums[0]["browser_download_url"]).decode("utf-8", "replace").splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[-1].lstrip("*").split("/")[-1] == name:
+                    listed = parts[0].lower()
+            if listed and listed != sha256(data):
+                fail(f"{name}: sha256 does not match the release's sha256sum.txt ({listed})")
+            log(f"{name}: sha256sum.txt of the release " + ("matches" if listed else "has no line for it"))
 
     actual = sha256(data)
     pinned = lock.get("sha256") or ""

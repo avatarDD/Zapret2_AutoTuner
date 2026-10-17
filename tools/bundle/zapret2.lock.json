@@ -1,7 +1,7 @@
 {
   "repo": "bol-van/zapret2",
-  "tag": "v1.0.6",
-  "version": "1.0.6",
+  "tag": "v1.0.5.2",
+  "version": "1.0.5.2",
   "asset_pattern": "^zapret2-v[0-9.]+\\.zip$",
   "sha256": "",
   "lua_compat": 6,

@@ -9,7 +9,7 @@ public sealed class Zapret2BundleTests : IDisposable
     public void Dispose() => _dir.Delete(true);
 
     [Theory]
-    [InlineData("github version v1.0.6 (a1adf7b) lua_compat_ver 6", "1.0.6", 6)]
+    [InlineData("github version v1.0.5.2 (6b6c63e) lua_compat_ver 6", "1.0.5.2", 6)]
     [InlineData("self-built version Oct  4 2026 10:18:18 lua_compat_ver 6", null, 6)]
     [InlineData("garbage", null, null)]
     public void Parses_engine_version(string output, string? version, int? compat)

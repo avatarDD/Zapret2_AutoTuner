@@ -1,9 +1,9 @@
 ---
 name: nfqws2-lua
-description: Строгий справочник Lua-библиотеки zapret2 1.0.6 (zapret-lib, zapret-antidpi, zapret-auto, zapret-obfs, zapret-pcap) — все функции --lua-desync, их аргументы и умолчания, стандартные блоки fooling/ipid/ipfrag/rawsend/reconstruct, маркеры позиций, tls_mod, блобы, оркестраторы, написание своих функций. Читать перед генерацией, мутацией или проверкой любой стратегии.
+description: Строгий справочник Lua-библиотеки zapret2 1.0.5.2 (zapret-lib, zapret-antidpi, zapret-auto, zapret-obfs, zapret-pcap) — все функции --lua-desync, их аргументы и умолчания, стандартные блоки fooling/ipid/ipfrag/rawsend/reconstruct, маркеры позиций, tls_mod, блобы, оркестраторы, написание своих функций. Читать перед генерацией, мутацией или проверкой любой стратегии.
 ---
 
-# Lua-библиотека zapret2 (compat 6, v1.0.6)
+# Lua-библиотека zapret2 (compat 6, v1.0.5.2)
 
 Источник истины: `lua/zapret-antidpi.lua` (комментарии `-- arg :` над каждой
 функцией), `lua/zapret-auto.lua`, `docs/manual.en.md` (главы «zapret-antidpi»,

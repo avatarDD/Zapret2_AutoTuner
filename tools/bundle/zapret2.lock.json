@@ -3,7 +3,7 @@
   "tag": "v1.0.5.2",
   "version": "1.0.5.2",
   "asset_pattern": "^zapret2-v[0-9.]+\\.zip$",
-  "sha256": "",
+  "sha256": "f585590bea6da82ac2c74926f6ac17e6204ee8b53e455c2ba2edae0c58c5d4ac",
   "lua_compat": 6,
   "rids": {
     "linux-x64": { "dir": "binaries/linux-x86_64", "files": ["nfqws2"] },

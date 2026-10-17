@@ -68,7 +68,7 @@ jobs:
       - name: Bundle zapret2
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python tools/bundle/bundle.py --rid ${{ matrix.rid }}
+        run: python tools/bundle/bundle.py --rid ${{ matrix.rid }} --strict
       - name: Publish App and Agent
         shell: bash
         run: |

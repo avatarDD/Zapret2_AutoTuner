@@ -29,6 +29,11 @@ service Agent {
   // TCP/UDP endpoints owned by a process (ProcessTracker, "choose a program" targets).
   rpc ListConnections (ListConnectionsRequest) returns (ListConnectionsReply);
 
+  // Replaces the AutoTuner block of the system hosts file (dpi-diagnostics §2a) after a backup, then flushes
+  // the DNS cache. An empty list removes the block. Pins stay after the Agent exits: they are the user's choice.
+  rpc PinHosts (PinHostsRequest) returns (PinHostsReply);
+  rpc ListHostsPins (ListHostsPinsRequest) returns (ListHostsPinsReply);
+
   // Stops everything, removes rules and exits.
   rpc Shutdown (ShutdownRequest) returns (ShutdownReply);
 }
@@ -136,6 +141,29 @@ message Connection {
 
 message ListConnectionsReply {
   repeated Connection connections = 1;
+}
+
+message HostsPin {
+  string host = 1;
+  string address = 2;
+}
+
+message PinHostsRequest {
+  repeated HostsPin pins = 1;
+}
+
+message PinHostsReply {
+  string backup_path = 1;   // copy of the hosts file before the change
+  bool dns_flushed = 2;
+  repeated HostsPin pins = 3;
+}
+
+message ListHostsPinsRequest {
+}
+
+message ListHostsPinsReply {
+  string path = 1;
+  repeated HostsPin pins = 2;
 }
 
 message ShutdownRequest {

@@ -70,7 +70,8 @@ internal sealed class TestServer : IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _loop;
 
-    public TestServer(ServerMode mode, X509Certificate2? cert = null, int bodyBytes = 200_000, bool chunked = false, int status = 200, string? location = null)
+    public TestServer(ServerMode mode, X509Certificate2? cert = null, int bodyBytes = 200_000, bool chunked = false, int status = 200, string? location = null,
+        IPAddress? bind = null, int port = 0)
     {
         Mode = mode;
         Cert = cert;
@@ -78,7 +79,7 @@ internal sealed class TestServer : IAsyncDisposable
         Chunked = chunked;
         Status = status;
         Location = location;
-        _listener = new TcpListener(IPAddress.Loopback, 0);
+        _listener = new TcpListener(bind ?? IPAddress.Loopback, port);
         _listener.Start();
         _loop = Task.Run(LoopAsync);
     }

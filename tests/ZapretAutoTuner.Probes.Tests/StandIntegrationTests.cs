@@ -122,6 +122,32 @@ public sealed class StandIntegrationTests(ITestOutputHelper output) : IAsyncLife
         Assert.InRange(cut.StalledAt ?? cut.BytesIn, Classifier.CutoffMin, Classifier.CutoffMax);
     }
 
+    [Fact]
+    public async Task Other_ip_is_found_when_two_of_three_are_blocked()
+    {
+        if (!_up)
+            return;
+        // PLAN 2.5a: the domain has three addresses, two blocked by IP and by port; the third one is found
+        var r = await AlternateIpSearch.RunAsync("open.test", dns: null, new AlternateIpOptions
+        {
+            Path = "/big",
+            Subnets = [],
+            AddressFilter = _ => true,
+            Exclude = [IPAddress.Parse($"{Net}.14")],
+            Sources = [new Fixed([$"{Net}.14", $"{Net}.15", $"{Net}.11"])],
+            TweakHttp = o => o with { TrustedRoots = TestCerts.Roots, ConnectTimeout = TimeSpan.FromSeconds(2) },
+        });
+        Assert.True(r.Found, string.Join("\n", r.Checked));
+        Assert.Equal($"{Net}.11", r.Best.Single().Candidate.Address.ToString());
+        Assert.True(r.Best[0].OpensFully);
+    }
+
+    private sealed class Fixed(string[] ips) : IAltIpCandidateSource
+    {
+        public Task<IReadOnlyList<AltIpCandidate>> GetAsync(string host, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<AltIpCandidate>>([.. ips.Select(i => new AltIpCandidate(IPAddress.Parse(i), "stand"))]);
+    }
+
     /// <summary>Progress&lt;T&gt; posts to the thread pool; tests need the calls in order.</summary>
     private sealed class SyncProgress<T>(Action<T> report) : IProgress<T>
     {

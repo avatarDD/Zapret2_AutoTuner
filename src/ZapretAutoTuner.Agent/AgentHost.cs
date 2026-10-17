@@ -30,6 +30,7 @@ internal sealed class AgentHost : IAsyncDisposable
         Firewall = OperatingSystem.IsLinux() ? new FirewallManager(State, Sysctl, EngineManager.FwMark) : null;
         Engines = new EngineManager(options, State, Firewall);
         Captures = new CaptureManager();
+        Hosts = new HostsManager(options.HostsFile ?? Core.Hosts.HostsFile.DefaultPath, options.DataDir!);
     }
 
     public AgentOptions Options { get; }
@@ -43,6 +44,8 @@ internal sealed class AgentHost : IAsyncDisposable
     public EngineManager Engines { get; }
 
     public CaptureManager Captures { get; }
+
+    public HostsManager Hosts { get; }
 
     /// <summary>Set when the Agent should exit (UI lost, Shutdown).</summary>
     public CancellationTokenSource Stopping { get; } = new();

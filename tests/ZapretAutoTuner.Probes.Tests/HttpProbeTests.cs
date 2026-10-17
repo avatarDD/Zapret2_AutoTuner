@@ -20,7 +20,8 @@ public class HttpProbeTests
             Tls = s.Cert is not null,
             TrustedRoots = TestCerts.Roots,
             StallTimeout = TimeSpan.FromMilliseconds(800),
-            HandshakeTimeout = TimeSpan.FromSeconds(2),
+            // a loaded Windows runner has taken over 2 s for the test server's first Schannel handshake
+            HandshakeTimeout = TimeSpan.FromSeconds(5),
             MaxTime = TimeSpan.FromSeconds(10),
         };
         return f is null ? o : f(o);

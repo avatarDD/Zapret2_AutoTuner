@@ -1,4 +1,4 @@
-namespace ZapretAutoTuner.Probes;
+namespace ZapretAutoTuner.Core.Diagnostics;
 
 /// <summary>Verification levels from dpi-diagnostics §3.</summary>
 public enum ProbeLevel

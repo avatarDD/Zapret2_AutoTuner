@@ -1,4 +1,4 @@
-using ZapretAutoTuner.Probes;
+using ZapretAutoTuner.Core.Diagnostics;
 
 namespace ZapretAutoTuner.Probes.Tests;
 

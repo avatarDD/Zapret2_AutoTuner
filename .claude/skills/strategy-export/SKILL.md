@@ -319,6 +319,21 @@ zapret-gui читает каталоги `catalogs/*.txt` (INI-секции ст
 До слияния этих доработок AutoTuner экспортирует §3.1/§3.2/§3.3 и честно
 пишет, какие файлы создать вручную.
 
+## 4b. Профили по ipset провайдера
+
+Стратегии режима «Хостинг-провайдеры» (`dpi-diagnostics` §4a) фильтруются
+по ipset, а не по hostlist:
+
+| Цель | Как |
+|---|---|
+| zapret2 | файл `/opt/zapret2/ipset/zt-<provider>-ipset.txt`, в профиле `--ipset=…` |
+| winws2 | `lists/zt-<provider>-ipset.txt` + `--ipset=…`. В `--wf-raw-filter` диапазоны не переносим (лимит 64 KB): перехват по портам, отбор по ipset внутри winws2 |
+| nfqws2-keenetic | профиль в `NFQWS_ARGS_CUSTOM` с `--ipset=/opt/etc/nfqws2/lists/zt-<provider>-ipset.list` и `--new`, чтобы он шёл раньше общих. `NFQWS_ARGS_IPSET` не трогаем: он общий |
+| zapret-gui | ipset с именем `<provider>-ipset` (проходит `IPSET_NAMESPACE_RE`), создаётся через `/api/ipsets/create` + `/api/ipsets/<name>`. В args `--ipset=lists/<provider>-ipset.txt` |
+
+Ipset агрегируется (слияние соседних префиксов). В README экспорта —
+дата снятия диапазонов и совет обновлять их.
+
 ## 4a. Закрепления IP (hosts)
 
 Если решение включает закреплённые IP (`dpi-diagnostics` §2a), каждый

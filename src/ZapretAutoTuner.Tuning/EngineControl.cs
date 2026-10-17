@@ -3,8 +3,22 @@ using ZapretAutoTuner.Protocol;
 
 namespace ZapretAutoTuner.Tuning;
 
-/// <summary>Raised when the Agent refuses to start an engine (Validator, policy, firewall).</summary>
-public sealed class EngineRefusedException(string message) : Exception(message);
+/// <summary>Raised when the Agent refuses to start an engine; <see cref="Stage"/> says which check refused it.</summary>
+public sealed class EngineRefusedException(string stage, string message) : Exception(message)
+{
+    /// <summary>"validator" or "policy" (the strategy is wrong), "firewall" or "engine" (the machine is not ready).</summary>
+    public string Stage { get; } = stage;
+
+    /// <summary>The refusal is about the machine, not the strategy: every other strategy would be refused too.</summary>
+    public bool Infrastructure => Stage is not ("validator" or "policy");
+
+    /// <summary>The Agent's "stage: problems" text.</summary>
+    public static EngineRefusedException FromAgent(string detail)
+    {
+        int colon = detail.IndexOf(':', StringComparison.Ordinal);
+        return new EngineRefusedException(colon > 0 ? detail[..colon] : "engine", detail);
+    }
+}
 
 /// <summary>Starting and stopping engine instances; the Agent does it for real, tests fake it.</summary>
 public interface IEngineControl
@@ -28,7 +42,7 @@ public sealed class AgentEngineControl(Agent.AgentClient client) : IEngineContro
         }
         catch (RpcException e) when (e.StatusCode is StatusCode.InvalidArgument or StatusCode.FailedPrecondition or StatusCode.PermissionDenied)
         {
-            throw new EngineRefusedException(e.Status.Detail);
+            throw EngineRefusedException.FromAgent(e.Status.Detail);
         }
     }
 

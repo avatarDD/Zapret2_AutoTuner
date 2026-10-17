@@ -140,6 +140,7 @@ public sealed record SearchOptions
 
     public TimeSpan PunishPause { get; init; } = TimeSpan.FromSeconds(60);
 
+    /// <summary>Pauses per punishment before the search gives up; the count starts again with every punishment.</summary>
     public int MaxPunishPauses { get; init; } = 3;
 
     /// <summary>Strategies that worked for others on this provider, tried first.</summary>
@@ -164,7 +165,8 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
     private FoundStrategy? _bestPartial;
     private int _done;
     private int _consecutiveNoConnect;
-    private int _pauses;
+    private int _seriesRun;
+    private int _nextAsk;
     private TimeSpan _strategyTime;
     private int _strategiesTimed;
 
@@ -176,6 +178,7 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
         var plan = options.Priors.Concat(set.Candidates).ToList();
         var catalog = FamilyCatalog.Default;
         var reason = SearchStopReason.Exhausted;
+        _nextAsk = options.StopAfterFound;
         try
         {
             for (int i = 0; i < plan.Count; i++)
@@ -192,22 +195,23 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
                     stage == SearchStage.Priors ? $"Trying a strategy that worked on your provider: {c.Family}" : $"Trying {c.Family}: {c.Strategy}");
 
                 var started = _sw.Elapsed;
+                int seriesBefore = _seriesRun;
                 var eff = await ScreenAsync(c, ct).ConfigureAwait(false);
-                if (eff is null)
-                {
-                    reason = SearchStopReason.Punished;
-                    break;
-                }
-                if (eff.Value.Partial)
-                    await RefineAsync(c, eff.Value, remaining, ct).ConfigureAwait(false);
-                else if (eff.Value.Working)
-                    AddFound(new FoundStrategy(c, eff.Value, Score(c.Strategy, eff.Value)));
+                if (eff.Partial)
+                    await RefineAsync(c, eff, remaining, ct).ConfigureAwait(false);
+                else if (eff.Working)
+                    AddFound(new FoundStrategy(c, eff, Score(c.Strategy, eff)));
                 _done++;
-                _strategyTime += _sw.Elapsed - started;
-                _strategiesTimed++;
+                // results taken from an interrupted session cost nothing and would make the estimate collapse
+                if (_seriesRun > seriesBefore)
+                {
+                    _strategyTime += _sw.Elapsed - started;
+                    _strategiesTimed++;
+                }
                 log?.Checkpoint(i);
 
-                if (_found.Count >= options.StopAfterFound && _found.Count - options.StopAfterFound == 0)
+                // asked once per StopAfterFound new strategies: "continue" means look for that many more
+                if (options.StopAfterFound > 0 && _found.Count >= _nextAsk)
                 {
                     bool more = options.AskContinue is not null && await options.AskContinue(Ranked(), ct).ConfigureAwait(false);
                     if (!more)
@@ -215,12 +219,17 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
                         reason = SearchStopReason.EnoughFound;
                         break;
                     }
+                    _nextAsk = _found.Count + options.StopAfterFound;
                 }
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             reason = SearchStopReason.Cancelled;
+        }
+        catch (PunishedException)
+        {
+            reason = SearchStopReason.Punished;
         }
 
         var ranked = Ranked();
@@ -248,21 +257,23 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
         return family is not null && family.SkipIfWorking.Any(id => _found.Any(f => f.Candidate.Family == id));
     }
 
-    /// <summary>Runs the screening attempts; null when punishment did not lift.</summary>
-    private async Task<Efficiency?> ScreenAsync(StrategyCandidate c, CancellationToken ct)
+    /// <summary>Runs the screening attempts. Throws <see cref="PunishedException"/> when punishment did not lift.</summary>
+    private async Task<Efficiency> ScreenAsync(StrategyCandidate c, CancellationToken ct)
     {
-        if (options.AlreadyTried.TryGetValue(c.Key, out var known))
-            return known;
+        if (options.AlreadyTried.TryGetValue(c.Key, out var known) && known.Attempts > 0)
+        {
+            if (!known.Partial || known.Attempts >= options.PartialAttempts)
+                return known;
+            // interrupted before the partial strategy got its extra attempts
+            var rest = await RunAsync(c, options.PartialAttempts - known.Attempts, _ => false, ct).ConfigureAwait(false);
+            return known.Add(Count(rest));
+        }
         // a dead strategy costs two attempts: one failure may be a lost packet, two with no success are not
         var outcomes = await RunAsync(c, options.Attempts, o => o.Count(x => !x.Ok) >= 2 && !o.Any(x => x.Ok), ct).ConfigureAwait(false);
-        if (outcomes is null)
-            return null;
         var eff = Count(outcomes);
         if (eff.Partial && eff.Attempts < options.PartialAttempts)
         {
             var more = await RunAsync(c, options.PartialAttempts - eff.Attempts, _ => false, ct).ConfigureAwait(false);
-            if (more is null)
-                return null;
             eff = eff.Add(Count(more));
         }
         return eff;
@@ -278,6 +289,8 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
         var beam = new List<(StrategyCandidate C, Efficiency E, string Path)> { (parent, parentEff, "") };
         int budget = options.RefineBudget;
         var deadline = _sw.Elapsed + options.RefineTime;
+        try
+        {
         while (budget > 0 && _sw.Elapsed < deadline && beam.Count > 0)
         {
             var next = new List<(StrategyCandidate C, Efficiency E, string Path)>();
@@ -293,12 +306,15 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
                     var child = c with { Strategy = m.Strategy };
                     Report(SearchStage.Refining, child, remaining,
                         $"Довожу частично рабочую ({e}): {m.What}", $"Refining a partly working one ({e}): {m.What}");
-                    // a child that can no longer beat the parent stops early
-                    int allowedFailures = options.PartialAttempts - (int)Math.Ceiling(e.Rate * options.PartialAttempts);
-                    var outcomes = await RunAsync(child, options.PartialAttempts, o => o.Count(x => !x.Ok) > allowedFailures, ct).ConfigureAwait(false);
-                    if (outcomes is null)
-                        return;
-                    var ce = Count(outcomes);
+                    Efficiency ce;
+                    if (options.AlreadyTried.TryGetValue(child.Key, out var known) && known.Attempts > 0)
+                        ce = known; // tried before the session was interrupted
+                    else
+                    {
+                        // a child that can no longer beat the parent stops early
+                        int allowedFailures = options.PartialAttempts - (int)Math.Ceiling(e.Rate * options.PartialAttempts);
+                        ce = Count(await RunAsync(child, options.PartialAttempts, o => o.Count(x => !x.Ok) > allowedFailures, ct).ConfigureAwait(false));
+                    }
                     bool accepted = ce.ClearlyBetterThan(e);
                     log?.Tuning(c.Strategy, m, ce, accepted);
                     var childPath = path.Length == 0 ? m.What : path + " → " + m.What;
@@ -315,41 +331,55 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
             }
             beam = [.. next.OrderByDescending(x => x.E.WilsonLower).Take(options.BeamWidth)];
         }
-        // budget spent without N/N: remember the best as partial, honestly labelled (§6.2a.5)
-        if (_bestPartial is null || best.Efficiency.Rate > _bestPartial.Efficiency.Rate)
-            _bestPartial = best;
+        }
+        finally
+        {
+            // budget spent (or the search stopped) without N/N: remember the best as partial, honestly labelled (§6.2a.5)
+            if (_bestPartial is null || best.Efficiency.Rate > _bestPartial.Efficiency.Rate)
+                _bestPartial = best;
+        }
     }
 
-    /// <summary>Runs a series and watches for punishment; null when the address did not come back.</summary>
-    private async Task<IReadOnlyList<TrialOutcome>?> RunAsync(StrategyCandidate c, int attempts, Func<IReadOnlyList<TrialOutcome>, bool> stopEarly, CancellationToken ct)
+    /// <summary>
+    /// Runs a series and watches for punishment. The series that trips it says nothing about the strategy: it is not
+    /// logged and runs again once the address answers. Throws <see cref="PunishedException"/> when it does not come back
+    /// after <see cref="SearchOptions.MaxPunishPauses"/> pauses.
+    /// </summary>
+    private async Task<IReadOnlyList<TrialOutcome>> RunAsync(StrategyCandidate c, int attempts, Func<IReadOnlyList<TrialOutcome>, bool> stopEarly, CancellationToken ct)
     {
-        var outcomes = await executor.RunAsync(c, attempts, stopEarly, ct).ConfigureAwait(false);
-        foreach (var o in outcomes)
+        for (bool retried = false; ; retried = true)
         {
-            log?.Trial(c, o);
-            _consecutiveNoConnect = o.Failure == TrialFailure.NoConnect ? _consecutiveNoConnect + 1 : 0;
-        }
-        if (_consecutiveNoConnect < options.PunishThreshold)
-            return outcomes;
-
-        // the DPI stopped answering even SYNs: wait it out, then check the address without the engine
-        while (_pauses < options.MaxPunishPauses)
-        {
-            _pauses++;
-            Report(SearchStage.Paused, c, 0, $"Провайдер «наказывает» адрес за попытки: пауза {options.PunishPause.TotalSeconds:0} с", $"The provider punishes the address for attempts: pausing {options.PunishPause.TotalSeconds:0} s");
-            await Task.Delay(options.PunishPause, ct).ConfigureAwait(false);
-            if (await executor.TargetReachableAsync(ct).ConfigureAwait(false))
+            _seriesRun++;
+            var outcomes = await executor.RunAsync(c, attempts, stopEarly, ct).ConfigureAwait(false);
+            foreach (var o in outcomes)
+                _consecutiveNoConnect = o.Failure == TrialFailure.NoConnect ? _consecutiveNoConnect + 1 : 0;
+            // the address answered without the engine and the rerun still lost every SYN: that is the strategy
+            if (_consecutiveNoConnect < options.PunishThreshold || retried)
             {
-                _consecutiveNoConnect = 0;
-                // the series that tripped the punishment says nothing about the strategy: run it again
-                var again = await executor.RunAsync(c, attempts, stopEarly, ct).ConfigureAwait(false);
-                foreach (var o in again)
+                if (retried)
+                    _consecutiveNoConnect = 0;
+                foreach (var o in outcomes)
                     log?.Trial(c, o);
-                return again;
+                return outcomes;
             }
+
+            // the DPI stopped answering even SYNs: wait it out, then check the address without the engine
+            int pauses = 0;
+            while (true)
+            {
+                if (pauses++ >= options.MaxPunishPauses)
+                    throw new PunishedException();
+                Report(SearchStage.Paused, c, 0, $"Провайдер «наказывает» адрес за попытки: пауза {options.PunishPause.TotalSeconds:0} с", $"The provider punishes the address for attempts: pausing {options.PunishPause.TotalSeconds:0} s");
+                await Task.Delay(options.PunishPause, ct).ConfigureAwait(false);
+                if (await executor.TargetReachableAsync(ct).ConfigureAwait(false))
+                    break;
+            }
+            _consecutiveNoConnect = 0;
         }
-        return null;
     }
+
+    /// <summary>The address stayed unreachable after every punishment pause: the search stops.</summary>
+    private sealed class PunishedException : Exception;
 
     private void AddFound(FoundStrategy f)
     {

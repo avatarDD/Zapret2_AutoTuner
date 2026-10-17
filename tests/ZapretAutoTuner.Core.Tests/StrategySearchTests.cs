@@ -186,6 +186,107 @@ public sealed class StrategySearchTests
     }
 
     [Fact]
+    public async Task Continue_asks_again_only_after_as_many_new_strategies()
+    {
+        // pos=1 and pos=midsld work, then nothing until the end of the multisplit family's multidisorder:pos=1
+        var works = new HashSet<string> { "--payload=tls_client_hello --lua-desync=multisplit:pos=1", Midsld, "--payload=tls_client_hello --lua-desync=multidisorder:pos=1" };
+        var dpi = new SimDpi((s, _) => works.Contains(s) ? TrialOutcome.Success() : TrialOutcome.Fail(TrialFailure.Reset));
+        var asked = new List<int>();
+        var r = await new StrategySearch(dpi, Quick(o => o with
+        {
+            Generator = new GeneratorOptions { Mode = SearchMode.Full },
+            StopAfterFound = 1,
+            AskContinue = (found, _) =>
+            {
+                asked.Add(found.Count);
+                return Task.FromResult(found.Count < 3);
+            },
+        })).RunAsync();
+        // one question per new strategy, none after the dead ones in between
+        Assert.Equal([1, 2, 3], asked);
+        Assert.Equal(SearchStopReason.EnoughFound, r.Reason);
+    }
+
+    [Fact]
+    public async Task Punishment_during_refinement_keeps_the_best_partial()
+    {
+        // pos=midsld works half of the time; the first child trips a punishment that never lifts
+        bool punished = false;
+        var dpi = new SimDpi((s, n) =>
+        {
+            if (s == Midsld)
+                return n % 2 == 1 ? TrialOutcome.Success() : TrialOutcome.Fail(TrialFailure.Reset);
+            if (punished || s.Contains("midsld", StringComparison.Ordinal))
+            {
+                punished = true;
+                return TrialOutcome.Fail(TrialFailure.NoConnect);
+            }
+            return TrialOutcome.Fail(TrialFailure.Reset);
+        }) { Reachable = () => false };
+        var log = new Log();
+        var r = await new StrategySearch(dpi, Quick(o => o with { PunishThreshold = 3 }), log).RunAsync();
+        Assert.Equal(SearchStopReason.Punished, r.Reason);
+        Assert.Equal(Midsld, r.BestPartial?.Candidate.Key);
+        // the series that tripped the punishment is not held against the strategy
+        Assert.DoesNotContain(log.Trials, t => t.Item1 != Midsld && t.Item1.Contains("midsld", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Punishment_series_runs_again_and_only_the_rerun_is_logged()
+    {
+        int calls = 0;
+        // pos=1: 2 lost SYNs, pos=2: 2 lost SYNs (punishment), then the address is back and pos=2 really resets
+        var dpi = new SimDpi((s, _) => ++calls <= 4 ? TrialOutcome.Fail(TrialFailure.NoConnect) : s.EndsWith("pos=midsld", StringComparison.Ordinal) ? TrialOutcome.Success() : TrialOutcome.Fail(TrialFailure.Reset));
+        var log = new Log();
+        await new StrategySearch(dpi, Quick(o => o with { StopAfterFound = 1 }), log).RunAsync();
+        var pos2 = log.Trials.Where(t => t.Item1.EndsWith("multisplit:pos=2", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, pos2.Count);
+        Assert.Equal(4, dpi.Attempts["--payload=tls_client_hello --lua-desync=multisplit:pos=2"]);
+    }
+
+    [Fact]
+    public async Task Resumed_partial_strategy_does_not_rerun_its_refinement()
+    {
+        var tried = new Dictionary<string, Efficiency>
+        {
+            ["--payload=tls_client_hello --lua-desync=multisplit:pos=1"] = new(0, 2),
+            ["--payload=tls_client_hello --lua-desync=multisplit:pos=2"] = new(0, 2),
+            [Midsld] = new(2, 5),
+            [MidsldPlus1] = new(5, 5),
+        };
+        var dpi = new SimDpi((_, _) => TrialOutcome.Fail(TrialFailure.Reset));
+        var r = await new StrategySearch(dpi, Quick(o => o with { AlreadyTried = tried, StopAfterFound = 1 })).RunAsync();
+        Assert.Equal(MidsldPlus1, r.Best?.Candidate.Key);
+        Assert.DoesNotContain(Midsld, dpi.Runs);
+        Assert.DoesNotContain(MidsldPlus1, dpi.Runs);
+    }
+
+    [Fact]
+    public async Task Estimate_ignores_strategies_taken_from_the_interrupted_session()
+    {
+        var gen = StrategyGenerator.Generate(new GeneratorOptions { Mode = SearchMode.Quick });
+        var tried = gen.Candidates.Take(10).ToDictionary(c => c.Key, _ => new Efficiency(0, 2));
+        var dpi = new SlowDpi(TimeSpan.FromMilliseconds(30));
+        var steps = new List<SearchProgress>();
+        await new StrategySearch(dpi, Quick(o => o with { AlreadyTried = tried, Generator = new GeneratorOptions { Mode = SearchMode.Quick } }), null, new Sync<SearchProgress>(steps.Add)).RunAsync();
+        // after the first real strategy the estimate is about 30 ms per remaining one, not a tenth of it
+        var first = steps.First(s => s.Stage == SearchStage.Screening && s.Remaining is not null && s.Done == 11);
+        Assert.True(first.Remaining!.Value.TotalMilliseconds / (first.Total - first.Done) >= 20, $"{first.Remaining} for {first.Total - first.Done}");
+    }
+
+    /// <summary>Every attempt fails after a delay.</summary>
+    private sealed class SlowDpi(TimeSpan delay) : ITrialExecutor
+    {
+        public async Task<IReadOnlyList<TrialOutcome>> RunAsync(StrategyCandidate candidate, int attempts, Func<IReadOnlyList<TrialOutcome>, bool> stopEarly, CancellationToken ct)
+        {
+            await Task.Delay(delay, ct);
+            return [TrialOutcome.Fail(TrialFailure.Reset), TrialOutcome.Fail(TrialFailure.Reset)];
+        }
+
+        public Task<bool> TargetReachableAsync(CancellationToken ct) => Task.FromResult(true);
+    }
+
+    [Fact]
     public async Task Budget_spent_keeps_the_best_partial_with_its_rate()
     {
         // only pos=midsld works, half of the time; no mutation helps

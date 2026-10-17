@@ -111,7 +111,14 @@ public sealed class KnowledgeBase : IDisposable
         return kb;
     }
 
-    public int SchemaVersion => (int)(long)Scalar("PRAGMA user_version")!;
+    public int SchemaVersion
+    {
+        get
+        {
+            lock (_gate)
+                return (int)(long)Scalar("PRAGMA user_version")!;
+        }
+    }
 
     private void Migrate()
     {
@@ -129,20 +136,36 @@ public sealed class KnowledgeBase : IDisposable
 
     // ---- settings ----
 
-    public string? GetSetting(string key) => (string?)Scalar("SELECT value FROM settings WHERE key=$k", ("$k", key));
+    public string? GetSetting(string key)
+    {
+        lock (_gate)
+            return (string?)Scalar("SELECT value FROM settings WHERE key=$k", ("$k", key));
+    }
 
-    public void SetSetting(string key, string value) =>
-        Exec("INSERT INTO settings(key,value,updated_at) VALUES($k,$v,$t) ON CONFLICT(key) DO UPDATE SET value=$v, updated_at=$t",
-            ("$k", key), ("$v", value), ("$t", Now()));
+    public void SetSetting(string key, string value)
+    {
+        lock (_gate)
+        {
+            Exec("INSERT INTO settings(key,value,updated_at) VALUES($k,$v,$t) ON CONFLICT(key) DO UPDATE SET value=$v, updated_at=$t",
+                ("$k", key), ("$v", value), ("$t", Now()));
+        }
+    }
 
-    public void RemoveSetting(string key) => Exec("DELETE FROM settings WHERE key=$k", ("$k", key));
+    public void RemoveSetting(string key)
+    {
+        lock (_gate)
+            Exec("DELETE FROM settings WHERE key=$k", ("$k", key));
+    }
 
     public IReadOnlyDictionary<string, string> AllSettings()
     {
-        var d = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var r in Rows("SELECT key, value FROM settings"))
-            d[(string)r[0]!] = (string)r[1]!;
-        return d;
+        lock (_gate)
+        {
+            var d = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var r in Rows("SELECT key, value FROM settings"))
+                d[(string)r[0]!] = (string)r[1]!;
+            return d;
+        }
     }
 
     // ---- networks, strategies, targets ----

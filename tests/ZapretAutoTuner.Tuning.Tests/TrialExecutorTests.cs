@@ -24,7 +24,7 @@ public sealed class TrialExecutorTests
         public Task<string> StartAsync(IReadOnlyList<string> argv, QueueRule? queue, string tag, CancellationToken ct)
         {
             if (Refuse is not null)
-                throw new EngineRefusedException(Refuse);
+                throw EngineRefusedException.FromAgent(Refuse);
             Started.Add((argv, queue));
             return Task.FromResult("e" + Started.Count);
         }
@@ -137,6 +137,26 @@ public sealed class TrialExecutorTests
         Assert.Equal(TrialFailure.Other, o.Failure);
         Assert.Contains("validator", o.Detail, StringComparison.Ordinal);
         Assert.Empty(engine.Stopped);
+    }
+
+    [Fact]
+    public async Task Busy_queue_is_not_blamed_on_the_strategy()
+    {
+        var engine = new FakeEngine { Refuse = "firewall: очередь 300 уже занята другим экземпляром" };
+        var e = await Assert.ThrowsAsync<EngineRefusedException>(() => Executor(engine, EnginePlatform.Linux).RunAsync(Candidate("--payload=tls_client_hello --lua-desync=multisplit:pos=2"), 3, _ => false, CancellationToken.None));
+        Assert.True(e.Infrastructure);
+        Assert.Equal("firewall", e.Stage);
+    }
+
+    [Fact]
+    public async Task Engine_started_after_cancel_is_still_stopped()
+    {
+        var engine = new FakeEngine();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Executor(engine, EnginePlatform.Linux).RunAsync(Candidate("--payload=tls_client_hello --lua-desync=multisplit:pos=2"), 3, _ => false, cts.Token));
+        Assert.Single(engine.Started);
+        Assert.Equal(["e1"], engine.Stopped);
     }
 
     [Fact]

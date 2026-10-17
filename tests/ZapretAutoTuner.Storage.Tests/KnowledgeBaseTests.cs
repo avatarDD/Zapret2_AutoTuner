@@ -156,4 +156,28 @@ public sealed class KnowledgeBaseTests
         Assert.False(new Efficiency(3, 5).ClearlyBetterThan(twoOfFive));
         Assert.Equal(0, default(Efficiency).Rate);
     }
+
+    [Fact]
+    public async Task Settings_and_trials_from_two_threads_do_not_collide()
+    {
+        using var kb = KnowledgeBase.OpenInMemory();
+        var s = ZapretAutoTuner.Core.Model.Strategy.Parse("--payload=tls_client_hello --lua-desync=multisplit:pos=1");
+        var trials = Task.Run(() =>
+        {
+            for (int i = 0; i < 200; i++)
+                kb.RecordTrial(new TrialRecord { Strategy = s, Host = "a.example", Ok = i % 2 == 0 });
+        });
+        var settings = Task.Run(() =>
+        {
+            for (int i = 0; i < 200; i++)
+            {
+                kb.SetSetting("k", i.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                _ = kb.GetSetting("k");
+                _ = kb.AllSettings();
+            }
+        });
+        await Task.WhenAll(trials, settings);
+        Assert.Equal("199", kb.GetSetting("k"));
+        Assert.Equal(200, kb.Results("a.example")[0].Efficiency.Attempts);
+    }
 }

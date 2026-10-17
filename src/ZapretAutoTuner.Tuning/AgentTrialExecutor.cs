@@ -69,9 +69,10 @@ public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target
         {
             return await WithEngineAsync(candidate, ct => ProbeSeriesAsync(attempts, stopEarly, ct), ct).ConfigureAwait(false);
         }
-        catch (EngineRefusedException e)
+        catch (EngineRefusedException e) when (!e.Infrastructure)
         {
-            // the strategy itself is wrong for this engine: it fails without a single probe
+            // the strategy itself is wrong for this engine: it fails without a single probe. A busy queue or a missing
+            // firewall would fail every strategy, so that refusal stops the search instead of marking them all dead.
             return [TrialOutcome.Fail(TrialFailure.Other, e.Message)];
         }
     }
@@ -83,9 +84,11 @@ public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target
     public async Task<T> WithEngineAsync<T>(StrategyCandidate candidate, Func<CancellationToken, Task<T>> body, CancellationToken ct)
     {
         var (argv, queue) = BuildLaunch(candidate);
-        var id = await engine.StartAsync(argv, queue, "trial:" + target.Host, ct).ConfigureAwait(false);
+        // not cancellable: the Agent may start the engine after the client gave up, and then nobody would stop it
+        var id = await engine.StartAsync(argv, queue, "trial:" + target.Host, CancellationToken.None).ConfigureAwait(false);
         try
         {
+            ct.ThrowIfCancellationRequested();
             await Task.Delay(options.Warmup, ct).ConfigureAwait(false);
             return await body(ct).ConfigureAwait(false);
         }

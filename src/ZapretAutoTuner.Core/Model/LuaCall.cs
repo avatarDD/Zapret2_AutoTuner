@@ -39,10 +39,12 @@ public sealed class LuaCall : IEquatable<LuaCall>
 
     public bool Has(string name) => Args.Any(a => a.Name == name);
 
+    /// <summary>Sets an argument: replaced where it stands, or appended when absent.</summary>
     public LuaCall With(string name, string? value = null)
     {
+        int at = Args.ToList().FindIndex(a => a.Name == name);
         var list = Args.Where(a => a.Name != name).ToList();
-        list.Add(new LuaArg(name, value));
+        list.Insert(at < 0 ? list.Count : at, new LuaArg(name, value));
         return new LuaCall(Function, list);
     }
 

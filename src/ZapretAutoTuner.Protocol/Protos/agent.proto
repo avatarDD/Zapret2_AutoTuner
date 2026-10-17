@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+option csharp_namespace = "ZapretAutoTuner.Protocol";
+
+package ztuner.agent.v1;
+
+// Privileged helper API (PLAN.md §2, phase 1.1). The UI runs unprivileged and talks to the Agent over a
+// named pipe (Windows) or a unix socket (Linux). Every call carries the session token in metadata.
+service Agent {
+  rpc Heartbeat (HeartbeatRequest) returns (HeartbeatReply);
+}
+
+message HeartbeatRequest {
+  int32 ui_pid = 1;
+}
+
+message HeartbeatReply {
+  string agent_version = 1;
+  int32 agent_pid = 2;
+  bool elevated = 3;
+}

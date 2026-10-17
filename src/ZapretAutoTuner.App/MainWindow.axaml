@@ -1,0 +1,9 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ZapretAutoTuner.App.MainWindow"
+        Title="Zapret2 AutoTuner" Width="900" Height="600">
+  <StackPanel Margin="24" Spacing="12">
+    <TextBlock Text="Zapret2 AutoTuner" FontSize="28" FontWeight="SemiBold" />
+    <TextBlock x:Name="VersionText" />
+  </StackPanel>
+</Window>

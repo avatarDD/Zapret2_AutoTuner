@@ -8,7 +8,7 @@ description: Строгий справочник Lua-библиотеки zapret
 Источник истины: `lua/zapret-antidpi.lua` (комментарии `-- arg :` над каждой
 функцией), `lua/zapret-auto.lua`, `docs/manual.en.md` (главы «zapret-antidpi»,
 «zapret-auto»). Генератор стратегий AutoTuner держит **машиночитаемую копию**
-этой таблицы (`src/ZapretAutoTuner.Core/Strategy/Catalog/*.json`) и юнит-тест,
+этой таблицы (`src/ZapretAutoTuner.Core/Catalog/Data/functions.json` и `protocols.json`) и юнит-тест,
 который сверяет её с бандлимыми lua: каждое имя функции и каждый `arg` есть в
 исходнике.
 
@@ -60,7 +60,7 @@ description: Строгий справочник Lua-библиотеки zapret
 | `tcp_nop_del` | Удалить NOP, чтобы освободить место |
 | `fool=имя_функции` | Своя функция порчи `fn(dis, fooling_options)` |
 
-**reconstruct:** `badsum` (испортить L4 checksum), `keepsum`.
+**reconstruct:** `badsum` (испортить L4 checksum). Других ключей в блоке нет.
 
 **ipid:** `ip_id=seq|rnd|zero|none`, `ip_id_conn` (продолжать seq между
 пакетами, нужен conntrack). Windows заменяет нулевой ip_id своим.
@@ -204,7 +204,8 @@ iff-функции: `cond_true`, `cond_false`, `cond_random` (`percent=50`),
 
 - `wgobfs` (`secret`, `padmin`=0, `padmax`=16), `ippxor` (`ippxor`, `dataxor`,
   `rebuild`), `udp2icmp` (`ctype`, `ccode`, `stype`, `scode`, `dataxor`,
-  `server`), `synhide`. Двусторонние, нужна вторая сторона. AutoTuner их не
+  `server`), `synhide` (`ghost`, `ghost6`, `synack`, `magic`, `x2`, `kind`,
+  `opt`, `xorseq`). Двусторонние, нужна вторая сторона. AutoTuner их не
   предлагает.
 - `pcap:file=имя[:keep]` пишет pcap. Нужен `--writable`. Мы пишем pcap
   своим tshark/dumpcap, поэтому это не используем.

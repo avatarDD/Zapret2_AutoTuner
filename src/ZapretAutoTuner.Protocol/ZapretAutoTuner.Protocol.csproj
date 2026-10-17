@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ZapretAutoTuner.Protocol</RootNamespace>
+    <!-- generated gRPC code does not follow our analyzers -->
+    <NoWarn>$(NoWarn);CA1001;CA1063;CA1816;CA2012;CA1822;CA1825;CA1050</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" />
+  </ItemGroup>
+  <ItemGroup>
+    <Protobuf Include="Protos\*.proto" GrpcServices="Both" />
+  </ItemGroup>
+</Project>

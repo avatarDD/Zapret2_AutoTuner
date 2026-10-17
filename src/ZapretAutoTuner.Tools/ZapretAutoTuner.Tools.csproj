@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ZapretAutoTuner.Tools</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ZapretAutoTuner.Core\ZapretAutoTuner.Core.csproj" />
+  </ItemGroup>
+</Project>

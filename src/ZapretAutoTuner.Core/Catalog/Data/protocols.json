@@ -1,0 +1,13 @@
+{
+  "source": "nfq2/protocol.c",
+  "l7": ["all", "unknown", "known", "http", "tls", "dtls", "quic", "wireguard", "dht", "discord", "stun", "xmpp", "dns", "mtproto", "bt", "utp_bt"],
+  "payloads": [
+    "all", "unknown", "empty", "known", "ipv4", "ipv6", "icmp", "http_req", "http_reply",
+    "tls_client_hello", "tls_server_hello", "dtls_client_hello", "dtls_server_hello", "quic_initial",
+    "wireguard_initiation", "wireguard_response", "wireguard_cookie", "wireguard_keepalive", "wireguard_data",
+    "dht", "discord_ip_discovery", "stun", "xmpp_stream", "xmpp_starttls", "xmpp_proceed", "xmpp_features",
+    "dns_query", "dns_response", "mtproto_initial", "bt_handshake", "utp_bt_handshake"
+  ],
+  "position_markers": ["abs", "host", "endhost", "sld", "midsld", "endsld", "method", "extlen", "sniext"],
+  "tls_mods": ["rnd", "rndsni", "dupsid", "padencap", "sni", "none"]
+}

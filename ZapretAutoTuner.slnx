@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ZapretAutoTuner.Agent/ZapretAutoTuner.Agent.csproj" />
+    <Project Path="src/ZapretAutoTuner.App/ZapretAutoTuner.App.csproj" />
+    <Project Path="src/ZapretAutoTuner.Core/ZapretAutoTuner.Core.csproj" />
+    <Project Path="src/ZapretAutoTuner.Probes/ZapretAutoTuner.Probes.csproj" />
+    <Project Path="src/ZapretAutoTuner.Protocol/ZapretAutoTuner.Protocol.csproj" />
+    <Project Path="src/ZapretAutoTuner.Tools/ZapretAutoTuner.Tools.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ZapretAutoTuner.Core.Tests/ZapretAutoTuner.Core.Tests.csproj" />
+    <Project Path="tests/ZapretAutoTuner.Tools.Tests/ZapretAutoTuner.Tools.Tests.csproj" />
+  </Folder>
+</Solution>

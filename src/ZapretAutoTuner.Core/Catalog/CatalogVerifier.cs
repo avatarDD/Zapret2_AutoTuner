@@ -76,6 +76,58 @@ public static partial class CatalogVerifier
         return problems;
     }
 
+    /// <summary>Compares options.json with <c>long_options</c> in nfq2/nfqws.c, including the platform #ifdefs.</summary>
+    public static List<string> VerifyOptions(LuaCatalog catalog, string nfqwsC)
+    {
+        var problems = new List<string>();
+        var start = nfqwsC.IndexOf("static const struct option long_options[]", StringComparison.Ordinal);
+        if (start < 0)
+            return ["в nfqws.c не найден long_options"];
+        var end = nfqwsC.IndexOf("};", start, StringComparison.Ordinal);
+        var found = new Dictionary<string, (string Arg, string Platform)>(StringComparer.Ordinal);
+        var stack = new Stack<string>();
+        foreach (var raw in nfqwsC[start..end].Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.StartsWith("#ifdef", StringComparison.Ordinal) || line.StartsWith("#if ", StringComparison.Ordinal) || line.StartsWith("#ifndef", StringComparison.Ordinal))
+                stack.Push(PlatformOf(line));
+            else if (line.StartsWith("#elif", StringComparison.Ordinal))
+            {
+                stack.Pop();
+                stack.Push(PlatformOf(line));
+            }
+            else if (line.StartsWith("#endif", StringComparison.Ordinal))
+                stack.Pop();
+            else if (OptionRegex().Match(line) is { Success: true } m)
+            {
+                var platform = stack.Count == 0 ? "all" : stack.Peek();
+                var arg = m.Groups[2].Value switch { "no_argument" => "none", "optional_argument" => "optional", _ => "required" };
+                found[m.Groups[1].Value] = (arg, platform);
+            }
+        }
+        foreach (var (name, (arg, platform)) in found)
+        {
+            if (!catalog.EngineOptions.TryGetValue(name, out var spec))
+                problems.Add($"опция --{name} есть в nfqws.c, но нет в options.json");
+            else if (spec.Arg != arg || spec.Platform != platform)
+                problems.Add($"опция --{name}: в nfqws.c {arg}/{platform}, в options.json {spec.Arg}/{spec.Platform}");
+        }
+        foreach (var spec in catalog.EngineOptions.Values.Where(o => o.Platform != "keenetic" && !found.ContainsKey(o.Name)))
+            problems.Add($"опция --{spec.Name} из options.json отсутствует в nfqws.c");
+        return problems;
+    }
+
+    private static string PlatformOf(string directive) => directive switch
+    {
+        _ when directive.Contains("__CYGWIN__", StringComparison.Ordinal) && directive.StartsWith("#ifndef", StringComparison.Ordinal) => "posix",
+        _ when directive.Contains("__CYGWIN__", StringComparison.Ordinal) => "windows",
+        _ when directive.Contains("__linux__", StringComparison.Ordinal) || directive.Contains("HAS_FILTER_SSID", StringComparison.Ordinal) => "linux",
+        _ => "bsd",
+    };
+
+    [GeneratedRegex(@"^\[IDX_[A-Z0-9_]+\]\s*=\s*\{""([a-z0-9-]+)"",\s*(no_argument|optional_argument|required_argument)")]
+    private static partial Regex OptionRegex();
+
     private static void Compare(List<string> problems, string what, List<string>? expected, List<string> actual)
     {
         if (expected is null)

@@ -53,7 +53,7 @@
       { "name": "ipfrag_next", "kind": "int", "min": 0, "max": 255 }
     ]
   },
-  "fooling_keys": ["ip_ttl", "ip6_ttl", "ip_autottl", "ip6_autottl", "ip6_hopbyhop", "ip6_hopbyhop2", "ip6_destopt", "ip6_destopt2", "ip6_routing", "ip6_ah", "tcp_seq", "tcp_ack", "tcp_md5", "tcp_flags_set", "tcp_flags_unset", "badsum", "fool"],
+  "fooling_keys": ["ip_ttl", "ip6_ttl", "ip_autottl", "ip6_autottl", "ip6_hopbyhop", "ip6_hopbyhop2", "ip6_destopt", "ip6_destopt2", "ip6_routing", "ip6_ah", "tcp_seq", "tcp_ack", "tcp_ts", "tcp_md5", "tcp_flags_set", "tcp_flags_unset", "badsum", "fool"],
   "functions": [
     { "name": "drop", "file": "zapret-antidpi.lua", "blocks": ["direction", "payload"], "args": [],
       "category": "basic", "ru": "Отбросить пакет", "en": "Drop the packet" },

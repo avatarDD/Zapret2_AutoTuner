@@ -12,8 +12,9 @@ public sealed class LuaCatalog
 
     private readonly Dictionary<string, FunctionSpec> _functions;
 
-    private LuaCatalog(FunctionCatalogData functions, ProtocolCatalogData protocols)
+    private LuaCatalog(FunctionCatalogData functions, ProtocolCatalogData protocols, EngineOptionsData options)
     {
+        EngineOptions = options.Options.ToDictionary(o => o.Name, StringComparer.Ordinal);
         Data = functions;
         Protocols = protocols;
         _functions = functions.Functions.ToDictionary(f => f.Name, StringComparer.Ordinal);
@@ -32,6 +33,9 @@ public sealed class LuaCatalog
     public ProtocolCatalogData Protocols { get; }
 
     public IReadOnlyCollection<FunctionSpec> Functions => _functions.Values;
+
+    /// <summary>nfqws2 / winws2 options by name without the leading <c>--</c>.</summary>
+    public IReadOnlyDictionary<string, EngineOptionSpec> EngineOptions { get; }
 
     public IReadOnlySet<string> L7 { get; }
 
@@ -68,7 +72,8 @@ public sealed class LuaCatalog
     {
         var f = Read("functions.json", CatalogJsonContext.Default.FunctionCatalogData);
         var p = Read("protocols.json", CatalogJsonContext.Default.ProtocolCatalogData);
-        return new LuaCatalog(f, p);
+        var o = Read("options.json", CatalogJsonContext.Default.EngineOptionsData);
+        return new LuaCatalog(f, p, o);
     }
 
     private static T Read<T>(string name, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info)

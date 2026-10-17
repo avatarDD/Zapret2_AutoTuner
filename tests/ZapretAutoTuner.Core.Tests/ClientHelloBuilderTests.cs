@@ -48,7 +48,9 @@ public sealed class ClientHelloBuilderTests
             Import(point);
             var bad = (byte[])point.Clone();
             bad[^1] ^= 1;
-            Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() => Import(bad));
+            // OpenSSL throws CryptographicException; CNG wraps it in PlatformNotSupportedException ("parameters are not valid")
+            var e = Record.Exception(() => Import(bad));
+            Assert.True(e is System.Security.Cryptography.CryptographicException or PlatformNotSupportedException, $"accepted a point off the curve: {e}");
         }
 
         void Import(byte[] p)

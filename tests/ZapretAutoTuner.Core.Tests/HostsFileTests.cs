@@ -66,7 +66,7 @@ public sealed class HostsFileTests
         var two = HostsFile.Apply(Original, [Yt]) + HostsFile.Apply("", [Gv]);
         var fixedUp = HostsFile.Apply(two, [Gv]);
         Assert.Equal([Gv], HostsFile.Read(fixedUp));
-        Assert.Single(fixedUp.Split('\n'), l => l == HostsFile.Begin);
+        Assert.Single(fixedUp.Split('\n'), l => l.TrimEnd('\r') == HostsFile.Begin); // CRLF on Windows
     }
 
     [Theory]

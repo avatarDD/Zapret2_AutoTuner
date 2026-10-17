@@ -64,9 +64,7 @@ public static class Unifier
                 continue;
             var cells = Matrix(rows);
             var (chosen, left) = Cover(cells, targets);
-            // narrow hostlists first (§7.6): a domain-specific profile must not be shadowed by a wider one
-            profiles.AddRange(chosen.OrderBy(p => p.Domains.Count).ThenBy(p => p.Score)
-                .Select(p => new UnifiedProfile(p.Strategy, p.Domains, l4, p.Score)));
+            profiles.AddRange(NarrowFirst(chosen).Select(p => new UnifiedProfile(p.Strategy, p.Domains, l4, p.Score)));
             uncovered.AddRange(left.Select(d => (d, l4)));
             if (chosen.Count > 1)
             {
@@ -98,6 +96,28 @@ public static class Unifier
         }
         return d;
     }
+
+    /// <summary>
+    /// Narrow hostlists first (§7.6): a hostlist matches subdomains too, so a profile holding a subdomain of another
+    /// profile's domain must come before it or it is never reached; the rest go by domain count, then score.
+    /// </summary>
+    private static List<Chosen> NarrowFirst(List<Chosen> chosen)
+    {
+        var left = chosen.OrderBy(p => p.Domains.Count).ThenBy(p => p.Score).ToList();
+        var result = new List<Chosen>();
+        while (left.Count > 0)
+        {
+            // the first profile no other remaining profile must precede
+            var next = left.FirstOrDefault(p => !left.Any(o => o != p && Shadows(p, o))) ?? left[0];
+            result.Add(next);
+            left.Remove(next);
+        }
+        return result;
+    }
+
+    /// <summary>Whether <paramref name="wide"/> would catch a domain of <paramref name="narrow"/> if it came first.</summary>
+    private static bool Shadows(Chosen wide, Chosen narrow) =>
+        narrow.Domains.Any(n => wide.Domains.Any(w => n.EndsWith("." + w, StringComparison.Ordinal)));
 
     private static (List<Chosen> Chosen, List<string> Left) Cover(Dictionary<string, Candidate> cells, List<string> targets)
     {
@@ -131,8 +151,10 @@ public static class Unifier
 
     /// <summary>
     /// The <c>circular</c> variant (§7.5, nfqws2-lua §5.1): the orchestrator sees the first 34228 bytes out and 5556
-    /// in to count failures, every strategy's instances carry <c>strategy=N</c> from 1 without gaps, and the first
-    /// (best) one is <c>final</c>, so rotation stops on it once reached.
+    /// in to count failures, and every strategy's instances carry <c>strategy=N</c> from 1 without gaps. Rotation
+    /// starts on strategy 1, so the best goes first; there is no <c>final</c>, which would stop the rotation for good
+    /// on a strategy that may stop working. Each strategy after the first starts from the engine defaults
+    /// (<c>--payload=all --in-range=x --out-range=a</c>) so it does not inherit the previous one's filters.
     /// </summary>
     public static Strategy Circular(IReadOnlyList<Strategy> strategies, int fails = 3)
     {
@@ -149,19 +171,21 @@ public static class Unifier
         for (int i = 0; i < strategies.Count; i++)
         {
             var n = (i + 1).ToString(CultureInfo.InvariantCulture);
+            if (i > 0 && strategies[i - 1].Actions.Any(a => a is not LuaDesync))
+                actions.AddRange([new PayloadFilter(["all"]), new InRange("x"), new OutRange("a")]);
             foreach (var a in strategies[i].Actions)
-            {
-                if (a is LuaDesync { Call: var c })
-                {
-                    var tagged = c.With("strategy", n);
-                    actions.Add(new LuaDesync(i == 0 ? tagged.With("final") : tagged));
-                }
-                else
-                    actions.Add(a);
-            }
+                actions.Add(a is LuaDesync { Call: var c } ? new LuaDesync(c.With("strategy", n)) : a);
         }
         return new Strategy(actions);
     }
+
+    /// <summary>
+    /// Whether the config needs <c>--ipcache-hostname</c>: a hostlist profile with a phase-0 technique (oob, syndata,
+    /// wssize...) acts before the hostname is known, so it fires only when the name is taken from the ipcache
+    /// (nfqws2-lua §10.7). Without it the Validator refuses the config.
+    /// </summary>
+    public static bool NeedsIpcacheHostname(Solution solution) => solution.Profiles.Any(p =>
+        p.HasHostFilter && !p.HasIpFilter && p.Strategy.Calls.Any(c => Catalog.LuaCatalog.Default.Find(c.Function) is { Phase0: true }));
 
     /// <summary>
     /// The plan as an exportable config: one profile per unified profile with its own hostlist (named after the

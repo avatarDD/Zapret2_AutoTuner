@@ -168,11 +168,21 @@ DPI без отслеживания seq её принимает. Fooling не н
 --in-range=x
 --payload=tls_client_hello
 --lua-desync=fake:blob=fake_default_tls:tcp_md5:strategy=1
---lua-desync=multidisorder:pos=1,midsld:strategy=2:final
+--payload=all --in-range=x --out-range=a --payload=tls_client_hello
+--lua-desync=multidisorder:pos=1,midsld:strategy=2
 ```
 
 - Каждый подчинённый инстанс несёт `strategy=N`. Номера идут с 1 **без
-  пропусков** (иначе error). `final` останавливает ротацию на этой стратегии.
+  пропусков** (иначе error). Ротация начинается со стратегии 1.
+- `final` на инстансе стратегии N останавливает ротацию, когда до неё дошли:
+  проверка неудач идёт только при `hrec.final~=hrec.nstrategy`. Значит,
+  `final` на стратегии 1 отключает ротацию совсем. Автотюнер `final` не
+  ставит, лучшую стратегию кладёт первой.
+- Фильтры `--payload`/`--in-range`/`--out-range` действуют до следующего
+  такого же фильтра, а подчинённые инстансы сохраняют свои. Стратегия без
+  своих фильтров унаследует фильтры предыдущей, поэтому перед ней ставится
+  сброс к умолчаниям движка: `--payload=all --in-range=x --out-range=a`
+  (nfqws.c: `payload_type=0` это all, `range_in` NEVER, `range_out` ALWAYS).
 - `fails` (3) — порог неудач, `time` (60 с) — окно сброса.
 - Состояние хранится per-host: ключ из `standard_hostkey` (`nld=N` режет до
   N-уровня, `reqhost` требует hostname, без hostname IP не используется).

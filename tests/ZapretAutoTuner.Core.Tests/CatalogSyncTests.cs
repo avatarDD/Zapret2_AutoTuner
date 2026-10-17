@@ -20,6 +20,17 @@ public sealed class CatalogSyncTests
     }
 
     [Fact]
+    public void Engine_options_match_nfqws_c()
+    {
+        var src = File.ReadAllText(Path.Combine(RepoPaths.Zapret2, "nfq2", "nfqws.c"));
+        var problems = CatalogVerifier.VerifyOptions(LuaCatalog.Default, src);
+        Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
+
+        var mutated = CatalogVerifier.VerifyOptions(LuaCatalog.Default, src.Replace("{\"wf-raw-filter\", required_argument", "{\"wf-raw-filter\", optional_argument", StringComparison.Ordinal));
+        Assert.Contains(mutated, p => p.Contains("--wf-raw-filter", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Missing_function_is_detected()
     {
         var problems = VerifyMutated("zapret-antidpi.lua", t => t.Replace("function fakedsplit(ctx, desync)", "function fakedsplit_gone(ctx, desync)", StringComparison.Ordinal));

@@ -7,3 +7,4 @@ artifacts/
 runtimes/*/zapret2/
 *.pcap
 *.pcapng
+!tests/pcaps/*.pcap

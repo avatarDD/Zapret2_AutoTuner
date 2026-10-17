@@ -5,9 +5,32 @@ option csharp_namespace = "ZapretAutoTuner.Protocol";
 package ztuner.agent.v1;
 
 // Privileged helper API (PLAN.md §2, phase 1.1). The UI runs unprivileged and talks to the Agent over a
-// named pipe (Windows) or a unix socket (Linux). Every call carries the session token in metadata.
+// named pipe (Windows) or a unix socket (Linux). Every call carries the session token in the
+// "x-ztuner-token" metadata header. If heartbeats stop for HEARTBEAT_TIMEOUT or the UI process exits, the
+// Agent stops every engine and capture, removes its firewall rules, restores sysctls and exits.
 service Agent {
   rpc Heartbeat (HeartbeatRequest) returns (HeartbeatReply);
+
+  // Runs the engine with --dry-run, then with --intercept=0 (nfqws2-engine §9). No interception.
+  rpc CheckEngineArgs (CheckEngineArgsRequest) returns (CheckEngineArgsReply);
+
+  // Starts one engine instance. On Linux the queue rule is added to the Agent's nft table (or iptables chain)
+  // for as long as the instance runs.
+  rpc StartEngine (StartEngineRequest) returns (StartEngineReply);
+  rpc StopEngine (StopEngineRequest) returns (StopEngineReply);
+
+  // Engine stdout/stderr lines from the start (buffered) and then live, until the engine exits.
+  rpc WatchEngine (WatchEngineRequest) returns (stream EngineOutput);
+
+  // Packet capture into a ring buffer, returned as pcapng in chunks on stop.
+  rpc StartCapture (StartCaptureRequest) returns (StartCaptureReply);
+  rpc StopCapture (StopCaptureRequest) returns (stream CaptureChunk);
+
+  // TCP/UDP endpoints owned by a process (ProcessTracker, "choose a program" targets).
+  rpc ListConnections (ListConnectionsRequest) returns (ListConnectionsReply);
+
+  // Stops everything, removes rules and exits.
+  rpc Shutdown (ShutdownRequest) returns (ShutdownReply);
 }
 
 message HeartbeatRequest {
@@ -18,4 +41,105 @@ message HeartbeatReply {
   string agent_version = 1;
   int32 agent_pid = 2;
   bool elevated = 3;
+  string platform = 4;          // linux | windows
+  string firewall_backend = 5;  // nft | iptables | windivert | none
+  string zapret2_version = 6;   // engine --version, empty if the engine was not found
+  repeated string engines = 7;  // running engine ids
+  repeated string captures = 8; // running capture ids
+}
+
+message CheckEngineArgsRequest {
+  repeated string argv = 1;
+}
+
+message CheckEngineArgsReply {
+  bool ok = 1;
+  // "validator", "policy", "dry-run" or "intercept=0": the stage that failed; empty when ok.
+  string stage = 2;
+  repeated string output = 3;
+}
+
+message QueueRule {
+  int32 queue_num = 1;
+  string tcp_ports = 2;
+  string udp_ports = 3;
+  repeated string targets = 4;  // IP addresses; empty means any address
+  bool incoming = 5;
+}
+
+message StartEngineRequest {
+  repeated string argv = 1;
+  // Linux only: the firewall rule feeding this instance. Its queue_num must equal --qnum.
+  QueueRule queue = 2;
+  // A label for logs, e.g. "probe:youtube.com".
+  string tag = 3;
+}
+
+message StartEngineReply {
+  string engine_id = 1;
+  int32 pid = 2;
+}
+
+message StopEngineRequest {
+  string engine_id = 1;
+}
+
+message StopEngineReply {
+  bool was_running = 1;
+  int32 exit_code = 2;
+}
+
+message WatchEngineRequest {
+  string engine_id = 1;
+}
+
+message EngineOutput {
+  string line = 1;
+  bool exited = 2;     // last message: the engine exited
+  int32 exit_code = 3;
+}
+
+message StartCaptureRequest {
+  repeated string addresses = 1;  // capture only packets to/from these IPs; empty means all
+  repeated int32 ports = 2;       // and only these ports (either direction); empty means all
+  int64 max_bytes = 3;            // ring buffer size; 0 means the default (32 MiB)
+  int32 snaplen = 4;              // 0 means 65535
+  string interface = 5;           // Linux: interface name; empty means all
+}
+
+message StartCaptureReply {
+  string capture_id = 1;
+}
+
+message StopCaptureRequest {
+  string capture_id = 1;
+}
+
+message CaptureChunk {
+  bytes data = 1;
+  int64 packets = 2;   // set in the last chunk
+  int64 dropped = 3;   // packets evicted from the ring buffer
+}
+
+message ListConnectionsRequest {
+  int32 pid = 1;
+}
+
+message Connection {
+  string protocol = 1;  // tcp | udp
+  string local_address = 2;
+  int32 local_port = 3;
+  string remote_address = 4;
+  int32 remote_port = 5;
+  string state = 6;
+}
+
+message ListConnectionsReply {
+  repeated Connection connections = 1;
+}
+
+message ShutdownRequest {
+}
+
+message ShutdownReply {
 }

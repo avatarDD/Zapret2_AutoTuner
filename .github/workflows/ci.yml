@@ -40,9 +40,53 @@ jobs:
           path: TestResults
           if-no-files-found: ignore
 
+  # PLAN 1.2: the real engine through the Agent. Linux: nfqws2 + nft in a network namespace (root).
+  # Windows: winws2 + WinDivert sniff capture (runners are Administrator).
+  integration:
+    name: Integration (${{ matrix.rid }})
+    needs: build-test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            os: ubuntu-latest
+          - rid: win-x64
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Bundle zapret2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/bundle/bundle.py --rid ${{ matrix.rid }} --strict
+      - name: Build tests
+        run: dotnet build tests/ZapretAutoTuner.Agent.Tests -c Release
+      - name: Agent tests as root (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo -E env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" ZT_ZAPRET2_DIR="$PWD/runtimes/linux-x64/zapret2" \
+            dotnet test tests/ZapretAutoTuner.Agent.Tests -c Release --no-build --logger "console;verbosity=normal"
+          sudo -E env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" dotnet test tests/ZapretAutoTuner.Core.Tests -c Release --filter "FullyQualifiedName~FirewallTests"
+          # nothing may be left behind
+          ! sudo nft list tables | grep -q ztuner
+          ! sudo iptables -t mangle -S | grep -q ztuner
+      - name: Agent tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:ZT_ZAPRET2_DIR = "$PWD\runtimes\win-x64\zapret2"
+          dotnet test tests/ZapretAutoTuner.Agent.Tests -c Release --no-build --logger "console;verbosity=normal"
+
   publish:
     name: Publish ${{ matrix.rid }}
-    needs: build-test
+    needs: [build-test, integration]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

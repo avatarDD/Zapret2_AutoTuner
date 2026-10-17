@@ -11,6 +11,9 @@ internal static class RepoPaths
     public static string Zapret2 =>
         Environment.GetEnvironmentVariable("ZT_ZAPRET2_DIR") is { Length: > 0 } d ? d : Path.Combine(Root, "third_party", "zapret2");
 
+    /// <summary>Packet corpus with the tshark reference (<c>tools/pcaps/make_corpus.py</c>).</summary>
+    public static string Pcaps(params string[] parts) => Path.Combine([Root, "tests", "pcaps", .. parts]);
+
     public static string Testdata(params string[] parts) => Path.Combine([Root, "tests", "testdata", .. parts]);
 
     private static string FindRoot()

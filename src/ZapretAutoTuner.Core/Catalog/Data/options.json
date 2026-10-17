@@ -1,0 +1,540 @@
+{
+ "source": "nfq2/nfqws.c long_options",
+ "options": [
+  {
+   "name": "debug",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "dry-run",
+   "arg": "none",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "intercept",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "fuzz",
+   "arg": "required",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "version",
+   "arg": "none",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "comment",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "qnum",
+   "arg": "required",
+   "scope": "global",
+   "platform": "linux"
+  },
+  {
+   "name": "bind-fix4",
+   "arg": "none",
+   "scope": "global",
+   "platform": "linux"
+  },
+  {
+   "name": "bind-fix6",
+   "arg": "none",
+   "scope": "global",
+   "platform": "linux"
+  },
+  {
+   "name": "port",
+   "arg": "required",
+   "scope": "global",
+   "platform": "bsd"
+  },
+  {
+   "name": "daemon",
+   "arg": "none",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "chdir",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "pidfile",
+   "arg": "required",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "user",
+   "arg": "required",
+   "scope": "global",
+   "platform": "posix"
+  },
+  {
+   "name": "uid",
+   "arg": "required",
+   "scope": "global",
+   "platform": "posix"
+  },
+  {
+   "name": "ctrack-timeouts",
+   "arg": "required",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "ctrack-disable",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "payload-disable",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "server",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "ipcache-lifetime",
+   "arg": "required",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "ipcache-hostname",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "reasm-disable",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "fwmark",
+   "arg": "required",
+   "scope": "global",
+   "platform": "linux"
+  },
+  {
+   "name": "sockarg",
+   "arg": "required",
+   "scope": "global",
+   "platform": "bsd"
+  },
+  {
+   "name": "writable",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "blob",
+   "arg": "required",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "lua-init",
+   "arg": "required",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "lua-gc",
+   "arg": "required",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-domains",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-exclude",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-exclude-domains",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-auto",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-auto-fail-threshold",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-auto-fail-time",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-auto-retrans-threshold",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-auto-retrans-maxseq",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-auto-retrans-reset",
+   "arg": "optional",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-auto-incoming-maxseq",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-auto-udp-in",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-auto-udp-out",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "hostlist-auto-debug",
+   "arg": "required",
+   "scope": "global",
+   "platform": "all"
+  },
+  {
+   "name": "new",
+   "arg": "optional",
+   "scope": "separator",
+   "platform": "all"
+  },
+  {
+   "name": "skip",
+   "arg": "none",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "name",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "template",
+   "arg": "optional",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "import",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "cookie",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "filter-l3",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "filter-tcp",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "filter-udp",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "filter-icmp",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "filter-ipp",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "filter-l7",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "filter-ssid",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "linux"
+  },
+  {
+   "name": "filter-ssid-neg",
+   "arg": "optional",
+   "scope": "profile",
+   "platform": "linux"
+  },
+  {
+   "name": "filter-mark",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "linux"
+  },
+  {
+   "name": "ipset",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "ipset-ip",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "ipset-exclude",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "ipset-exclude-ip",
+   "arg": "required",
+   "scope": "profile",
+   "platform": "all"
+  },
+  {
+   "name": "payload",
+   "arg": "required",
+   "scope": "action",
+   "platform": "all"
+  },
+  {
+   "name": "in-range",
+   "arg": "required",
+   "scope": "action",
+   "platform": "all"
+  },
+  {
+   "name": "out-range",
+   "arg": "required",
+   "scope": "action",
+   "platform": "all"
+  },
+  {
+   "name": "lua-desync",
+   "arg": "required",
+   "scope": "action",
+   "platform": "all"
+  },
+  {
+   "name": "wf-iface",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-l3",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-tcp-in",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-tcp-out",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-udp-in",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-udp-out",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-tcp-empty",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-icmp-in",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-icmp-out",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-ipp-in",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-ipp-out",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-raw",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-raw-part",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-raw-filter",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-filter-lan",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-filter-loopback",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-save",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "wf-dup-check",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "ssid-filter",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "ssid-filter-neg",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "nlm-filter",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "nlm-filter-neg",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "nlm-list",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
+   "name": "fastpath-workaround",
+   "arg": "optional",
+   "scope": "global",
+   "platform": "keenetic",
+   "note": "patched nfqws2 of nfqws2-keenetic only"
+  }
+ ]
+}

@@ -156,7 +156,34 @@ public sealed class ProtocolCatalogData
     public List<string> TlsMods { get; init; } = [];
 }
 
+/// <summary>One nfqws2 command-line option (nfq2/nfqws.c <c>long_options</c>).</summary>
+public sealed class EngineOptionSpec
+{
+    public required string Name { get; init; }
+
+    /// <summary><c>none</c>, <c>optional</c> or <c>required</c> (getopt has_arg).</summary>
+    public string Arg { get; init; } = "required";
+
+    /// <summary><c>global</c>, <c>profile</c>, <c>action</c> (ordered inside a profile) or <c>separator</c> (<c>--new</c>).</summary>
+    public string Scope { get; init; } = "global";
+
+    /// <summary><c>all</c>, <c>linux</c>, <c>windows</c>, <c>posix</c> (not Windows), <c>bsd</c> or <c>keenetic</c>.</summary>
+    public string Platform { get; init; } = "all";
+
+    public string? Note { get; init; }
+
+    public override string ToString() => Name;
+}
+
+public sealed class EngineOptionsData
+{
+    public string Source { get; init; } = "";
+
+    public List<EngineOptionSpec> Options { get; init; } = [];
+}
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower, ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip, AllowTrailingCommas = true)]
 [JsonSerializable(typeof(FunctionCatalogData))]
 [JsonSerializable(typeof(ProtocolCatalogData))]
+[JsonSerializable(typeof(EngineOptionsData))]
 internal sealed partial class CatalogJsonContext : JsonSerializerContext;

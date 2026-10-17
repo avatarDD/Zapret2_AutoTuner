@@ -9,6 +9,7 @@ namespace ZapretAutoTuner.Tuning.Tests;
 public sealed class UnifyTests
 {
     private const string Midsld = "--payload=tls_client_hello --lua-desync=multisplit:pos=midsld";
+    private const string Quic = "--payload=quic_initial --lua-desync=fake:blob=fake_default_quic:repeats=6";
     private const string Midsld1 = "--payload=tls_client_hello --lua-desync=multisplit:pos=midsld+1";
 
     /// <summary>The stand's truth: which strategy opens which domain.</summary>
@@ -23,7 +24,7 @@ public sealed class UnifyTests
         }
     }
 
-    private static DomainResult R(string d, string s, bool ok, double score = 1) => new(d, L4Kind.Tcp, Strategy.Parse(s), ok ? new Efficiency(5, 5) : new Efficiency(0, 2), score);
+    private static DomainResult R(string d, string s, bool ok, double score = 1, L4Kind l4 = L4Kind.Tcp) => new(d, l4, Strategy.Parse(s), ok ? new Efficiency(5, 5) : new Efficiency(0, 2), score);
 
     [Fact]
     public async Task Cross_check_finds_the_common_strategy_history_did_not_show()
@@ -81,6 +82,38 @@ public sealed class UnifyTests
         Assert.Equal("443", queue.TcpPorts);
         Assert.Equal("443", queue.UdpPorts);
         Assert.Equal(["10.0.0.1", "10.0.0.2"], queue.Targets);
+        var v = new StrategyValidator(new ValidationContext()).ValidateArgv(argv);
+        Assert.True(v.Ok, string.Join("\n", v.Errors));
+    }
+
+    [Fact]
+    public async Task Budget_is_shared_between_tcp_and_quic_and_skips_do_not_count()
+    {
+        var tcp = Enumerable.Range(1, 8).Select(i => R($"d{i}.test", $"--payload=tls_client_hello --lua-desync=multisplit:pos={i}", true));
+        var quic = new[] { R("d1.test", Quic, true, 1, L4Kind.Udp), R("d2.test", Quic, true, 1, L4Kind.Udp) };
+        var history = tcp.Concat(quic).ToArray();
+        var truth = new Truth((_, _) => false);
+        await UnifyRunner.RunAsync(history, [.. history.Select(h => h.Domain).Distinct()], truth, new UnifyOptions { MaxChecks = 10 });
+        // QUIC needs two checks, TCP takes the rest of the budget
+        Assert.Equal(10, truth.Checked.Count);
+        Assert.Equal(2, truth.Checked.Count(c => c.Strategy == Quic));
+
+        // the first candidate works everywhere: the worse ones are skipped and the budget is not spent on them
+        var h2 = new[] { R("a.test", Midsld, true), R("b.test", Midsld, true), R("b.test", Midsld1, true, 2), R("a.test", Midsld1, true, 2) };
+        var t2 = new Truth((_, _) => true);
+        var plan = await UnifyRunner.RunAsync(h2, ["a.test", "b.test"], t2, new UnifyOptions { MaxChecks = 3 });
+        Assert.Equal(2, t2.Checked.Count);
+        Assert.Equal(Midsld, Assert.Single(plan.Profiles).Strategy.ToString());
+    }
+
+    [Fact]
+    public void Combined_launch_with_a_phase0_hostlist_profile_uses_ipcache_hostname()
+    {
+        var plan = Unifier.Plan([R("a.test", "--lua-desync=wssize:wsize=1:scale=6", true), R("b.test", Midsld, true)]);
+        var solution = Unifier.ToSolution(plan);
+        var targets = new[] { new TrialTarget { Host = "a.test", Addresses = [IPAddress.Parse("10.0.0.1")] } };
+        var (argv, _) = ConfigCheck.BuildLaunch(solution, targets, new AgentTrialOptions { LuaDir = "/lua", Platform = EnginePlatform.Linux });
+        Assert.Contains(argv, a => a.StartsWith("--ipcache-hostname", StringComparison.Ordinal));
         var v = new StrategyValidator(new ValidationContext()).ValidateArgv(argv);
         Assert.True(v.Ok, string.Join("\n", v.Errors));
     }

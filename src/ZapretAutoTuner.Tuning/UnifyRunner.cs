@@ -25,7 +25,10 @@ public sealed record UnifyOptions
     /// <summary>How many of the best candidates per protocol are run on every domain of the group.</summary>
     public int MaxCandidates { get; init; } = 6;
 
-    /// <summary>Upper bound on cross-check runs (each is one engine start and up to N probes).</summary>
+    /// <summary>
+    /// Upper bound on cross-check runs (each is one engine start and up to N probes), split between TCP and QUIC;
+    /// what one protocol does not need goes to the other. Skipped checks do not count.
+    /// </summary>
     public int MaxChecks { get; init; } = 60;
 
     public ExportTargets ExportTargets { get; init; } = ExportTargets.Pc;
@@ -45,7 +48,8 @@ public static class UnifyRunner
     {
         options ??= new UnifyOptions();
         var rows = history.ToList();
-        var plan = new List<(Strategy Strategy, double Score, string Domain, L4Kind L4)>();
+        var groups = new Dictionary<L4Kind, List<string>>();
+        var queues = new Dictionary<L4Kind, List<(Strategy Strategy, double Score, string Domain)>>();
         foreach (var l4 in new[] { L4Kind.Tcp, L4Kind.Udp })
         {
             var group = domains.Where(d => rows.Any(r => r.L4 == l4 && r.Domain == d)).ToList();
@@ -57,31 +61,45 @@ public static class UnifyRunner
                 .OrderByDescending(c => c.Coverage).ThenBy(c => c.Score)
                 .Take(options.MaxCandidates)
                 .ToList();
-            foreach (var c in candidates)
-                foreach (var d in group)
-                    plan.Add((c.Strategy, c.Score, d, l4));
+            groups[l4] = group;
+            queues[l4] = [.. candidates.SelectMany(c => group.Select(d => (c.Strategy, c.Score, d)))];
         }
-        var checks = plan.Take(options.MaxChecks).ToList();
-        var groupSize = checks.GroupBy(x => x.L4).ToDictionary(g => g.Key, g => g.Select(x => x.Domain).Distinct().Count());
-        var fresh = new Dictionary<(string, L4Kind), Dictionary<string, bool>>();
-        var commonFor = new Dictionary<L4Kind, double>();
-        for (int i = 0; i < checks.Count; i++)
+        // the budget is shared by the protocols, so QUIC is not starved by a long TCP queue
+        var budget = new Dictionary<L4Kind, int>();
+        int share = queues.Count == 0 ? 0 : options.MaxChecks / queues.Count, spare = options.MaxChecks - share * queues.Count;
+        foreach (var (l4, q) in queues.OrderBy(q => q.Value.Count))
         {
-            var (s, score, d, l4) = checks[i];
-            // a strategy no better than one that already works everywhere cannot change the plan
-            if (commonFor.TryGetValue(l4, out var best) && score >= best)
-                continue;
-            progress?.Report(new UnifyProgress(i, checks.Count, $"Перекрёстная проверка: {s} на {d}", $"Cross-check: {s} on {d}"));
-            var eff = await checker.CheckAsync(s, d, l4, ct).ConfigureAwait(false);
-            rows.Add(new DomainResult(d, l4, s, eff, score));
-            var key = (StrategyNormalizer.Key(s), l4);
-            if (!fresh.TryGetValue(key, out var cells))
-                fresh[key] = cells = new Dictionary<string, bool>(StringComparer.Ordinal);
-            cells[d] = eff.Working;
-            if (cells.Count == groupSize[l4] && cells.Values.All(ok => ok))
-                commonFor[l4] = Math.Min(score, commonFor.GetValueOrDefault(l4, double.MaxValue));
+            budget[l4] = Math.Min(q.Count, share + spare);
+            spare += share - budget[l4];
         }
-        progress?.Report(new UnifyProgress(checks.Count, checks.Count, "Объединяю стратегии", "Unifying the strategies"));
+        int total = budget.Values.Sum(), done = 0;
+        foreach (var (l4, queue) in queues)
+        {
+            var fresh = new Dictionary<string, Dictionary<string, bool>>(StringComparer.Ordinal);
+            double? common = null;
+            int used = 0;
+            foreach (var (s, score, d) in queue)
+            {
+                if (used >= budget[l4])
+                    break;
+                // a strategy no better than one that already works everywhere cannot change the plan
+                if (common is { } best && score >= best)
+                    continue;
+                progress?.Report(new UnifyProgress(done, total, $"Перекрёстная проверка: {s} на {d}", $"Cross-check: {s} on {d}"));
+                var eff = await checker.CheckAsync(s, d, l4, ct).ConfigureAwait(false);
+                used++;
+                done++;
+                rows.Add(new DomainResult(d, l4, s, eff, score));
+                var key = StrategyNormalizer.Key(s);
+                if (!fresh.TryGetValue(key, out var cells))
+                    fresh[key] = cells = new Dictionary<string, bool>(StringComparer.Ordinal);
+                cells[d] = eff.Working;
+                if (cells.Count == groups[l4].Count && cells.Values.All(ok => ok))
+                    common = Math.Min(score, common ?? double.MaxValue);
+            }
+        }
+        total = done;
+        progress?.Report(new UnifyProgress(total, total, "Объединяю стратегии", "Unifying the strategies"));
         return Unifier.Plan(rows, domains);
     }
 }

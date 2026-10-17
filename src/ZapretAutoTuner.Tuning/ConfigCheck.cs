@@ -2,6 +2,7 @@ using ZapretAutoTuner.Core.Diagnostics;
 using ZapretAutoTuner.Core.Engine;
 using ZapretAutoTuner.Core.Model;
 using ZapretAutoTuner.Core.Search;
+using ZapretAutoTuner.Core.Unify;
 using ZapretAutoTuner.Core.Validation;
 using ZapretAutoTuner.Protocol;
 
@@ -13,7 +14,11 @@ public sealed record ConfigDomainResult(string Domain, Efficiency L2, bool? Page
     public bool Passed => L2.Attempts > 0 && L2.Successes == L2.Attempts && PageOk != false;
 }
 
-public sealed record ConfigCheckResult(IReadOnlyList<ConfigDomainResult> Domains, IReadOnlyList<string> Argv)
+/// <param name="Unchecked">
+/// Profiles the check could not probe: QUIC ones, since the probes are TCP (L2 is a TLS handshake plus a download).
+/// They are in the engine run, so they are shown to catch nothing else, but not shown to work.
+/// </param>
+public sealed record ConfigCheckResult(IReadOnlyList<ConfigDomainResult> Domains, IReadOnlyList<string> Argv, IReadOnlyList<string> Unchecked)
 {
     public bool Passed => Domains.Count > 0 && Domains.All(d => d.Passed);
 }
@@ -54,7 +59,8 @@ public static class ConfigCheck
         {
             await engine.StopAsync(id, CancellationToken.None).ConfigureAwait(false);
         }
-        return new ConfigCheckResult(results, argv);
+        var notProbed = solution.Profiles.Where(p => p.UdpPorts is not null && p.TcpPorts is null).Select(p => p.Name).ToList();
+        return new ConfigCheckResult(results, argv, notProbed);
     }
 
     internal static (List<string> Argv, QueueRule? Queue) BuildLaunch(Solution solution, IReadOnlyList<TrialTarget> targets, AgentTrialOptions options)
@@ -80,6 +86,7 @@ public static class ConfigCheck
             Profiles = profiles,
             QueueNum = options.QueueNum,
             TargetAddresses = addresses,
+            IpcacheHostname = Unifier.NeedsIpcacheHostname(solution),
         };
         var argv = EngineArgsBuilder.Build(launch);
         if (options.Platform == EnginePlatform.Windows)

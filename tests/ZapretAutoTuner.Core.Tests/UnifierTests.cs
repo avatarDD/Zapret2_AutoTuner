@@ -85,10 +85,13 @@ public sealed class UnifierTests
         var c = Unifier.Circular([Strategy.Parse(Fake), Strategy.Parse(Midsld)]);
         var text = c.ToString();
         Assert.StartsWith("--out-range=-s34228 --in-range=-s5556 --lua-desync=circular --in-range=x --out-range=a", text, StringComparison.Ordinal);
-        Assert.Contains("--lua-desync=fake:blob=fake_default_tls:tcp_md5:strategy=1:final", text, StringComparison.Ordinal);
-        Assert.Contains("--lua-desync=multisplit:pos=1:strategy=1:final", text, StringComparison.Ordinal);
+        // the best goes first: rotation starts on strategy 1; no final, it would stop the rotation for good
+        Assert.Contains("--lua-desync=fake:blob=fake_default_tls:tcp_md5:strategy=1", text, StringComparison.Ordinal);
+        Assert.Contains("--lua-desync=multisplit:pos=1:strategy=1", text, StringComparison.Ordinal);
         Assert.Contains("--lua-desync=multisplit:pos=midsld:strategy=2", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("strategy=2:final", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("final", text, StringComparison.Ordinal);
+        // strategy 2 starts from the engine defaults, not from strategy 1's filters
+        Assert.Contains("--payload=all --in-range=x --out-range=a --payload=tls_client_hello --lua-desync=multisplit:pos=midsld:strategy=2", text, StringComparison.Ordinal);
         var v = new StrategyValidator(new ValidationContext()).ValidateStrategy(c);
         Assert.True(v.Ok, string.Join("\n", v.Errors));
         // the orchestrator needs incoming packets (Windows: --wf-tcp-in)
@@ -114,5 +117,44 @@ public sealed class UnifierTests
         var adaptive = Unifier.ToSolution(plan, adaptive: true);
         Assert.Equal(["tcp1", "quic1"], adaptive.Profiles.Select(p => p.Name));
         Assert.Contains("circular", adaptive.Profiles[0].Strategy.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Circular_strategy_without_filters_does_not_inherit_the_previous_ones()
+    {
+        var bare = Strategy.Parse("--lua-desync=multisplit:pos=2");
+        var c = Unifier.Circular([Strategy.Parse("--payload=tls_client_hello --in-range=-s1 --lua-desync=multisplit:pos=1"), bare]).ToString();
+        Assert.EndsWith("--payload=all --in-range=x --out-range=a --lua-desync=multisplit:pos=2:strategy=2", c, StringComparison.Ordinal);
+        // no reset is needed after a strategy that changed nothing
+        var c2 = Unifier.Circular([bare, Strategy.Parse(Midsld)]).ToString();
+        Assert.DoesNotContain("--payload=all", c2, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Subdomain_profile_goes_before_the_parent_domain_profile()
+    {
+        // the parent's profile covers more domains, yet a hostlist with youtube.com also matches m.youtube.com
+        var plan = Unifier.Plan(
+        [
+            R("youtube.com", Fake, true, 4), R("site1.ru", Fake, true, 4),
+            R("m.youtube.com", Midsld, true, 1),
+        ]);
+        Assert.Equal(["m.youtube.com"], plan.Profiles[0].Domains);
+        var plan2 = Unifier.Plan(
+        [
+            R("youtube.com", Midsld, true, 1),
+            R("m.youtube.com", Fake, true, 4), R("www.youtube.com", Fake, true, 4), R("site1.ru", Fake, true, 4),
+        ]);
+        Assert.Equal(["m.youtube.com", "www.youtube.com", "site1.ru"], plan2.Profiles[0].Domains);
+        Assert.Equal(["youtube.com"], plan2.Profiles[1].Domains);
+    }
+
+    [Fact]
+    public void Phase0_technique_in_a_hostlist_profile_needs_ipcache_hostname()
+    {
+        var plan = Unifier.Plan([R("a.com", "--lua-desync=wssize:wsize=1:scale=6", true), R("b.com", Midsld, true)]);
+        var s = Unifier.ToSolution(plan);
+        Assert.True(Unifier.NeedsIpcacheHostname(s));
+        Assert.False(Unifier.NeedsIpcacheHostname(Unifier.ToSolution(Unifier.Plan([R("a.com", Midsld, true)]))));
     }
 }

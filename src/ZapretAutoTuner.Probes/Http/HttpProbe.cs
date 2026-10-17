@@ -7,6 +7,7 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using ZapretAutoTuner.Core.Diagnostics;
+using ZapretAutoTuner.Probes.Net;
 
 namespace ZapretAutoTuner.Probes.Http;
 
@@ -82,30 +83,23 @@ public static class HttpProbe
         using var total = CancellationTokenSource.CreateLinkedTokenSource(ct);
         total.CancelAfter(o.MaxTime);
 
-        using var socket = new Socket(o.Address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        TcpConnectResult conn;
         try
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(total.Token);
-            cts.CancelAfter(o.ConnectTimeout);
-            await socket.ConnectAsync(new IPEndPoint(o.Address, o.Port), cts.Token).ConfigureAwait(false);
-            r.ConnectOk = true;
-            r.ConnectTime = sw.Elapsed;
+            conn = await TcpConnector.ConnectAsync(o.Address, o.Port, o.ConnectTimeout, total.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return r.Fail(ProbeError.ConnectTimeout, "SYN без ответа", sw);
+            return r.Fail(ProbeError.ConnectTimeout, "истекло общее время", sw);
         }
-        catch (SocketException e)
+        if (!conn.Ok)
         {
-            return e.SocketErrorCode switch
-            {
-                SocketError.ConnectionRefused => r.Fail(ProbeError.ConnectRefused, "RST в ответ на SYN", sw, rst: true),
-                SocketError.TimedOut => r.Fail(ProbeError.ConnectTimeout, "SYN без ответа", sw),
-                SocketError.HostUnreachable or SocketError.NetworkUnreachable or SocketError.HostDown or SocketError.AddressNotAvailable
-                    => r.Fail(ProbeError.Unreachable, e.Message, sw),
-                _ => r.Fail(ProbeError.Other, e.Message, sw),
-            };
+            ct.ThrowIfCancellationRequested();
+            return r.Fail(conn.Error, conn.Detail ?? "", sw, rst: conn.Rst);
         }
+        using var socket = conn.Socket!;
+        r.ConnectOk = true;
+        r.ConnectTime = sw.Elapsed;
 
         var raw = new CountingStream(new NetworkStream(socket, ownsSocket: false));
         Stream stream = raw;

@@ -170,6 +170,47 @@ internal sealed class AgentService : Protocol.Agent.AgentBase
 
     private static Protocol.HostsPin ToProto(Core.Hosts.HostsPin p) => new() { Host = p.Host, Address = p.Address.ToString() };
 
+    public override async Task<ServiceReply> InstallService(InstallServiceRequest request, ServerCallContext context)
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, "служба winws2 есть только в Windows"));
+        var files = request.Files.ToDictionary(kv => kv.Key, kv => kv.Value.ToByteArray(), StringComparer.Ordinal);
+        try
+        {
+            var output = await WinwsService.InstallAsync(files, _host.Engines.EnginePath,
+                argv => _host.Engines.Precheck(argv, [WinwsService.Directory + ".new"]) is { } bad ? $"{bad.Stage}: {string.Join("; ", bad.Output)}" : null,
+                context.CancellationToken);
+            var (installed, running, _) = await WinwsService.QueryAsync(context.CancellationToken);
+            return new ServiceReply { Installed = installed, Running = running, Directory = WinwsService.Directory, Output = output };
+        }
+        catch (ArgumentException e)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, e.Message));
+        }
+        catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, e.Message));
+        }
+    }
+
+    public override async Task<ServiceReply> RemoveService(RemoveServiceRequest request, ServerCallContext context)
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, "служба winws2 есть только в Windows"));
+        var output = await WinwsService.RemoveAsync(context.CancellationToken);
+        if (Directory.Exists(WinwsService.Directory))
+            Directory.Delete(WinwsService.Directory, true);
+        return new ServiceReply { Directory = WinwsService.Directory, Output = output };
+    }
+
+    public override async Task<ServiceReply> QueryService(QueryServiceRequest request, ServerCallContext context)
+    {
+        if (!OperatingSystem.IsWindows())
+            return new ServiceReply();
+        var (installed, running, output) = await WinwsService.QueryAsync(context.CancellationToken);
+        return new ServiceReply { Installed = installed, Running = running, Directory = WinwsService.Directory, Output = output };
+    }
+
     public override Task<ShutdownReply> Shutdown(ShutdownRequest request, ServerCallContext context)
     {
         _host.RequestStop("shutdown requested");

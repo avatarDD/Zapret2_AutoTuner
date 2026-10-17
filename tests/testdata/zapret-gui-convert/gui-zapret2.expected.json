@@ -1,0 +1,24 @@
+{
+  "dropped": [],
+  "kind": "zapret2",
+  "kind_title": "конфиг zapret2 (NFQWS2_OPT)",
+  "ok": true,
+  "profiles": [
+    {
+      "args": "--blob=tls_google:@bin/tls_google.bin --filter-tcp=443 --filter-l7=tls --lua-desync=fake:blob=tls_google",
+      "enabled": true,
+      "id": "import1",
+      "name": "TCP 443"
+    },
+    {
+      "args": "--filter-udp=443 --lua-desync=fake:blob=fake_default_quic:repeats=6",
+      "enabled": true,
+      "id": "import2",
+      "name": "UDP 443"
+    }
+  ],
+  "warnings": [
+    "интерфейса ppp0 (IFACE_WAN) на этом роутере нет — внешний интерфейс GUI берёт из своих настроек",
+    "маркеры <HOSTLIST> убраны: списки подставит режим фильтра GUI (Настройки → nfqws)"
+  ]
+}

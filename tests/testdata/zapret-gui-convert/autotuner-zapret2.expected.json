@@ -1,0 +1,32 @@
+{
+  "dropped": [],
+  "kind": "zapret2",
+  "kind_title": "конфиг zapret2 (NFQWS2_OPT)",
+  "ok": true,
+  "profiles": [
+    {
+      "args": "--blob=tls_wl:@bin/zt_tls_wl.bin --name=tcp1 --filter-tcp=443 --filter-l7=tls --hostlist=lists/zt-tcp1.txt --payload=tls_client_hello --lua-desync=fake:blob=tls_wl:tcp_md5 --lua-desync=multidisorder:pos=1,midsld",
+      "enabled": true,
+      "id": "import1",
+      "name": "TCP 443"
+    },
+    {
+      "args": "--name=tcp2 --filter-tcp=80,443 --filter-l7=http,tls --hostlist=lists/zt-tcp2.txt --payload=tls_client_hello --lua-desync=multisplit:pos=1:seqovl=5:seqovl_pattern=0x1603030000 --payload=http_req --lua-desync=multisplit:pos=method+2",
+      "enabled": true,
+      "id": "import2",
+      "name": "TCP 80,443"
+    },
+    {
+      "args": "--name=quic1 --filter-udp=443 --filter-l7=quic --hostlist=lists/zt-quic1.txt --payload=quic_initial --lua-desync=fake:blob=fake_default_quic:repeats=6",
+      "enabled": true,
+      "id": "import3",
+      "name": "UDP 443"
+    }
+  ],
+  "warnings": [
+    "файла блоба zt_tls_wl.bin здесь нет — загрузите его в «Блобы»",
+    "списка zt-tcp1.txt здесь нет — создайте его или уберите --hostlist",
+    "списка zt-tcp2.txt здесь нет — создайте его или уберите --hostlist",
+    "списка zt-quic1.txt здесь нет — создайте его или уберите --hostlist"
+  ]
+}

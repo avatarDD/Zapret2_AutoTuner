@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ZapretAutoTuner.Delivery</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ZapretAutoTuner.Core\ZapretAutoTuner.Core.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Protocol\ZapretAutoTuner.Protocol.csproj" />
+    <PackageReference Include="SSH.NET" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ZapretAutoTuner.Delivery.Tests" />
+  </ItemGroup>
+</Project>

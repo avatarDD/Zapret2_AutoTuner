@@ -1,0 +1,3 @@
+/opt/zapret2/nfq2/nfqws2 --qnum 200 --debug=@/tmp/x.log --hostlist /opt/zapret2/lists/other.txt \
+  --filter-tcp=443 --lua-desync=multisplit:pos=1  # working
+--new --filter-udp=443 --dpi-desync=fake

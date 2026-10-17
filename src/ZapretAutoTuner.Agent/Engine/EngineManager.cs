@@ -51,9 +51,10 @@ internal sealed class EngineManager : IDisposable
     public EngineInstance? Find(string id) => _engines.GetValueOrDefault(id);
 
     /// <summary>Validator + policy problems, or null if the argv may run.</summary>
-    public CheckResult? Precheck(IReadOnlyList<string> argv)
+    /// <param name="extraReadRoots">More directories the argv may read from (the winws2 service directory).</param>
+    public CheckResult? Precheck(IReadOnlyList<string> argv, IReadOnlyList<string>? extraReadRoots = null)
     {
-        var policy = EngineArgvPolicy.Check(argv, WriteRoots, ReadRoots);
+        var policy = EngineArgvPolicy.Check(argv, WriteRoots, [.. ReadRoots, .. extraReadRoots ?? []]);
         if (policy.Count > 0)
             return new CheckResult(false, "policy", policy);
         var ctx = new ValidationContext { Catalog = LuaCatalog.Default, Platform = Platform };

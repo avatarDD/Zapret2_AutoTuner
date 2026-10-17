@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ZapretAutoTuner.Core</RootNamespace>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Catalog\Data\*.json" LogicalName="ZapretAutoTuner.Core.Catalog.%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

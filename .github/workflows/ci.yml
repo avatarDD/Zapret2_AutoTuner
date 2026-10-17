@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-test:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore ZapretAutoTuner.slnx
+      - name: Build
+        run: dotnet build ZapretAutoTuner.slnx -c Release --no-restore
+      - name: Test
+        run: dotnet test ZapretAutoTuner.slnx -c Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: TestResults
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish ${{ matrix.rid }}
+    needs: build-test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+            run_engine: true
+          - rid: linux-x64
+            os: ubuntu-latest
+            run_engine: true
+          - rid: linux-arm64
+            os: ubuntu-latest
+            run_engine: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Bundle zapret2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/bundle/bundle.py --rid ${{ matrix.rid }} --strict
+      - name: Publish App and Agent
+        shell: bash
+        run: |
+          out="artifacts/publish/${{ matrix.rid }}"
+          for p in src/ZapretAutoTuner.App/ZapretAutoTuner.App.csproj src/ZapretAutoTuner.Agent/ZapretAutoTuner.Agent.csproj; do
+            dotnet publish "$p" -c Release -r ${{ matrix.rid }} --self-contained true -o "$out"
+          done
+          ls -la "$out/zapret2"
+      - name: Engine --version from the publish folder
+        if: matrix.run_engine
+        shell: bash
+        run: |
+          out="artifacts/publish/${{ matrix.rid }}"
+          if [ "${{ runner.os }}" = "Windows" ]; then eng="$out/zapret2/winws2.exe"; else eng="$out/zapret2/nfqws2"; fi
+          "$eng" --version | tee engine-version.txt
+          grep -q "lua_compat_ver 6" engine-version.txt
+          if [ "${{ runner.os }}" = "Windows" ]; then "$out/ztuner-agent.exe" --version; else "$out/ztuner-agent" --version; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZapretAutoTuner-${{ matrix.rid }}
+          path: artifacts/publish/${{ matrix.rid }}
+          if-no-files-found: error

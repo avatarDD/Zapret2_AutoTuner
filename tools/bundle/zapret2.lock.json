@@ -1,0 +1,15 @@
+{
+  "repo": "bol-van/zapret2",
+  "tag": "v1.0.5.2",
+  "version": "1.0.5.2",
+  "asset_pattern": "^zapret2-v[0-9.]+\\.zip$",
+  "sha256": "f585590bea6da82ac2c74926f6ac17e6204ee8b53e455c2ba2edae0c58c5d4ac",
+  "lua_compat": 6,
+  "rids": {
+    "linux-x64": { "dir": "binaries/linux-x86_64", "files": ["nfqws2"] },
+    "linux-arm64": { "dir": "binaries/linux-arm64", "files": ["nfqws2"] },
+    "win-x64": { "dir": "binaries/windows-x86_64", "files": ["winws2.exe", "cygwin1.dll", "WinDivert.dll", "WinDivert64.sys"], "optional": ["killall.exe", "ip2net.exe", "mdig.exe"] }
+  },
+  "common": ["lua/zapret-lib.lua", "lua/zapret-antidpi.lua", "lua/zapret-auto.lua", "lua/zapret-obfs.lua", "lua/zapret-pcap.lua"],
+  "common_dirs": ["files/fake"]
+}

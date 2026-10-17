@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ZapretAutoTuner.Agent</RootNamespace>
+    <AssemblyName>ztuner-agent</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ZapretAutoTuner.Core\ZapretAutoTuner.Core.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Protocol\ZapretAutoTuner.Protocol.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Tools\ZapretAutoTuner.Tools.csproj" />
+  </ItemGroup>
+</Project>

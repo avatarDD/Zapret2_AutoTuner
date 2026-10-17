@@ -1,0 +1,43 @@
+{
+  // The "check blocks" resource set (dpi-diagnostics §4b). Users can add their own resources in the app.
+  // kind: service | provider | control. path: a big resource where one exists (the 16 KB check needs volume),
+  // otherwise "/" and the checker pads the request. quic: also check HTTP/3.
+  "resources": [
+    { "id": "youtube", "kind": "service", "name_ru": "YouTube", "name_en": "YouTube", "targets": [
+      { "host": "www.youtube.com", "quic": true },
+      { "host": "redirector.googlevideo.com", "path": "/report_mapping" },
+      { "host": "i.ytimg.com", "path": "/generate_204" } ] },
+    { "id": "google", "kind": "service", "name_ru": "Google", "name_en": "Google", "targets": [ { "host": "www.google.com", "quic": true } ] },
+    { "id": "facebook", "kind": "service", "name_ru": "Facebook", "name_en": "Facebook", "targets": [ { "host": "www.facebook.com", "quic": true } ] },
+    { "id": "instagram", "kind": "service", "name_ru": "Instagram", "name_en": "Instagram", "targets": [ { "host": "www.instagram.com", "quic": true }, { "host": "static.cdninstagram.com" } ] },
+    { "id": "whatsapp", "kind": "service", "name_ru": "WhatsApp", "name_en": "WhatsApp", "targets": [ { "host": "web.whatsapp.com" } ] },
+    { "id": "x", "kind": "service", "name_ru": "X (Twitter)", "name_en": "X (Twitter)", "targets": [ { "host": "x.com" }, { "host": "abs.twimg.com" } ] },
+    { "id": "discord", "kind": "service", "name_ru": "Discord", "name_en": "Discord", "targets": [ { "host": "discord.com" }, { "host": "gateway.discord.gg" }, { "host": "cdn.discordapp.com" } ] },
+    { "id": "telegram", "kind": "service", "name_ru": "Telegram (веб)", "name_en": "Telegram (web)", "targets": [ { "host": "web.telegram.org" }, { "host": "telegram.org" } ] },
+    { "id": "tiktok", "kind": "service", "name_ru": "TikTok", "name_en": "TikTok", "targets": [ { "host": "www.tiktok.com" } ] },
+    { "id": "linkedin", "kind": "service", "name_ru": "LinkedIn", "name_en": "LinkedIn", "targets": [ { "host": "www.linkedin.com" } ] },
+    { "id": "spotify", "kind": "service", "name_ru": "Spotify", "name_en": "Spotify", "targets": [ { "host": "open.spotify.com" } ] },
+    { "id": "chatgpt", "kind": "service", "name_ru": "ChatGPT", "name_en": "ChatGPT", "targets": [ { "host": "chatgpt.com" } ] },
+    { "id": "claude", "kind": "service", "name_ru": "Claude", "name_en": "Claude", "targets": [ { "host": "claude.ai" } ] },
+    { "id": "netflix", "kind": "service", "name_ru": "Netflix", "name_en": "Netflix", "targets": [ { "host": "www.netflix.com" } ] },
+    { "id": "twitch", "kind": "service", "name_ru": "Twitch", "name_en": "Twitch", "targets": [ { "host": "www.twitch.tv" } ] },
+    { "id": "github", "kind": "service", "name_ru": "GitHub", "name_en": "GitHub", "targets": [ { "host": "github.com" }, { "host": "objects.githubusercontent.com" } ] },
+    { "id": "reddit", "kind": "service", "name_ru": "Reddit", "name_en": "Reddit", "targets": [ { "host": "www.reddit.com" } ] },
+    { "id": "medium", "kind": "service", "name_ru": "Medium", "name_en": "Medium", "targets": [ { "host": "medium.com" } ] },
+    { "id": "soundcloud", "kind": "service", "name_ru": "SoundCloud", "name_en": "SoundCloud", "targets": [ { "host": "soundcloud.com" } ] },
+    { "id": "rutracker", "kind": "service", "name_ru": "RuTracker", "name_en": "RuTracker", "targets": [ { "host": "rutracker.org" } ] },
+    { "id": "proton", "kind": "service", "name_ru": "Proton", "name_en": "Proton", "targets": [ { "host": "proton.me" } ] },
+    { "id": "signal", "kind": "service", "name_ru": "Signal", "name_en": "Signal", "targets": [ { "host": "signal.org" }, { "host": "chat.signal.org" } ] },
+
+    { "id": "cloudflare", "kind": "provider", "name_ru": "Cloudflare", "name_en": "Cloudflare", "targets": [ { "host": "speed.cloudflare.com", "path": "/__down?bytes=262144", "quic": true } ] },
+    { "id": "hetzner", "kind": "provider", "name_ru": "Hetzner", "name_en": "Hetzner", "targets": [ { "host": "fsn1-speed.hetzner.com", "path": "/100MB.bin" } ] },
+    { "id": "ovh", "kind": "provider", "name_ru": "OVH", "name_en": "OVH", "targets": [ { "host": "proof.ovh.net", "path": "/files/1Mb.dat" } ] },
+    { "id": "digitalocean", "kind": "provider", "name_ru": "DigitalOcean", "name_en": "DigitalOcean", "targets": [ { "host": "speedtest-ams3.digitalocean.com", "path": "/10mb.test" } ] },
+    { "id": "linode", "kind": "provider", "name_ru": "Akamai / Linode", "name_en": "Akamai / Linode", "targets": [ { "host": "speedtest.frankfurt.linode.com", "path": "/100MB-frankfurt.bin" } ] },
+    { "id": "aws", "kind": "provider", "name_ru": "AWS", "name_en": "AWS", "targets": [ { "host": "ip-ranges.amazonaws.com", "path": "/ip-ranges.json" } ] },
+    { "id": "fastly", "kind": "provider", "name_ru": "Fastly", "name_en": "Fastly", "targets": [ { "host": "www.fastly.com" } ] },
+
+    { "id": "yandex", "kind": "control", "name_ru": "Яндекс (контроль)", "name_en": "Yandex (control)", "targets": [ { "host": "ya.ru" } ] },
+    { "id": "vk", "kind": "control", "name_ru": "VK (контроль)", "name_en": "VK (control)", "targets": [ { "host": "vk.com" } ] }
+  ]
+}

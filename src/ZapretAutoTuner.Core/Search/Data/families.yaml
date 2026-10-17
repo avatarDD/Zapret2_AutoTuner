@@ -1,0 +1,274 @@
+# Strategy families for the search (PLAN 3.1, dpi-diagnostics §6.1): the blockcheck2 space as data.
+#
+# A family expands its templates over its axes (the cartesian product, the last axis varying fastest). An axis is a
+# list of values or a per-mode map {quick, standard, full}; a mode missing from the map takes the previous mode's
+# list. "@name" in an axis pulls in a shared set from `sets`; "@pos" and "@pos1" pick the set of the protocol being
+# generated (pos_tls or pos_http). "{white}" is the whitelisted SNI (an option, by default www.google.com) and the
+# blob tls_white is a real ClientHello for it, built by ClientHelloBuilder and declared with --blob. The family's `payload` becomes "--payload=…" in front of
+# the template; `payload: none` leaves the strategy without a payload filter (phase-0 techniques).
+#
+# Fields: order (blockcheck2 file number, cheap first), l4 (tcp|udp), protocols (tls|http|quic: what the target
+# speaks), modes (where the family is used at all), first_for (block labels that move it to the front), skip_for
+# (labels where it is pointless), skip_if_working (standard mode: when one of these families already works, this one
+# is not tried, like SCANLEVEL=standard), tags (ttl, slow, white, phase0, nat: used by ranking and filters).
+#
+# Every generated strategy goes through the Validator; a test checks that none of them fails it.
+
+sets:
+  fooling:
+    quick: [tcp_md5, "tcp_seq=-3000"]
+    standard: [tcp_md5, badsum, "tcp_seq=-3000", "tcp_seq=1000000", "tcp_ack=-66000:tcp_ts_up"]
+    full: [tcp_md5, badsum, "tcp_seq=-3000", "tcp_seq=1000000", "tcp_ack=-66000:tcp_ts_up", "tcp_ts=-1000",
+           "tcp_flags_unset=ACK", "tcp_flags_set=SYN", "tcp_md5:tcp_seq=-3000"]
+  ttl:
+    quick: ["ip_autottl=-2,3-20"]
+    standard: ["ip_autottl=-1,3-20", "ip_autottl=-2,3-20", "ip_autottl=-3,3-20", "ip_ttl=4", "ip_ttl=6"]
+    full: ["ip_autottl=-1,3-20", "ip_autottl=-2,3-20", "ip_autottl=-3,3-20", "ip_autottl=-4,3-20", "ip_autottl=-5,3-20",
+           "ip_ttl=1", "ip_ttl=2", "ip_ttl=3", "ip_ttl=4", "ip_ttl=5", "ip_ttl=6", "ip_ttl=7", "ip_ttl=8", "ip_ttl=9",
+           "ip_ttl=10", "ip_ttl=11", "ip_ttl=12"]
+  pos_tls:
+    quick: ["1", midsld]
+    standard: ["1", "2", midsld, "1,midsld", "sniext+1", "1,sniext+1,midsld"]
+    full: ["1", "2", "3", midsld, "midsld+1", "1,midsld", "sniext+1", "sniext+4", "1,sniext+1,midsld", "host,endhost",
+           "host,midsld,endhost", "-10"]
+  pos_http:
+    quick: [method+2, midsld]
+    standard: ["1", "2", method+2, midsld, "method+2,midsld", "host,endhost"]
+    full: ["1", "2", method+2, midsld, "method+2,midsld", "host,endhost", "host-1", "endhost-1", "1,host,midsld,endhost"]
+  pos1_tls:
+    quick: ["1"]
+    standard: ["1", "2", midsld, "sniext+1"]
+    full: ["1", "2", "3", midsld, "midsld+1", "sniext+1", "host", "endhost"]
+  pos1_http:
+    quick: [method+2]
+    standard: ["1", method+2, midsld, host]
+    full: ["1", "2", method+2, midsld, host, endhost]
+  fake_tls_blob:
+    quick: [fake_default_tls]
+    standard: [fake_default_tls, tls_white, "0x00000000"]
+  tls_mod:
+    quick: [""]
+    standard: ["", ":tls_mod=rnd,dupsid", ":tls_mod=rnd,dupsid,sni={white}"]
+    full: ["", ":tls_mod=rnd,dupsid", ":tls_mod=rnd,dupsid,sni={white}", ":tls_mod=padencap", ":tls_mod=rndsni"]
+  repeats:
+    quick: ["1"]
+    standard: ["1", "2", "6"]
+    full: ["1", "2", "6", "11"]
+
+families:
+  - id: http_basic
+    order: 10
+    l4: tcp
+    protocols: [http]
+    payload: http_req
+    first_for: [HttpBlock]
+    templates:
+      - "--lua-desync=http_hostcase"
+      - "--lua-desync=http_domcase"
+      - "--lua-desync=http_hostcase:spell=hoSt"
+      - "--lua-desync=http_hostcase --lua-desync=http_domcase"
+      - "--lua-desync=http_unixeol"
+      - "--lua-desync=http_methodeol"
+
+  - id: multisplit
+    order: 20
+    l4: tcp
+    protocols: [tls, http]
+    payload: auto
+    templates:
+      - "--lua-desync=multisplit:pos={pos}"
+      - "--lua-desync=multidisorder:pos={pos}"
+    axes:
+      pos: "@pos"
+
+  - id: seqovl
+    order: 23
+    l4: tcp
+    protocols: [tls]
+    payload: tls_client_hello
+    skip_if_working: [multisplit]
+    templates:
+      - "--lua-desync=multisplit:pos={pos}:seqovl={ovl}:seqovl_pattern={pattern}"
+      - "--lua-desync=multidisorder:pos=midsld:seqovl={dovl}:seqovl_pattern={pattern}"
+    axes:
+      pos: {quick: ["1"], standard: ["1", "2", "1,midsld"], full: ["1", "2", "1,midsld", "sniext+1"]}
+      ovl: {quick: ["5"], standard: ["1", "5", "681"]}
+      dovl: {quick: ["1"], standard: ["1", "2"]}
+      pattern: {quick: ["0x1603030000"], standard: ["0x1603030000", tls_white, "0x00"]}
+
+  - id: syndata
+    order: 24
+    l4: tcp
+    protocols: [tls, http]
+    payload: none
+    modes: [standard, full]
+    skip_if_working: [multisplit, seqovl]
+    tags: [phase0]
+    templates:
+      - "--lua-desync=syndata"
+      - "--lua-desync=syndata:tls_mod=rnd,sni={white}:blob=tls_white"
+      - "--lua-desync=syndata --lua-desync=multisplit:pos={pos}"
+    axes:
+      pos: {quick: ["1"], standard: ["1", midsld]}
+
+  - id: fake
+    order: 25
+    l4: tcp
+    protocols: [tls]
+    payload: tls_client_hello
+    skip_if_working: [multisplit, seqovl]
+    templates:
+      - "--lua-desync=fake:blob={blob}:{fool}{mod}:repeats={rep}"
+    axes:
+      blob: "@fake_tls_blob"
+      fool: "@fooling"
+      mod: "@tls_mod"
+      rep: "@repeats"
+
+  - id: fake_ttl
+    order: 26
+    l4: tcp
+    protocols: [tls]
+    payload: tls_client_hello
+    modes: [standard, full]
+    skip_if_working: [multisplit, seqovl, fake]
+    tags: [ttl]
+    templates:
+      - "--lua-desync=fake:blob={blob}:{ttl}:repeats={rep}"
+    axes:
+      blob: {quick: [fake_default_tls], standard: [fake_default_tls, tls_white]}
+      ttl: "@ttl"
+      rep: {quick: ["1"], standard: ["1", "6"]}
+
+  - id: fake_http
+    order: 25
+    l4: tcp
+    protocols: [http]
+    payload: http_req
+    skip_if_working: [http_basic, multisplit]
+    templates:
+      - "--lua-desync=fake:blob=fake_default_http:{fool}:repeats={rep}"
+    axes:
+      fool: "@fooling"
+      rep: "@repeats"
+
+  - id: faked
+    order: 30
+    l4: tcp
+    protocols: [tls, http]
+    payload: auto
+    skip_if_working: [multisplit, seqovl]
+    templates:
+      - "--lua-desync=fakedsplit:pos={pos1}:{fool}"
+      - "--lua-desync=fakeddisorder:pos={pos1}:{fool}"
+    axes:
+      pos1: "@pos1"
+      fool: "@fooling"
+
+  - id: hostfake
+    order: 35
+    l4: tcp
+    protocols: [tls, http]
+    payload: auto
+    skip_if_working: [multisplit, seqovl]
+    templates:
+      - "--lua-desync=hostfakesplit:host={host}:midhost={mid}:{fool}:tcp_ts_up"
+      - "--lua-desync=hostfakesplit:host={host}:disorder_after=-1:{fool}:tcp_ts_up"
+    axes:
+      host: {quick: ["{white}"], standard: ["{white}", "ozon.ru"]}
+      mid: {quick: [host-2], standard: [host-2, midsld]}
+      fool: {quick: [tcp_md5], standard: [tcp_md5, "tcp_seq=-3000", badsum]}
+
+  - id: fake_multi
+    order: 50
+    l4: tcp
+    protocols: [tls]
+    payload: tls_client_hello
+    skip_if_working: [multisplit, seqovl, fake]
+    templates:
+      - "--lua-desync=fake:blob={blob}:{fool}{mod} --lua-desync=multisplit:pos={pos}"
+      - "--lua-desync=fake:blob={blob}:{fool}{mod} --lua-desync=multidisorder:pos={pos}"
+    axes:
+      blob: "@fake_tls_blob"
+      fool: "@fooling"
+      mod: {quick: [""], standard: ["", ":tls_mod=rnd,dupsid,sni={white}"]}
+      pos: {quick: ["1", midsld], standard: ["1", midsld, "1,midsld"], full: "@pos_tls"}
+
+  - id: fake_seqovl
+    order: 52
+    l4: tcp
+    protocols: [tls]
+    payload: tls_client_hello
+    skip_if_working: [multisplit, seqovl, fake, fake_multi]
+    templates:
+      # nfqws2-keenetic default strategy 1, with the white hello as the fake and the overlap pattern
+      - "--lua-desync=fake:blob=tls_white:tls_mod=rnd,dupsid,sni={white}:{fool} --lua-desync=multisplit:pos={pos}:seqovl=1:seqovl_pattern=tls_white:tcp_ts_up"
+    axes:
+      fool: {quick: ["tcp_seq=10000"], standard: ["tcp_seq=10000", tcp_md5, badsum]}
+      pos: {quick: ["1,midsld"], standard: ["1,midsld", "1", "sniext+1"]}
+
+  - id: fake_faked
+    order: 55
+    l4: tcp
+    protocols: [tls]
+    payload: tls_client_hello
+    modes: [standard, full]
+    skip_if_working: [multisplit, seqovl, fake, fake_multi, faked]
+    templates:
+      - "--lua-desync=fake:blob={blob}:{fool} --lua-desync=fakedsplit:pos={pos1}:{fool}"
+      - "--lua-desync=fake:blob={blob}:{fool} --lua-desync=fakeddisorder:pos={pos1}:{fool}"
+    axes:
+      blob: {quick: [fake_default_tls], standard: [fake_default_tls, tls_white]}
+      fool: "@fooling"
+      pos1: {quick: ["1"], standard: ["1", midsld], full: ["1", "2", midsld, "sniext+1"]}
+
+  - id: fake_hostfake
+    order: 60
+    l4: tcp
+    protocols: [tls]
+    payload: tls_client_hello
+    modes: [standard, full]
+    skip_if_working: [multisplit, seqovl, fake, fake_multi, hostfake]
+    templates:
+      - "--lua-desync=fake:blob={blob}:{fool} --lua-desync=hostfakesplit:host={white}:midhost=host-2:{fool}:tcp_ts_up"
+    axes:
+      blob: {quick: [fake_default_tls], standard: [fake_default_tls, tls_white]}
+      fool: "@fooling"
+
+  - id: oob
+    order: 17
+    l4: tcp
+    protocols: [tls, http]
+    payload: none
+    modes: [full]
+    tags: [phase0]
+    templates:
+      - "--in-range=-s1 --lua-desync=oob"
+      - "--in-range=-s1 --lua-desync=oob:urp=e"
+
+  - id: wssize
+    order: 98
+    l4: tcp
+    protocols: [tls, http]
+    payload: none
+    modes: [standard, full]
+    skip_if_working: [multisplit, seqovl, fake, fake_ttl, faked, hostfake, fake_multi, fake_seqovl, fake_faked, fake_hostfake]
+    tags: [slow, phase0]
+    templates:
+      - "--lua-desync=wssize:wsize=1:scale=6"
+      - "--lua-desync=wssize:wsize=1:scale=6 --lua-desync=multisplit:pos=midsld"
+
+  - id: quic
+    order: 90
+    l4: udp
+    protocols: [quic]
+    payload: quic_initial
+    first_for: [QuicBlock]
+    templates:
+      - "--lua-desync=fake:blob=fake_default_quic:repeats={rep}"
+      - "--lua-desync=fake:blob=0x00000000000000000000000000000000:repeats={rep}"
+      - "--lua-desync=udplen:increment={inc}"
+      - "--lua-desync=fake:blob=fake_default_quic:repeats={rep} --lua-desync=udplen:increment={inc}"
+    axes:
+      rep: {quick: ["6"], standard: ["2", "6", "11"], full: ["1", "2", "4", "6", "11", "20"]}
+      inc: {quick: ["2"], standard: ["2", "8"], full: ["2", "4", "8", "16", "-2"]}

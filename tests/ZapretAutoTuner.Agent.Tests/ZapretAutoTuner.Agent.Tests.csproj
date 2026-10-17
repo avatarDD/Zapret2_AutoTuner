@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZapretAutoTuner.Agent\ZapretAutoTuner.Agent.csproj" />
+    <ProjectReference Include="..\..\src\ZapretAutoTuner.Protocol\ZapretAutoTuner.Protocol.csproj" />
+  </ItemGroup>
+</Project>

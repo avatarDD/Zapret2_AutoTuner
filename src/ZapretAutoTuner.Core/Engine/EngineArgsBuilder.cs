@@ -43,7 +43,7 @@ public static class EngineArgsBuilder
         a.AddRange(l.ExtraGlobalOptions);
 
         foreach (var f in l.LuaFiles ?? StandardLuaFiles)
-            a.Add("--lua-init=@" + PathArg(Path.Combine(l.LuaDir, f), win));
+            a.Add("--lua-init=@" + PathArg(l.LuaDir.TrimEnd('/', '\\') + "/" + f, win)); // the target platform's separator, not the host's
         foreach (var f in l.ExtraLuaPaths)
             a.Add("--lua-init=@" + PathArg(f, win));
 

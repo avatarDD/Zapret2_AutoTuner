@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using ZapretAutoTuner.Core.Diagnostics;
 using ZapretAutoTuner.Core.Packets;
 using ZapretAutoTuner.Probes.Quic;
 

@@ -57,6 +57,12 @@ public sealed class HostsFileTests
     {
         var broken = Original + HostsFile.Begin + "\n1.2.3.4 old.example\n";
         Assert.Equal(Original, HostsFile.Remove(broken));
+        // the user's own lines below a block that lost its END stay
+        var userBelow = Original + HostsFile.Begin + "\n1.2.3.4 old.example\n\n192.168.1.1 router.lan\n";
+        Assert.Equal(Original + "\n192.168.1.1 router.lan\n", HostsFile.Remove(userBelow));
+        Assert.Equal(["old.example"], HostsFile.Read(userBelow).Select(p => p.Host));
+        var commentBelow = Original + HostsFile.Begin + "\n1.2.3.4 old.example\n# my router\n192.168.1.1 router.lan\n";
+        Assert.Equal(Original + "# my router\n192.168.1.1 router.lan\n", HostsFile.Remove(commentBelow));
         var two = HostsFile.Apply(Original, [Yt]) + HostsFile.Apply("", [Gv]);
         var fixedUp = HostsFile.Apply(two, [Gv]);
         Assert.Equal([Gv], HostsFile.Read(fixedUp));

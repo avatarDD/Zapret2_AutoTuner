@@ -82,6 +82,22 @@ public class IpcTests
         await conn.Client.PinHostsAsync(new PinHostsRequest());
         Assert.Equal(original, await File.ReadAllTextAsync(hosts));
         Assert.Empty((await conn.Client.ListHostsPinsAsync(new ListHostsPinsRequest())).Pins);
+
+        // nothing to change: no write and no backup
+        var noop = await conn.Client.PinHostsAsync(new PinHostsRequest());
+        Assert.Equal("", noop.BackupPath);
+
+        // a hosts file in a legacy code page (cp1251 comment) keeps every byte outside the block
+        byte[] legacy = [.. "# "u8, 0xD0, 0xEE, 0xF3, 0xF2, 0xE5, 0xF0, .. "\r\n10.0.0.5 nas.lan\r\n"u8];
+        await File.WriteAllBytesAsync(hosts, legacy);
+        var lr = await conn.Client.PinHostsAsync(req);
+        Assert.Equal(legacy, await File.ReadAllBytesAsync(lr.BackupPath));
+        var withPin = await File.ReadAllBytesAsync(hosts);
+        Assert.Equal(legacy, withPin[..legacy.Length]);
+        Assert.Contains("142.250.1.10 www.youtube.com\r\n", System.Text.Encoding.Latin1.GetString(withPin), StringComparison.Ordinal);
+        await conn.Client.PinHostsAsync(new PinHostsRequest());
+        Assert.Equal(legacy, await File.ReadAllBytesAsync(hosts));
+        Assert.Empty(Directory.GetFiles(dir, "*.ztuner-tmp"));
     }
 
     [Fact]

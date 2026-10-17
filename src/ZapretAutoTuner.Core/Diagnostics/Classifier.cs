@@ -195,6 +195,9 @@ public static class Classifier
         if (t.Dns?.Poisoned == true)
             findings.Add(new LabelFinding(BlockLabel.DnsPoison, null, t.Dns.Evidence));
 
+        if (t.Addresses.Count == 0 && t.Dns?.Poisoned != true)
+            findings.Add(new LabelFinding(BlockLabel.Unknown, null, ["адреса сайта не найдены: ни один DNS не вернул A/AAAA"]));
+
         var live = new List<string>();
         var dead = new List<string>();
         foreach (var a in t.Addresses)
@@ -289,9 +292,10 @@ public static class Classifier
         if (main is not null && !baselineOk && !r.Any(x => x.Label == BlockLabel.Punish))
             ClassifyFailure(a, main, Add);
 
-        // 2.8 also when the page itself is small: the padded download crosses the threshold
-        if (a.Padded is { } pad && IsCutoff(pad, 128 * 1024) && !r.Any(x => x.Label == BlockLabel.Cutoff16K))
-            Add(BlockLabel.Cutoff16K, [$"загрузка с раздутым запросом остановилась на {pad.StalledAt ?? pad.BytesIn} B", .. Evidence(pad)]);
+        // 2.8 also when the page itself is small: the padded request alone crosses the threshold. The DPI counts the
+        // volume of the flow, so the cut shows as the padded exchange dying while the plain one completes.
+        if (a.Padded is { } pad && baselineOk && IsPaddedCutoff(pad) && !r.Any(x => x.Label == BlockLabel.Cutoff16K))
+            Add(BlockLabel.Cutoff16K, [$"обычный запрос проходит, раздутый ({pad.BytesOut} B отправлено, {pad.BytesIn} B принято) обрывается", .. Evidence(pad)]);
 
         // 2.14
         if (a.Tls12 is { } t12 && a.Tls13 is { } t13 && t12.TlsOk && !t13.TlsOk && t13.ConnectOk)
@@ -314,6 +318,8 @@ public static class Classifier
                 Add(BlockLabel.Open, $"полная загрузка: {baseline[0].BodyBytes} B, HTTP {baseline[0].HttpStatus}");
             else if (baseline.Count == 0)
                 Add(BlockLabel.Unknown, "baseline не измерен");
+            else
+                Add(BlockLabel.Unknown, ["загрузка не прошла, но ни один признак блокировки не совпал", .. Evidence(main!)]);
         }
         return r;
     }
@@ -400,6 +406,11 @@ public static class Classifier
     private static bool IsCutoff(ProbeResult p, long need) =>
         p.TlsOk && !p.Passes(ProbeLevel.L2Body, need) && p.Error is ProbeError.Stalled or ProbeError.HttpReset or ProbeError.Truncated
         && (p.StalledAt ?? p.BytesIn) is >= CutoffMin and <= CutoffMax;
+
+    /// <summary>The padded probe died after the flow passed the cut-off size (sent and received together).</summary>
+    internal static bool IsPaddedCutoff(ProbeResult p) =>
+        p.TlsOk && !p.Complete && p.Error is ProbeError.Stalled or ProbeError.HttpReset or ProbeError.HttpTimeout or ProbeError.Truncated
+        && p.BytesOut + p.BytesIn >= CutoffMin;
 
     /// <summary>
     /// HTTP block (§2.6): a redirect to another registrable domain, or a reset or silence on the request. A redirect to

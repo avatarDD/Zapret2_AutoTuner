@@ -44,7 +44,7 @@ public sealed class StandIntegrationTests(ITestOutputHelper output) : IAsyncLife
         if (!Available())
             return;
         _dir = Directory.CreateTempSubdirectory("ztstand").FullName;
-        var cert = TestCerts.Leaf("open.test", "sni.test", "drop.test", "ip.test", "port.test", "cut.test", "kyber.test", "fp.test", "redirect.test", "iana.org");
+        var cert = TestCerts.Leaf("open.test", "sni.test", "drop.test", "ip.test", "port.test", "cut.test", "kyber.test", "fp.test", "redirect.test", "vol.test", "iana.org");
         await File.WriteAllTextAsync(Path.Combine(_dir, "c.pem"), cert.ExportCertificatePem());
         using var key = System.Security.Cryptography.X509Certificates.RSACertificateExtensions.GetRSAPrivateKey(cert)!;
         await File.WriteAllTextAsync(Path.Combine(_dir, "k.pem"), key.ExportPkcs8PrivateKeyPem());
@@ -62,10 +62,10 @@ public sealed class StandIntegrationTests(ITestOutputHelper output) : IAsyncLife
         return Task.CompletedTask;
     }
 
-    private static ClassifierOptions Options(string ip) => new()
+    private static ClassifierOptions Options(string ip, string path = "/big") => new()
     {
         Addresses = [IPAddress.Parse(ip)],
-        Path = "/big",
+        Path = path,
         BaselineAttempts = 2,
         Pause = TimeSpan.FromMilliseconds(50),
         NeutralAddress = IPAddress.Parse($"{Net}.11"),
@@ -85,23 +85,25 @@ public sealed class StandIntegrationTests(ITestOutputHelper output) : IAsyncLife
     {
         if (!_up)
             return;
-        var cases = new (string Host, string Ip, BlockLabel Expected, NextStep Next)[]
+        var cases = new (string Host, string Ip, BlockLabel Expected, NextStep Next, string Path)[]
         {
-            ("open.test", $"{Net}.11", BlockLabel.Open, NextStep.Nothing),
-            ("sni.test", $"{Net}.12", BlockLabel.SniBlock, NextStep.SearchStrategy),
-            ("drop.test", $"{Net}.13", BlockLabel.SniBlock, NextStep.SearchStrategy),
-            ("ip.test", $"{Net}.14", BlockLabel.IpBlock, NextStep.FindOtherIp),
-            ("port.test", $"{Net}.15", BlockLabel.PortBlock, NextStep.FindOtherIp),
-            ("cut.test", $"{Net}.16", BlockLabel.Cutoff16K, NextStep.SearchStrategy),
-            ("kyber.test", $"{Net}.17", BlockLabel.KyberMultiPkt, NextStep.SearchStrategy),
-            ("fp.test", $"{Net}.18", BlockLabel.Fingerprint, NextStep.SearchStrategy),
-            ("redirect.test", $"{Net}.19", BlockLabel.HttpBlock, NextStep.SearchStrategy),
+            ("open.test", $"{Net}.11", BlockLabel.Open, NextStep.Nothing, "/big"),
+            ("sni.test", $"{Net}.12", BlockLabel.SniBlock, NextStep.SearchStrategy, "/big"),
+            ("drop.test", $"{Net}.13", BlockLabel.SniBlock, NextStep.SearchStrategy, "/big"),
+            ("ip.test", $"{Net}.14", BlockLabel.IpBlock, NextStep.FindOtherIp, "/big"),
+            ("port.test", $"{Net}.15", BlockLabel.PortBlock, NextStep.FindOtherIp, "/big"),
+            ("cut.test", $"{Net}.16", BlockLabel.Cutoff16K, NextStep.SearchStrategy, "/big"),
+            ("kyber.test", $"{Net}.17", BlockLabel.KyberMultiPkt, NextStep.SearchStrategy, "/big"),
+            ("fp.test", $"{Net}.18", BlockLabel.Fingerprint, NextStep.SearchStrategy, "/big"),
+            ("redirect.test", $"{Net}.19", BlockLabel.HttpBlock, NextStep.SearchStrategy, "/big"),
+            // a 2 KB page never reaches the cut; only the padded request does
+            ("vol.test", $"{Net}.20", BlockLabel.Cutoff16K, NextStep.SearchStrategy, "/"),
         };
         // different addresses do not share DPI rules, so the cases can run side by side
         var runs = await Task.WhenAll(cases.Select(async c =>
         {
             var steps = new List<ClassifierStep>();
-            var run = await ClassifierRunner.RunAsync(c.Host, Options(c.Ip), new SyncProgress<ClassifierStep>(steps.Add));
+            var run = await ClassifierRunner.RunAsync(c.Host, Options(c.Ip, c.Path), new SyncProgress<ClassifierStep>(steps.Add));
             return (c, run, steps);
         }));
 

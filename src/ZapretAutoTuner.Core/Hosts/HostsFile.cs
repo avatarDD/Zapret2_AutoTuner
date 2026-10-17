@@ -28,16 +28,15 @@ public static class HostsFile
     public static List<HostsPin> Read(string content)
     {
         var pins = new List<HostsPin>();
-        bool inside = false;
-        foreach (var raw in content.Split('\n'))
+        var lines = content.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+        int begin = lines.FindIndex(l => l.Trim() == Begin);
+        while (begin >= 0)
         {
-            var line = raw.TrimEnd('\r').Trim();
-            if (line == Begin)
-                inside = true;
-            else if (line == End)
-                inside = false;
-            else if (inside && line.Length > 0 && line[0] != '#')
+            int end = BlockEnd(lines, begin);
+            foreach (var line in lines.Skip(begin + 1).Take(end - begin).Select(l => l.Trim()))
             {
+                if (line.Length == 0 || line[0] == '#')
+                    continue;
                 var parts = line.Split((char[])[' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length >= 2 && IPAddress.TryParse(parts[0], out var ip))
                 {
@@ -45,6 +44,7 @@ public static class HostsFile
                         pins.Add(new HostsPin(h, ip));
                 }
             }
+            begin = end + 1 < lines.Count ? lines.FindIndex(end + 1, l => l.Trim() == Begin) : -1;
         }
         return pins;
     }
@@ -64,18 +64,13 @@ public static class HostsFile
             lines.RemoveAt(lines.Count - 1);
 
         int begin = lines.FindIndex(l => l.Trim() == Begin);
-        int end = begin < 0 ? -1 : lines.FindIndex(begin + 1, l => l.Trim() == End);
-        if (begin >= 0 && end < 0)
-            end = lines.Count - 1; // a cut block (manual edit): drop it to the end
         int at = begin;
         // remove every AutoTuner block, there should be at most one
         while (begin >= 0)
         {
+            int end = BlockEnd(lines, begin);
             lines.RemoveRange(begin, end - begin + 1);
             begin = lines.FindIndex(l => l.Trim() == Begin);
-            end = begin < 0 ? -1 : lines.FindIndex(begin + 1, l => l.Trim() == End);
-            if (begin >= 0 && end < 0)
-                end = lines.Count - 1;
         }
 
         if (pins.Count > 0)
@@ -98,6 +93,35 @@ public static class HostsFile
         if (endsWithNewline || pins.Count > 0)
             sb.Append(nl);
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The last line of the block that starts at <paramref name="begin"/>. A block whose END line was deleted by hand
+    /// ends at the last of its own lines (our comments and <c>IP host</c> pins) before the first blank or foreign
+    /// line, so the user's lines further down are never taken with it.
+    /// </summary>
+    private static int BlockEnd(List<string> lines, int begin)
+    {
+        int end = lines.FindIndex(begin + 1, l => l.Trim() == End);
+        int nextBegin = lines.FindIndex(begin + 1, l => l.Trim() == Begin);
+        if (end >= 0 && (nextBegin < 0 || end < nextBegin))
+            return end;
+        int last = begin;
+        for (int i = begin + 1; i < lines.Count; i++)
+        {
+            var t = lines[i].Trim();
+            bool ours = t.StartsWith("# Added by Zapret2 AutoTuner", StringComparison.Ordinal) || IsPinLine(t);
+            if (!ours)
+                break;
+            last = i;
+        }
+        return last;
+    }
+
+    private static bool IsPinLine(string t)
+    {
+        var parts = t.Split((char[])[' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 2 && IPAddress.TryParse(parts[0], out _) && Target.IsValidHostName(parts[1]);
     }
 
     /// <summary>Removes the AutoTuner block.</summary>

@@ -23,7 +23,7 @@ public sealed class BrowserProbeTests(ITestOutputHelper output)
         </head><body><h1>main</h1>
         <img src="http://dead.test/logo.png">
         <img src="http://ad.doubleclick.net/pixel.gif">
-        <script>window.addEventListener('load', () => fetch('http://slow.test/feed').catch(() => {}));</script>
+        <script>window.addEventListener('load', () => { fetch('http://slow.test/feed').catch(() => {}); new EventSource('/events'); });</script>
         </body></html>
         """;
 
@@ -76,7 +76,8 @@ public sealed class BrowserProbeTests(ITestOutputHelper output)
             var domains = SecondaryDomains.Analyze(load, "main.test");
             output.WriteLine($"{chrome}: load={load.LoadTime} requests={load.Requests.Count}\n" + string.Join("\n", domains));
             var by = domains.ToDictionary(d => d.Host);
-            Assert.Equal(DomainState.Ok, by["main.test"].State);
+            Assert.Equal(DomainState.Ok, by["main.test"].State); // the open event stream is not a stall
+            Assert.Contains(load.Requests, r => r.Url.EndsWith("/events", StringComparison.Ordinal) && r.Status == 200);
             Assert.True(by["main.test"].IsMain);
             Assert.Equal(DomainState.Ok, by["cdn.test"].State);
             Assert.True(by["cdn.test"].Bytes >= 20_000);
@@ -159,6 +160,13 @@ public sealed class BrowserProbeTests(ITestOutputHelper output)
                     var head = sb.ToString();
                     var path = head.Split(' ')[1];
                     var host = head.Split("\r\n").FirstOrDefault(l => l.StartsWith("Host:", StringComparison.OrdinalIgnoreCase))?[5..].Trim() ?? "";
+                    if (path == "/events")
+                    {
+                        // a live stream: headers and one event, then it stays open like a real SSE feed
+                        await s.WriteAsync("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\n\r\ndata: hi\n\n"u8.ToArray(), _cts.Token);
+                        await Task.Delay(Timeout.Infinite, _cts.Token);
+                        return;
+                    }
                     if (host.StartsWith("slow.test", StringComparison.Ordinal))
                     {
                         await Task.Delay(Timeout.Infinite, _cts.Token);

@@ -188,7 +188,7 @@ public static class ClassifierRunner
             await Task.Delay(o.Pause, ct).ConfigureAwait(false);
             obs = obs with { NeutralSni = await HttpAsync(o, host, ip, o.Port, ProbeLevel.L1Handshake, o.NeutralDomain, ct).ConfigureAwait(false) };
         }
-        else if (baseline.All(b => b.Passes(ProbeLevel.L2Body) && b.Complete) && baseline.Max(b => b.BodyBytes) < 128 * 1024)
+        else if (baseline.Count > 0 && baseline.All(b => b.Passes(ProbeLevel.L2Body) && b.Complete) && baseline.Max(b => b.BodyBytes) < 128 * 1024)
         {
             // the page is small: inflate the request so a volume cut-off has a chance to show (§3)
             step("16k", a, "Страница маленькая: проверяю обрыв на 16 KB раздутым запросом", "Small page: checking the 16 KB cut-off with a padded request");

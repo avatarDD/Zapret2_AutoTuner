@@ -522,6 +522,7 @@ public static class HttpProbe
             TlsOk = TlsOk,
             HttpStatus = HttpStatus,
             BytesIn = BytesIn,
+            BytesOut = raw?.BytesOut ?? 0,
             BodyBytes = BodyBytes,
             ContentLength = ContentLength,
             Complete = Complete,

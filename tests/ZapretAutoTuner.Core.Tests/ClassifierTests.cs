@@ -42,6 +42,19 @@ public sealed class ClassifierTests
     }
 
     [Fact]
+    public void A_failure_no_rule_explains_is_unknown_not_open()
+    {
+        // data trickled until the time limit: blocked, but no label fits
+        var v = Run(Addr() with { Baseline = [Fail(ProbeError.TimeLimit, tls: true, bytes: 40_000), Fail(ProbeError.TimeLimit, tls: true, bytes: 41_000)] });
+        Assert.Equal(BlockLabel.Unknown, v.Primary);
+        Assert.Equal(NextStep.NeedVpn, v.Next);
+
+        var none = Classifier.Classify(new TargetObservation { Host = Host, Addresses = [] });
+        Assert.Equal(BlockLabel.Unknown, none.Primary);
+        Assert.NotEqual(NextStep.Nothing, none.Next);
+    }
+
+    [Fact]
     public void All_addresses_dead_is_an_ip_block_and_starts_the_other_ip_search()
     {
         var v = Run(
@@ -144,8 +157,14 @@ public sealed class ClassifierTests
     [Fact]
     public void Small_page_but_padded_download_cut_is_the_cutoff()
     {
-        var v = Run(Addr() with { Baseline = [Ok(body: 3000)], Padded = Fail(ProbeError.HttpReset, tls: true, bytes: 18_000) });
+        // the 24 KB of padding goes out, the DPI counts it and kills the flow before the response
+        var v = Run(Addr() with { Baseline = [Ok(body: 3000)], Padded = Fail(ProbeError.HttpTimeout, tls: true, bytes: 4_500) with { BytesOut = 26_000 } });
         Assert.Equal(BlockLabel.Cutoff16K, v.Primary);
+        Assert.Contains(v.Findings.Single(f => f.Label == BlockLabel.Cutoff16K).Evidence, e => e.Contains("26000 B отправлено", StringComparison.Ordinal));
+
+        // a padded probe that died before sending much is not a volume cut
+        var early = Run(Addr() with { Baseline = [Ok(body: 3000)], Padded = Fail(ProbeError.HttpReset, tls: true, bytes: 0) with { BytesOut = 600 } });
+        Assert.DoesNotContain(BlockLabel.Cutoff16K, early.Labels);
     }
 
     [Fact]

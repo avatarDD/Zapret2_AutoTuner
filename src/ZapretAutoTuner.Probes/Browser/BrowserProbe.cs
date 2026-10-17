@@ -97,6 +97,11 @@ public static class BrowserProbe
             e.Finish(sw.Elapsed, null);
             pending.Add(FillAsync(r, e, altSvc));
         };
+        page.Response += (_, resp) =>
+        {
+            if (log.TryGetValue(resp.Request, out var e))
+                e.Answered(sw.Elapsed, resp.Status);
+        };
         page.WebSocket += (_, ws) => webSockets.Add(ws.Url);
 
         bool loadFired = false;
@@ -127,7 +132,7 @@ public static class BrowserProbe
 
         // let late requests settle, but stop as soon as nothing is in flight
         var settleUntil = sw.Elapsed + o.Settle;
-        while (sw.Elapsed < settleUntil && log.Values.Any(e => !e.Done))
+        while (sw.Elapsed < settleUntil && log.Values.Any(e => !e.Done && e.Headers is null))
             await Task.Delay(200, ct).ConfigureAwait(false);
 
         List<string> hints = [];
@@ -263,6 +268,18 @@ public static class BrowserProbe
 
         public int? Status { get; set; }
 
+        /// <summary>When the response headers came; a stream (SSE, long poll) may never finish but is not stalled.</summary>
+        public TimeSpan? Headers { get; private set; }
+
+        public void Answered(TimeSpan at, int status)
+        {
+            lock (_gate)
+            {
+                Headers ??= at;
+                Status ??= status;
+            }
+        }
+
         public void Finish(TimeSpan at, string? error)
         {
             lock (_gate)
@@ -281,7 +298,7 @@ public static class BrowserProbe
             Error = Error,
             Bytes = Bytes,
             Started = Started,
-            Duration = Error is null && Ended is { } end ? end - Started : null,
+            Duration = Error is not null ? null : Ended is { } end ? end - Started : Headers is { } h ? h - Started : null,
         };
     }
 }

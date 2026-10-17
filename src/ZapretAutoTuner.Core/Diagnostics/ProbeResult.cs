@@ -83,6 +83,9 @@ public sealed record ProbeResult
     /// <summary>Response bytes after the TLS layer (headers and body).</summary>
     public long BytesIn { get; init; }
 
+    /// <summary>Request bytes sent on the wire, TLS included (a padded request is large).</summary>
+    public long BytesOut { get; init; }
+
     /// <summary>Response body bytes.</summary>
     public long BodyBytes { get; init; }
 

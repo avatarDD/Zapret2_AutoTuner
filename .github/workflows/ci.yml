@@ -67,7 +67,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python tools/bundle/bundle.py --rid ${{ matrix.rid }} --strict
       - name: Build tests
-        run: dotnet build tests/ZapretAutoTuner.Agent.Tests -c Release
+        run: |
+          dotnet build tests/ZapretAutoTuner.Agent.Tests -c Release
+          dotnet build tests/ZapretAutoTuner.Tuning.Tests -c Release
       - name: Agent tests as root (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -76,6 +78,9 @@ jobs:
           sudo -E env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" dotnet test tests/ZapretAutoTuner.Core.Tests -c Release --filter "FullyQualifiedName~FirewallTests"
           # the classifier against the DPI emulator stand (tools/stand)
           sudo -E env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" dotnet test tests/ZapretAutoTuner.Probes.Tests -c Release --filter "Category=Integration" --logger "console;verbosity=detailed"
+          # the strategy search with the real nfqws2 against the stand (PLAN 3.3, 3.4)
+          sudo -E env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" ZT_ZAPRET2_DIR="$PWD/runtimes/linux-x64/zapret2" \
+            dotnet test tests/ZapretAutoTuner.Tuning.Tests -c Release --no-build --filter "Category=Integration" --logger "console;verbosity=detailed"
           # nothing may be left behind
           ! sudo nft list tables | grep -q ztuner
           ! sudo iptables -t mangle -S | grep -q ztuner

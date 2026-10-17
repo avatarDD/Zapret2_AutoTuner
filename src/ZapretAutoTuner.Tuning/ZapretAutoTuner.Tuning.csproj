@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ZapretAutoTuner.Tuning</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ZapretAutoTuner.Core\ZapretAutoTuner.Core.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Probes\ZapretAutoTuner.Probes.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Protocol\ZapretAutoTuner.Protocol.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Storage\ZapretAutoTuner.Storage.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ZapretAutoTuner.Tuning.Tests" />
+  </ItemGroup>
+</Project>

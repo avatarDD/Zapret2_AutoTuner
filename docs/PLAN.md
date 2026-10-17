@@ -52,7 +52,7 @@ ZapretAutoTuner.Core (общая библиотека, без ввода-выв�
   Strategy.Generator, Strategy.Validator, Strategy.Normalizer, Classifier, Unifier (set cover),
   Exporters (Zapret2, Keenetic, ZapretGui, Bundle), Importers, KnowledgeBase (SQLite)
 ZapretAutoTuner.Probes:
-  CurlProbe (бандл curl), ImpersonateProbe (TLS-отпечатки), BrowserProbe (Playwright), UdpProbe
+  HttpProbe (свой HTTP/1.1 поверх TCP/TLS), HelloProbe (TLS-отпечатки), QuicProbe, DnsProbe, BrowserProbe (Playwright)
 ZapretAutoTuner.Tools: менеджер бандла и загрузок инструментов, проверка хэшей и подписей
 ```
 
@@ -97,13 +97,14 @@ docs/                           PLAN.md, ARCHITECTURE.md, USER_GUIDE.md
 | Инструмент | Зачем | Windows | Linux | Способ |
 |---|---|---|---|---|
 | zapret2 (winws2 / nfqws2 + lua + files/fake) | движок | `zapret2-vX-win.zip`: winws2.exe, cygwin1.dll, WinDivert.dll/64.sys, killall.exe | static nfqws2 из релиза под arch | **в комплекте**, версия закреплена, SHA-256 сверяется. Кнопка «Обновить zapret2» тянет релиз с GitHub, проверяет compat-версию lua |
-| curl с TLS 1.3, kyber и HTTP/3 | быстрые пробы L1/L2 | curl-for-win (OpenSSL 3.5+, ngtcp2) | static curl (OpenSSL 3.5+, ngtcp2/nghttp3) | **в комплекте** (~8 MB) |
-| Имперсонатор TLS-отпечатков | профили Chrome/Firefox/Safari/TV без браузера | curl-impersonate (или свой клиент) | то же | в комплекте, либо докачка из формы |
+| Пробы L1/L2 (HTTP, TLS 1.2/1.3) | быстрые пробы | встроено: свой HTTP/1.1 поверх `SslStream` | то же | встроено, curl не нужен |
+| Имперсонатор TLS-отпечатков | профили Chrome/Firefox/Safari/TV без браузера | встроено: ClientHello из спецификаций (`Packets/Data/client-hellos.json`), JA4 сверен с настоящими клиентами | то же | встроено |
+| QUIC Initial | QUIC-тест | встроено: свои Initial v1/v2 с шифрованием | то же | встроено |
 | Chromium и Firefox (Playwright) | L3-проверка страницы, HAR, вторичные домены | `playwright install chromium firefox` в каталог приложения | то же (+ системные зависимости через `install-deps` с подтверждением) | **докачка из формы** «Инструменты» (~300 MB), с прогрессом. Можно указать установленный Chrome или Firefox |
 | Захват пакетов | анализ | WinDivert sniff (уже есть) | AF_PACKET (без зависимостей) | встроено |
 | Wireshark | ручной разбор | ссылка «Установить» (winget) | пакетный менеджер | опционально |
 | ncat-аналог | проверка портов | встроено (сокеты .NET) | встроено | встроено |
-| DNS/DoH | диагностика подмены | встроено (DnsClient.NET + HttpClient DoH) | встроено | встроено |
+| DNS/DoH | диагностика подмены | встроено (свой DNS-кодек, UDP/TCP и DoH через HttpClient) | встроено | встроено |
 | nft | перехват на Linux | — | системный; если нет — подсказка установить пакет `nftables` (кнопка с командой под дистрибутив) | проверка при старте |
 
 Экран «Инструменты»: статус каждого инструмента (версия, путь, OK или нет),
@@ -169,15 +170,24 @@ nft-таблица `inet ztuner` с set адресов цели, `queue num` и�
 **2.1 DnsProbe.** Системный DNS, публичные UDP 53, DoH (несколько
 серверов), HTTPS RR (ECH, alpn), сравнение, метка `DNS_POISON`.
 
-**2.2 CurlProbe.** L1/L2 на заданный IP (`--resolve`), TLS 1.2 и 1.3, HTTP/3,
+**2.2 HttpProbe.** Свой HTTP/1.1 клиент поверх TCP и `SslStream` вместо
+бандла curl: в релизе остаются только официальные бинарники апстримов, а
+нужные пробам детали (точка stall, RST, порядок байт) у своего клиента видны
+лучше. L1/L2 на заданный IP, TLS 1.2 и 1.3,
 GET крупного ресурса, раздувание заголовками (аналог `CURL_PAD`), замер
 `bytes_in`, stall, ошибки. Результат — `ProbeResult` из `dpi-diagnostics` §3.
 
-**2.3 ImpersonateProbe.** Тот же интерфейс с отпечатками профилей клиентов.
+**2.3 HelloProbe и QuicProbe.** ClientHello профилей клиентов строится из
+спецификаций (GREASE, порядок расширений, ML-KEM, ECH GREASE, padding), JA4
+совпадает с настоящими браузерами. Проба отправляет его и смотрит ответ
+сервера. QuicProbe шлёт свой QUIC Initial и читает Initial сервера.
 
 **2.4 BrowserProbe.** Playwright: открыть URL в Chromium и Firefox, HAR,
 сетевой лог, ошибки по доменам, `load`, скриншот. Режим «изолированный
-профиль браузера» (без кэша и расширений, DoH на выбор).
+профиль браузера» (без кэша и расширений, DoH на выбор). Браузер ищется так:
+`ZT_CHROMIUM`/`ZT_FIREFOX`, каталог `browsers/` рядом с приложением, установка
+Playwright. HAR, сохранённый пользователем в своём браузере, разбирается так
+же (`Har.Parse`).
 
 **2.5 Classifier.** Цепочка тестов из `dpi-diagnostics` §2 с
 доказательствами. Без запуска движка: baseline, порт-тест, кросс-SNI тест
@@ -208,12 +218,16 @@ Instagram, X/Twitter, Discord, Telegram и другие, плюс хостинг
 контрольные ресурсы. Параллельные быстрые пробы без движка, таблица-светофор
 с причиной блокировки простыми словами. Оттуда одной кнопкой можно перейти к
 подбору для отмеченных строк. С включённой стратегией видны колонки «без
-обхода» и «с обходом». История проверок сохраняется.
+обхода» и «с обходом». История проверок сохраняется (в SQLite фазы 3; в
+фазе 2 чекер возвращает отчёт, хранение добавит фаза 3).
 - Готово, когда: на стенде чекер за ≤ 2 минуты верно размечает все типы
   блоков по набору из 30 ресурсов.
 
 **2.6 Вторичные домены.** HAR + pcap SNI → список доменов с важностью,
-итеративное открытие (до 3 итераций).
+итеративное открытие (до 3 итераций). Состояния: ok, частично, ошибка,
+stall, заблокирован браузером, только упомянут. Реклама и счётчики — список
+как данные (`Diagnostics/Data/noise-domains.json`), по умолчанию не чинятся.
+Самый большой ответ домена из HAR становится ресурсом для L2.
 
 ### Фаза 3. Генератор и перебор (недели 5–7)
 
@@ -408,8 +422,8 @@ WinDivert sniff или AF_PACKET (только заголовки и CH, без 
 
 - В релиз кладутся только официальные бинарники апстримов: nfqws2/winws2,
   WinDivert, cygwin1.dll и lua — из релизного архива bol-van/zapret2
-  (SHA-256 закреплён в `tools/bundle/zapret2.lock.json`), curl и прочие
-  инструменты — из официальных сборок их проектов. Свои пересборки не
+  (SHA-256 закреплён в `tools/bundle/zapret2.lock.json`), браузеры для L3 —
+  официальные сборки Playwright. curl не нужен: пробы встроены. Свои пересборки не
   выпускаем.
 - Установщики: Windows — MSIX/Inno Setup (подпись кода, если появится
   сертификат) и portable zip. Linux — AppImage, .deb, .rpm (Agent как
@@ -484,7 +498,11 @@ WinDivert sniff или AF_PACKET (только заголовки и CH, без 
 
 ## 6. Тестовый стенд (нужен с фазы 1)
 
-- Linux network namespaces: клиент ↔ «DPI» ↔ сервер. «DPI» — программа
+- Сделано в фазе 2: `tools/stand/stand.sh` поднимает netns `ztstand`
+  (veth, 10.124.0.x), «DPI» собран на правилах iptables (string, connbytes,
+  u32, length), сервер — `tools/stand/server.py`. Интеграционный тест
+  классификатора идёт в CI под root и проверяет, что netns убран.
+- Дальше: Linux network namespaces: клиент ↔ «DPI» ↔ сервер. «DPI» — программа
   на nfqueue или eBPF, которая реализует типы блоков: SNI-RST, SNI-drop,
   16 KB cutoff (с whitelist SNI), QUIC-drop, HTTP-redirect, IP-drop,
   fingerprint (по JA4), «наказание», балансировка двух DPI с разными

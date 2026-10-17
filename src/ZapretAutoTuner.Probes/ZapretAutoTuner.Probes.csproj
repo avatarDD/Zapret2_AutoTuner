@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\ZapretAutoTuner.Core\ZapretAutoTuner.Core.csproj" />
+    <PackageReference Include="Microsoft.Playwright" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Data\*.json" LogicalName="ZapretAutoTuner.Probes.Data.%(Filename)%(Extension)" />

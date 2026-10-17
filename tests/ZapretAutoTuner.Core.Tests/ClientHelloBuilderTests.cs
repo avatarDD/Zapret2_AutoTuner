@@ -25,6 +25,43 @@ public sealed class ClientHelloBuilderTests
         Assert.Equal(ja4, Build(id).Ja4());
     }
 
+    // A server validates the NIST key share it picks (Schannel answered a random point with an alert), so the share
+    // must import as a real public key; the OS crypto checks that the point is on the curve.
+    [Theory]
+    [InlineData(32)]
+    [InlineData(48)]
+    [InlineData(66)]
+    public void Nist_key_share_is_a_point_on_the_curve(int size)
+    {
+        var (curve, named) = size switch
+        {
+            32 => (WeierstrassCurve.P256, System.Security.Cryptography.ECCurve.NamedCurves.nistP256),
+            48 => (WeierstrassCurve.P384, System.Security.Cryptography.ECCurve.NamedCurves.nistP384),
+            _ => (WeierstrassCurve.P521, System.Security.Cryptography.ECCurve.NamedCurves.nistP521),
+        };
+        for (int seed = 0; seed < 4; seed++)
+        {
+            var point = ClientHelloBuilder.EcPoint(curve, new Random(seed));
+            Assert.Equal(1 + 2 * size, point.Length);
+            Assert.Equal(4, point[0]);
+            Assert.Equal(point, ClientHelloBuilder.EcPoint(curve, new Random(seed)));
+            Import(point);
+            var bad = (byte[])point.Clone();
+            bad[^1] ^= 1;
+            Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() => Import(bad));
+        }
+
+        void Import(byte[] p)
+        {
+            using var ec = System.Security.Cryptography.ECDiffieHellman.Create();
+            ec.ImportParameters(new System.Security.Cryptography.ECParameters
+            {
+                Curve = named,
+                Q = new System.Security.Cryptography.ECPoint { X = p[1..(1 + size)], Y = p[(1 + size)..] },
+            });
+        }
+    }
+
     [Fact]
     public void Chrome_spec_equals_the_captured_chromium_hello()
     {

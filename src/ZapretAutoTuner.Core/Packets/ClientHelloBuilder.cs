@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Net;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -405,12 +406,12 @@ public static class ClientHelloBuilder
     {
         0x001D => RandomBytes(rnd, 32),
         0x001E => RandomBytes(rnd, 56),
-        0x0017 => [4, .. RandomBytes(rnd, 64)],
-        0x0018 => [4, .. RandomBytes(rnd, 96)],
-        0x0019 => [4, .. RandomBytes(rnd, 132)],
+        0x0017 => EcPoint(WeierstrassCurve.P256, rnd),
+        0x0018 => EcPoint(WeierstrassCurve.P384, rnd),
+        0x0019 => EcPoint(WeierstrassCurve.P521, rnd),
         0x11EC => [.. MlKem768PublicKey(rnd), .. RandomBytes(rnd, 32)],           // X25519MLKEM768: ML-KEM first
         0x6399 => [.. RandomBytes(rnd, 32), .. MlKem768PublicKey(rnd)],           // X25519Kyber768Draft00: X25519 first
-        0x11EB => [4, .. RandomBytes(rnd, 64), .. MlKem768PublicKey(rnd)],        // SecP256r1MLKEM768
+        0x11EB => [.. EcPoint(WeierstrassCurve.P256, rnd), .. MlKem768PublicKey(rnd)], // SecP256r1MLKEM768
         0x0201 => MlKem768PublicKey(rnd),
         0x0100 => RandomBytes(rnd, 256), // ffdhe2048
         0x0101 => RandomBytes(rnd, 384), // ffdhe3072
@@ -419,6 +420,21 @@ public static class ClientHelloBuilder
         0x0104 => RandomBytes(rnd, 1024),
         _ => RandomBytes(rnd, 32),
     };
+
+    /// <summary>
+    /// An uncompressed point that is really on the curve: a server that picks this group (Schannel prefers the NIST
+    /// curves) validates it and answers a random point with an alert. The scalar comes from <paramref name="rnd"/>, so a
+    /// seeded hello stays deterministic; the point is computed here rather than by the OS crypto, which not every
+    /// platform lets import a private key without its public part.
+    /// </summary>
+    internal static byte[] EcPoint(WeierstrassCurve curve, Random rnd)
+    {
+        var d = RandomBytes(rnd, curve.Size);
+        d[0] &= curve.Size == 66 ? (byte)0x01 : (byte)0x7F; // below the group order
+        d[^1] |= 1; // never zero
+        var (x, y) = curve.Multiply(new BigInteger(d, isUnsigned: true, isBigEndian: true));
+        return [4, .. curve.Encode(x), .. curve.Encode(y)];
+    }
 
     /// <summary>
     /// An ML-KEM-768 encapsulation key that passes the modulus check (FIPS 203 §7.2): three polynomials of 256
@@ -490,4 +506,87 @@ public static class ClientHelloBuilder
 
         public byte[] ToArray() => _ms.ToArray();
     }
+}
+
+/// <summary>A NIST prime curve y² = x³ − 3x + b, just enough to compute a public point for a key share.</summary>
+internal sealed class WeierstrassCurve
+{
+    public static readonly WeierstrassCurve P256 = new(32,
+        "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
+        "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+        "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296",
+        "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5");
+
+    public static readonly WeierstrassCurve P384 = new(48,
+        "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffff",
+        "b3312fa7e23ee7e4988e056be3f82d19181d9c6efe8141120314088f5013875ac656398d8a2ed19d2a85c8edd3ec2aef",
+        "aa87ca22be8b05378eb1c71ef320ad746e1d3b628ba79b9859f741e082542a385502f25dbf55296c3a545e3872760ab7",
+        "3617de4a96262c6f5d9e98bf9292dc29f8f41dbd289a147ce9da3113b5f0b8c00a60b1ce1d7e819d7a431d7c90ea0e5f");
+
+    public static readonly WeierstrassCurve P521 = new(66,
+        "01ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "0051953eb9618e1c9a1f929a21a0b68540eea2da725b99b315f3b8b489918ef109e156193951ec7e937b1652c0bd3bb1bf073573df883d2c34f1ef451fd46b503f00",
+        "00c6858e06b70404e9cd9e3ecb662395b4429c648139053fb521f828af606b4d3dbaa14b5e77efe75928fe1dc127a2ffa8de3348b3c1856a429bf97e7e31c2e5bd66",
+        "011839296a789a3bc0045c8a5fb42c7d1bd998f54449579b446817afbd17273e662c97ee72995ef42640c550b9013fad0761353c7086a272c24088be94769fd16650");
+
+    private readonly BigInteger _p;
+    private readonly BigInteger _b;
+    private readonly BigInteger _gx;
+    private readonly BigInteger _gy;
+
+    private WeierstrassCurve(int size, string p, string b, string gx, string gy)
+    {
+        Size = size;
+        _p = Hex(p);
+        _b = Hex(b);
+        _gx = Hex(gx);
+        _gy = Hex(gy);
+    }
+
+    /// <summary>Bytes of one coordinate.</summary>
+    public int Size { get; }
+
+    public bool Contains(BigInteger x, BigInteger y) => Mod(y * y - (x * x * x - 3 * x + _b)) == 0;
+
+    /// <summary>k·G by double-and-add in affine coordinates (slow, but a hello needs one point).</summary>
+    public (BigInteger X, BigInteger Y) Multiply(BigInteger k)
+    {
+        (BigInteger X, BigInteger Y)? acc = null;
+        var add = (_gx, _gy);
+        for (; k > 0; k >>= 1)
+        {
+            if (!k.IsEven)
+                acc = acc is { } a ? Add(a, add) : add;
+            add = Add(add, add);
+        }
+        return acc ?? throw new ArgumentOutOfRangeException(nameof(k));
+    }
+
+    public byte[] Encode(BigInteger v)
+    {
+        var raw = v.ToByteArray(isUnsigned: true, isBigEndian: true);
+        var outBytes = new byte[Size];
+        raw.CopyTo(outBytes, Size - raw.Length);
+        return outBytes;
+    }
+
+    // k is below the group order, so the sum of two distinct multiples of G is never the point at infinity
+    private (BigInteger, BigInteger) Add((BigInteger X, BigInteger Y) a, (BigInteger X, BigInteger Y) b)
+    {
+        BigInteger l = a == b
+            ? Mod((3 * a.X * a.X - 3) * Inverse(2 * a.Y))
+            : Mod((b.Y - a.Y) * Inverse(b.X - a.X));
+        var x = Mod(l * l - a.X - b.X);
+        return (x, Mod(l * (a.X - x) - a.Y));
+    }
+
+    private BigInteger Inverse(BigInteger v) => BigInteger.ModPow(Mod(v), _p - 2, _p);
+
+    private BigInteger Mod(BigInteger v)
+    {
+        var r = v % _p;
+        return r.Sign < 0 ? r + _p : r;
+    }
+
+    private static BigInteger Hex(string s) => new(Convert.FromHexString(s), isUnsigned: true, isBigEndian: true);
 }

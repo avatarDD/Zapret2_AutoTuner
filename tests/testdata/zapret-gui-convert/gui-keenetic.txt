@@ -1,0 +1,6 @@
+
+ISP_INTERFACE="eth3"
+NFQWS_BASE_ARGS="--qnum=200 --user=nobody"
+NFQWS_ARGS="--filter-tcp=443 --lua-desync=multisplit:pos=1 --lua-init=@/opt/etc/nfqws2/lua/zapret-antidpi.lua"
+NFQWS_ARGS_QUIC="--filter-udp=443 --lua-desync=fake:blob=fake_default_quic"
+NFQWS_EXTRA_ARGS="--hostlist=/opt/etc/nfqws2/user.list --hostlist-exclude=/opt/etc/nfqws2/other.txt"

@@ -1,0 +1,6 @@
+NFQWS2_OPT="
+--blob=tls_wl:@/opt/zapret2/files/fake/tls_wl.bin
+--filter-tcp=443 --filter-l7=tls --hostlist=/opt/zapret2/lists/zt-tcp1.txt --payload=tls_client_hello --lua-desync=fake:blob=tls_wl:tcp_md5 --lua-desync=multidisorder:pos=1,midsld --new
+--filter-tcp=80,443 --filter-l7=http,tls --hostlist=/opt/zapret2/lists/zt-tcp2.txt --payload=tls_client_hello --lua-desync=multisplit:pos=1:seqovl=5:seqovl_pattern=0x1603030000 --payload=http_req --lua-desync=multisplit:pos=method+2 --new
+--filter-udp=443 --filter-l7=quic --hostlist=/opt/zapret2/lists/zt-quic1.txt --payload=quic_initial --lua-desync=fake:blob=fake_default_quic:repeats=6
+"

@@ -1,0 +1,23 @@
+{
+  "dropped": [
+    "--debug=@/tmp/x.log",
+    "--qnum",
+    "200"
+  ],
+  "kind": "args",
+  "kind_title": "строка аргументов nfqws2",
+  "ok": true,
+  "profiles": [
+    {
+      "args": "--hostlist=lists/other.txt --filter-tcp=443 --lua-desync=multisplit:pos=1",
+      "enabled": true,
+      "id": "import1",
+      "name": "TCP 443"
+    }
+  ],
+  "warnings": [
+    "стратегия nfqws v1 (--dpi-desync) — для nfqws2 её надо переписать на --lua-desync",
+    "--qnum задаёт GUI, а не стратегия",
+    "--debug в файл: nfqws2 обнуляет его от root; лог движка и так приходит в журнал GUI"
+  ]
+}

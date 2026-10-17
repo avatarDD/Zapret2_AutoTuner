@@ -176,6 +176,19 @@ $NFQWS_ARGS $NFQWS_EXTRA_ARGS
   необходимости, `lua/zapret-autotuner.lua` + строка в `NFQWS_BASE_ARGS`.
 - Версию lua пакета сверяем по `NFQWS2_COMPAT_VER_REQUIRED` (сейчас 6).
 
+- Штатный `NFQWS_ARGS_UDP` пакета 1.3.1 содержит `fake:repeats=6:strategy=1`
+  без `blob=`: zapret-antidpi.lua бросает `fake: 'blob' arg required` на
+  первом пакете. Экспортёр этот профиль не трогает (он пользовательский),
+  но пишет предупреждение.
+- Порядок профилей в экспорте: все профили, кроме основного TCP и QUIC для
+  тех же доменов, идут в `NFQWS_ARGS_CUSTOM` в порядке решения (узкие
+  раньше). Основной TCP — последний (самый широкий) TCP-профиль, его
+  hostlist становится `lists/user.list`. Если QUIC-профиль покрывает другие
+  домены, он тоже уходит в CUSTOM со своим списком, а `NFQWS_ARGS_QUIC`
+  пустой (init пропускает пустые переменные).
+- Если в hostlist-профиле есть техника фазы 0, в `NFQWS_BASE_ARGS`
+  добавляется `--ipcache-hostname` (то же в zapret2, winws2 и zapret-gui).
+
 ### 2.3 Поставка
 
 Два варианта на форме:
@@ -220,10 +233,17 @@ zapret2 в `/opt/zapret2` (lua `lua/`, блобы `files/fake/`, hostlist
 - **Файлы списков, блобов и lua не передаются.** Их надо создать в GUI
   отдельно.
 
-Экспортёр «zapret-gui (текст)» формирует **keenetic-подобный** или
-`NFQWS2_OPT` текст с путями вида `/opt/zapret2/lists/zt-x.txt` и
-`/opt/zapret2/files/fake/zt_x.bin`, чтобы после конвертации ссылки стали
-`lists/zt-x.txt` и `@bin/zt_x.bin`. К тексту прилагаются инструкции «создайте
+Импорт keenetic-конфига в GUI теряет смысл: профили идут в порядке
+переменных в тексте, а не в порядке init (`NFQWS_ARGS_CUSTOM` оказывается
+последним), а все переменные «только со списками» (`MODE_LIST`,
+`MODE_ALL`, `NFQWS_ARGS_IPSET`) дописываются к **каждому** профилю, в том
+числе к UDP и CUSTOM. Поэтому экспортёр «zapret-gui (текст)» формирует
+только `NFQWS2_OPT` текст с путями вида `/opt/zapret2/lists/zt-x.txt` и
+`/opt/zapret2/files/fake/x.bin`, чтобы после конвертации ссылки стали
+`lists/zt-x.txt` и `@bin/x.bin`. `--name` в args не пишется (у профиля GUI
+своё имя). Глобальные опции, которые нужны стратегии (`--ipcache-hostname`),
+идут в начало первого профиля. Порт `convert` на C# (`ZapretGuiConvert`)
+сверяется golden-тестами с Python (`tools/golden/zapret_gui_convert.py`). К тексту прилагаются инструкции «создайте
 списки X, Y и блоб Z» и сами файлы.
 
 ### 3.2 JSON стратегии (через API, без доработок GUI)

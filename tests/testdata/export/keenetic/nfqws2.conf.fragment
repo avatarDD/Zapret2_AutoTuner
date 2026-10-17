@@ -1,0 +1,13 @@
+NFQWS_BASE_ARGS="--fastpath-workaround=auto
+--lua-init=@/opt/etc/nfqws2/lua/zapret-lib.lua
+--lua-init=@/opt/etc/nfqws2/lua/zapret-antidpi.lua
+--lua-init=@/opt/etc/nfqws2/lua/zapret-auto.lua
+--blob=quic_initial:@/opt/etc/nfqws2/blobs/quic_initial.bin
+--blob=tls_clienthello:@/opt/etc/nfqws2/blobs/tls_clienthello.bin
+--blob=tls_wl:@/opt/etc/nfqws2/blobs/tls_wl.bin"
+NFQWS_ARGS="--name=tcp2 --filter-tcp=80,443 --filter-l7=http,tls --payload=tls_client_hello --lua-desync=multisplit:pos=1:seqovl=5:seqovl_pattern=0x1603030000 --payload=http_req --lua-desync=multisplit:pos=method+2"
+NFQWS_ARGS_QUIC="--name=quic1 --filter-udp=443 --filter-l7=quic --payload=quic_initial --lua-desync=fake:blob=fake_default_quic:repeats=6"
+NFQWS_EXTRA_ARGS="$MODE_LIST"
+NFQWS_ARGS_CUSTOM="--name=tcp1 --filter-tcp=443 --filter-l7=tls --hostlist=/opt/etc/nfqws2/lists/zt-tcp1.list --payload=tls_client_hello --lua-desync=fake:blob=tls_wl:tcp_md5 --lua-desync=multidisorder:pos=1,midsld"
+TCP_PORTS=80,443
+UDP_PORTS=443,590:600,1400,3478:3481,5349,19294:19344,49152:65535

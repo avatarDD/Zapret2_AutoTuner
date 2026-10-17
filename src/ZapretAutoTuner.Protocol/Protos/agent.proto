@@ -34,6 +34,13 @@ service Agent {
   rpc PinHosts (PinHostsRequest) returns (PinHostsReply);
   rpc ListHostsPins (ListHostsPinsRequest) returns (ListHostsPinsReply);
 
+  // winws2 as a Windows service from a winws2 export (PLAN 5.3): files go to a directory only administrators can
+  // write, relative paths become absolute, the config passes the precheck first. The service stays after the Agent
+  // exits: installing it is the user's explicit choice. Windows only (FailedPrecondition elsewhere).
+  rpc InstallService (InstallServiceRequest) returns (ServiceReply);
+  rpc RemoveService (RemoveServiceRequest) returns (ServiceReply);
+  rpc QueryService (QueryServiceRequest) returns (ServiceReply);
+
   // Stops everything, removes rules and exits.
   rpc Shutdown (ShutdownRequest) returns (ShutdownReply);
 }
@@ -170,4 +177,22 @@ message ShutdownRequest {
 }
 
 message ShutdownReply {
+}
+
+message InstallServiceRequest {
+  // A winws2 export: zt-config.txt, lists/*, files/* (relative paths, '/' separators).
+  map<string, bytes> files = 1;
+}
+
+message RemoveServiceRequest {
+}
+
+message QueryServiceRequest {
+}
+
+message ServiceReply {
+  bool installed = 1;
+  bool running = 2;
+  string directory = 3;
+  string output = 4;
 }

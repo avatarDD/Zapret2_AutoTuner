@@ -1,0 +1,9 @@
+
+# zapret2 config
+FWTYPE=nftables
+IFACE_WAN="ppp0"
+NFQWS2_OPT="
+--blob=tls_google:@/opt/zapret2/files/fake/tls_google.bin
+--filter-tcp=443 --filter-l7=tls <HOSTLIST> --lua-desync=fake:blob=tls_google --new
+--filter-udp=443 <HOSTLIST_NOAUTO> --lua-desync=fake:blob=fake_default_quic:repeats=6
+"

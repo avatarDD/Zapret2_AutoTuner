@@ -299,6 +299,22 @@ def make_live():
         dump.wait()
         srv.terminate()
         srv.wait()
+    # a real browser hello: the reference for ClientHelloBuilder's "chrome141" spec
+    chrome = os.environ.get("ZT_CHROMIUM", "/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
+    if os.path.exists(chrome):
+        srv = subprocess.Popen(["openssl", "s_server", "-quiet", "-accept", "48443", "-key", key, "-cert", crt, "-www"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        dump = subprocess.Popen(["tcpdump", "-i", "lo", "-U", "-w", os.path.join(OUT, "live_chromium141.pcap"), "tcp port 48443"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(1.5)
+        subprocess.run([chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--no-proxy-server",
+                        "--host-resolver-rules=MAP chrome.test 127.0.0.1", "--ignore-certificate-errors", "--dump-dom",
+                        "https://chrome.test:48443/"], capture_output=True, timeout=30)
+        time.sleep(1)
+        dump.terminate()
+        dump.wait()
+        srv.terminate()
+        srv.wait()
     shutil.rmtree(tmp)
 
 

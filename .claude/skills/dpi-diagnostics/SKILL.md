@@ -275,7 +275,7 @@ QUIC. DPI и стратегии реагируют на это по-разном
 Встроенные профили (минимум):
 - Chrome/Edge latest (kyber, ECH, QUIC, GREASE);
 - Firefox latest (kyber, ECH по DoH, QUIC);
-- Safari/iOS (kyber с iOS 18, QUIC; ICMP-чувствителен);
+- Safari/iOS (kyber X25519MLKEM768 только с iOS 26 и macOS 26, QUIC; ICMP-чувствителен);
 - Android Chrome / WebView;
 - Smart TV и старые клиенты (Tizen, webOS, Android TV 9–11, YouTube TV-app):
   TLS 1.2 и 1.3 без kyber, часто без QUIC, свой порядок расширений;

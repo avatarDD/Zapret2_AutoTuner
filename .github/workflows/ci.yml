@@ -74,9 +74,12 @@ jobs:
           sudo -E env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" ZT_ZAPRET2_DIR="$PWD/runtimes/linux-x64/zapret2" \
             dotnet test tests/ZapretAutoTuner.Agent.Tests -c Release --no-build --logger "console;verbosity=normal"
           sudo -E env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" dotnet test tests/ZapretAutoTuner.Core.Tests -c Release --filter "FullyQualifiedName~FirewallTests"
+          # the classifier against the DPI emulator stand (tools/stand)
+          sudo -E env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" dotnet test tests/ZapretAutoTuner.Probes.Tests -c Release --filter "Category=Integration" --logger "console;verbosity=detailed"
           # nothing may be left behind
           ! sudo nft list tables | grep -q ztuner
           ! sudo iptables -t mangle -S | grep -q ztuner
+          ! ip netns list | grep -q ztstand
       - name: Agent tests (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

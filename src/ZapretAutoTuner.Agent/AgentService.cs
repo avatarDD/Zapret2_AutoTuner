@@ -135,6 +135,41 @@ internal sealed class AgentService : Protocol.Agent.AgentBase
         return Task.FromResult(reply);
     }
 
+    public override async Task<PinHostsReply> PinHosts(PinHostsRequest request, ServerCallContext context)
+    {
+        var pins = new List<Core.Hosts.HostsPin>();
+        foreach (var p in request.Pins)
+        {
+            if (!System.Net.IPAddress.TryParse(p.Address, out var ip))
+                throw new RpcException(new Status(StatusCode.InvalidArgument, $"не IP-адрес: {p.Address}"));
+            pins.Add(new Core.Hosts.HostsPin(p.Host, ip));
+        }
+        try
+        {
+            var (backup, flushed, result) = await _host.Hosts.SetAsync(pins, context.CancellationToken);
+            var reply = new PinHostsReply { BackupPath = backup, DnsFlushed = flushed };
+            reply.Pins.AddRange(result.Select(ToProto));
+            return reply;
+        }
+        catch (ArgumentException e)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, e.Message));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, $"не удалось записать {_host.Hosts.Path}: {e.Message}"));
+        }
+    }
+
+    public override async Task<ListHostsPinsReply> ListHostsPins(ListHostsPinsRequest request, ServerCallContext context)
+    {
+        var reply = new ListHostsPinsReply { Path = _host.Hosts.Path };
+        reply.Pins.AddRange((await _host.Hosts.ListAsync(context.CancellationToken)).Select(ToProto));
+        return reply;
+    }
+
+    private static Protocol.HostsPin ToProto(Core.Hosts.HostsPin p) => new() { Host = p.Host, Address = p.Address.ToString() };
+
     public override Task<ShutdownReply> Shutdown(ShutdownRequest request, ServerCallContext context)
     {
         _host.RequestStop("shutdown requested");

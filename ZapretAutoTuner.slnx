@@ -10,6 +10,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/ZapretAutoTuner.Agent.Tests/ZapretAutoTuner.Agent.Tests.csproj" />
     <Project Path="tests/ZapretAutoTuner.Core.Tests/ZapretAutoTuner.Core.Tests.csproj" />
+    <Project Path="tests/ZapretAutoTuner.Probes.Tests/ZapretAutoTuner.Probes.Tests.csproj" />
     <Project Path="tests/ZapretAutoTuner.Tools.Tests/ZapretAutoTuner.Tools.Tests.csproj" />
   </Folder>
 </Solution>

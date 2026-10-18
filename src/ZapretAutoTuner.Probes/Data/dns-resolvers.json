@@ -1,0 +1,34 @@
+{
+  // Default resolvers of DnsProbe (dpi-diagnostics §1, §2.1, §2a).
+  // DoH endpoints carry a bootstrap IP: the DoH host itself is never resolved through the system DNS.
+  "udp": [
+    { "name": "Cloudflare", "address": "1.1.1.1" },
+    { "name": "Google", "address": "8.8.8.8" },
+    { "name": "Quad9", "address": "9.9.9.9" },
+    { "name": "Yandex", "address": "77.88.8.8" }
+  ],
+  "doh": [
+    { "name": "Cloudflare", "url": "https://cloudflare-dns.com/dns-query", "bootstrap": "1.1.1.1", "ecs": false },
+    { "name": "Google", "url": "https://dns.google/dns-query", "bootstrap": "8.8.8.8", "ecs": true },
+    { "name": "Quad9", "url": "https://dns.quad9.net/dns-query", "bootstrap": "9.9.9.9", "ecs": false },
+    { "name": "AdGuard", "url": "https://dns.adguard-dns.com/dns-query", "bootstrap": "94.140.14.14", "ecs": false }
+  ],
+  // Addresses that never belong to a public site: a stub, sinkhole or local network in an answer for a public
+  // name means the answer was replaced.
+  "sinkholes": [
+    { "cidr": "0.0.0.0/8", "note": "this network / 0.0.0.0 sinkhole" },
+    { "cidr": "127.0.0.0/8", "note": "loopback" },
+    { "cidr": "10.0.0.0/8", "note": "private (RFC 1918)" },
+    { "cidr": "172.16.0.0/12", "note": "private (RFC 1918)" },
+    { "cidr": "192.168.0.0/16", "note": "private (RFC 1918)" },
+    { "cidr": "100.64.0.0/10", "note": "carrier-grade NAT (RFC 6598)" },
+    { "cidr": "169.254.0.0/16", "note": "link-local" },
+    { "cidr": "::1/128", "note": "loopback" },
+    { "cidr": "::/128", "note": "unspecified" },
+    { "cidr": "fc00::/7", "note": "unique local" },
+    { "cidr": "fe80::/10", "note": "link-local" }
+  ],
+  // Block-page addresses of ISPs. Add only addresses confirmed by a capture; an entry here makes DnsProbe report
+  // DNS_POISON on sight. Format: { "address": "x.x.x.x", "isp": "name", "note": "evidence" }.
+  "block_pages": []
+}

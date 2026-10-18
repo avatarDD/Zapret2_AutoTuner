@@ -5,5 +5,9 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Catalog\Data\*.json" LogicalName="ZapretAutoTuner.Core.Catalog.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Packets\Data\*.json" LogicalName="ZapretAutoTuner.Core.Packets.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Diagnostics\Data\*.json" LogicalName="ZapretAutoTuner.Core.Diagnostics.%(Filename)%(Extension)" />
+    <InternalsVisibleTo Include="ZapretAutoTuner.Core.Tests" />
+    <InternalsVisibleTo Include="ZapretAutoTuner.Probes.Tests" />
   </ItemGroup>
 </Project>

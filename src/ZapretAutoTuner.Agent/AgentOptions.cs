@@ -35,6 +35,12 @@ internal sealed class AgentOptions
     /// <summary>Clean up when no heartbeat arrives for this long.</summary>
     public TimeSpan HeartbeatTimeout { get; set; } = TimeSpan.FromSeconds(3);
 
+    /// <summary>Clean up when the first heartbeat does not arrive for this long after the start.</summary>
+    public TimeSpan StartupGrace { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Hosts file to edit; default — the system one (tests point it elsewhere).</summary>
+    public string? HostsFile { get; set; }
+
     /// <summary>Only remove leftovers of a crashed Agent (firewall table, sysctls, engines) and exit.</summary>
     public bool CleanupOnly { get; set; }
 
@@ -58,6 +64,7 @@ internal sealed class AgentOptions
                 case "--data-dir": o.DataDir = value; break;
                 case "--heartbeat-timeout": o.HeartbeatTimeout = TimeSpan.FromMilliseconds(int.Parse(value, CultureInfo.InvariantCulture)); break;
                 case "--cleanup": o.CleanupOnly = true; break;
+                case "--hosts-file": o.HostsFile = value; break;
                 default: throw new ArgumentException($"unknown option {a}");
             }
         }

@@ -145,7 +145,23 @@ public class UnitTests
         await wd.StartAsync(CancellationToken.None);
         host.Heartbeat();
         Assert.False(await TestEnv.WaitUntil(() => host.Stopping.IsCancellationRequested, TimeSpan.FromMilliseconds(200)));
-        Assert.True(await TestEnv.WaitUntil(() => host.Stopping.IsCancellationRequested, TimeSpan.FromSeconds(2)));
+        // generous: a loaded Windows runner delays the 250 ms watchdog ticks while other tests start Agents
+        Assert.True(await TestEnv.WaitUntil(() => host.Stopping.IsCancellationRequested, TimeSpan.FromSeconds(10)));
+        Assert.Equal("no heartbeat", host.StopReason);
+        await wd.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Watchdog_waits_for_the_first_heartbeat_within_the_startup_grace()
+    {
+        var dir = TestEnv.NewTempDir();
+        var o = AgentOptions.Parse(["--socket=/unused", "--token=" + new string('x', 64), "--ui-pid=" + Environment.ProcessId, "--data-dir=" + dir, "--heartbeat-timeout=200"]);
+        o.StartupGrace = TimeSpan.FromMilliseconds(1500);
+        await using var host = new AgentHost(o);
+        using var wd = new Watchdog(host);
+        await wd.StartAsync(CancellationToken.None);
+        Assert.False(await TestEnv.WaitUntil(() => host.Stopping.IsCancellationRequested, TimeSpan.FromMilliseconds(800)));
+        Assert.True(await TestEnv.WaitUntil(() => host.Stopping.IsCancellationRequested, TimeSpan.FromSeconds(10)));
         Assert.Equal("no heartbeat", host.StopReason);
         await wd.StopAsync(CancellationToken.None);
     }

@@ -19,6 +19,7 @@ internal sealed class AgentHost : IAsyncDisposable
 {
     private readonly Lock _hbLock = new();
     private long _lastHeartbeat = Stopwatch.GetTimestamp();
+    private bool _heartbeatSeen;
     private int _cleanedUp;
 
     public AgentHost(AgentOptions options)
@@ -30,6 +31,7 @@ internal sealed class AgentHost : IAsyncDisposable
         Firewall = OperatingSystem.IsLinux() ? new FirewallManager(State, Sysctl, EngineManager.FwMark) : null;
         Engines = new EngineManager(options, State, Firewall);
         Captures = new CaptureManager();
+        Hosts = new HostsManager(options.HostsFile ?? Core.Hosts.HostsFile.DefaultPath, options.DataDir!);
     }
 
     public AgentOptions Options { get; }
@@ -44,6 +46,8 @@ internal sealed class AgentHost : IAsyncDisposable
 
     public CaptureManager Captures { get; }
 
+    public HostsManager Hosts { get; }
+
     /// <summary>Set when the Agent should exit (UI lost, Shutdown).</summary>
     public CancellationTokenSource Stopping { get; } = new();
 
@@ -52,7 +56,23 @@ internal sealed class AgentHost : IAsyncDisposable
     public void Heartbeat()
     {
         lock (_hbLock)
+        {
             _lastHeartbeat = Stopwatch.GetTimestamp();
+            _heartbeatSeen = true;
+        }
+    }
+
+    /// <summary>
+    /// True when the UI is gone silent: heartbeats stopped for <see cref="AgentOptions.HeartbeatTimeout"/>, or none
+    /// came within <see cref="AgentOptions.StartupGrace"/> of the start (a slow machine may need seconds to connect).
+    /// </summary>
+    public bool HeartbeatLost
+    {
+        get
+        {
+            lock (_hbLock)
+                return Stopwatch.GetElapsedTime(_lastHeartbeat) > (_heartbeatSeen ? Options.HeartbeatTimeout : Options.StartupGrace);
+        }
     }
 
     public TimeSpan SinceHeartbeat
@@ -202,7 +222,7 @@ internal sealed class Watchdog : BackgroundService
                 {
                     if (ui is not null && HasExited(ui))
                         _host.RequestStop("UI process exited");
-                    else if (_host.SinceHeartbeat > _host.Options.HeartbeatTimeout)
+                    else if (_host.HeartbeatLost)
                         _host.RequestStop("no heartbeat");
                 }
             }

@@ -45,6 +45,62 @@ public class IpcTests
     }
 
     [Fact]
+    public async Task Hosts_pins_are_written_backed_up_and_removed()
+    {
+        var dir = TestEnv.NewTempDir();
+        var hosts = Path.Combine(dir, "hosts");
+        const string original = "127.0.0.1 localhost\n10.0.0.5 nas.lan\n";
+        await File.WriteAllTextAsync(hosts, original);
+        await using var conn = await AgentConnection.LaunchAsync(new AgentLaunchOptions
+        {
+            AgentPath = TestEnv.AgentPath,
+            DataDir = dir,
+            Elevation = AgentElevation.None,
+            StartTimeout = TimeSpan.FromSeconds(30),
+            HostsFile = hosts,
+        });
+
+        var req = new PinHostsRequest();
+        req.Pins.Add(new HostsPin { Host = "www.youtube.com", Address = "142.250.1.10" });
+        var r = await conn.Client.PinHostsAsync(req);
+        Assert.Equal(original, await File.ReadAllTextAsync(r.BackupPath));
+        var text = await File.ReadAllTextAsync(hosts);
+        Assert.StartsWith(original, text, StringComparison.Ordinal);
+        Assert.Contains("142.250.1.10 www.youtube.com", text, StringComparison.Ordinal);
+        var list = await conn.Client.ListHostsPinsAsync(new ListHostsPinsRequest());
+        Assert.Equal(hosts, list.Path);
+        Assert.Equal("www.youtube.com", Assert.Single(list.Pins).Host);
+
+        // a line break in a host name must not inject other lines
+        var bad = new PinHostsRequest();
+        bad.Pins.Add(new HostsPin { Host = "a.com\n1.2.3.4 bank.com", Address = "1.2.3.4" });
+        var e = await Assert.ThrowsAsync<RpcException>(async () => await conn.Client.PinHostsAsync(bad));
+        Assert.Equal(StatusCode.InvalidArgument, e.StatusCode);
+        Assert.Equal(text, await File.ReadAllTextAsync(hosts));
+
+        // one call removes everything AutoTuner added
+        await conn.Client.PinHostsAsync(new PinHostsRequest());
+        Assert.Equal(original, await File.ReadAllTextAsync(hosts));
+        Assert.Empty((await conn.Client.ListHostsPinsAsync(new ListHostsPinsRequest())).Pins);
+
+        // nothing to change: no write and no backup
+        var noop = await conn.Client.PinHostsAsync(new PinHostsRequest());
+        Assert.Equal("", noop.BackupPath);
+
+        // a hosts file in a legacy code page (cp1251 comment) keeps every byte outside the block
+        byte[] legacy = [.. "# "u8, 0xD0, 0xEE, 0xF3, 0xF2, 0xE5, 0xF0, .. "\r\n10.0.0.5 nas.lan\r\n"u8];
+        await File.WriteAllBytesAsync(hosts, legacy);
+        var lr = await conn.Client.PinHostsAsync(req);
+        Assert.Equal(legacy, await File.ReadAllBytesAsync(lr.BackupPath));
+        var withPin = await File.ReadAllBytesAsync(hosts);
+        Assert.Equal(legacy, withPin[..legacy.Length]);
+        Assert.Contains("142.250.1.10 www.youtube.com\r\n", System.Text.Encoding.Latin1.GetString(withPin), StringComparison.Ordinal);
+        await conn.Client.PinHostsAsync(new PinHostsRequest());
+        Assert.Equal(legacy, await File.ReadAllBytesAsync(hosts));
+        Assert.Empty(Directory.GetFiles(dir, "*.ztuner-tmp"));
+    }
+
+    [Fact]
     public async Task Agent_exits_within_5_seconds_after_ui_dies()
     {
         var dir = TestEnv.NewTempDir();

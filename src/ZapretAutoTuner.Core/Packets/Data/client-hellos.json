@@ -1,0 +1,86 @@
+{
+  // ClientHello shapes of real clients for the impersonating probes (dpi-diagnostics §5).
+  // extensions: wire order; "grease" (empty), "grease:00" (one zero byte), a type in hex whose body is built from the
+  // fields below, or "type:hexbody" for a fixed body. Types the builder fills: 0000 0005 000a 000b 000d 0010 0012 0015
+  // 0016 0017 001b 001c 0022 0023 002b 002d 0031 0033 0039 44cd 4469 fe0d ff01.
+  "specs": [
+    {
+      "id": "chrome141",
+      "name": "Chrome 141",
+      "source": "captured from Chromium 141.0.7390.37 (headless, Linux), October 2026",
+      "record_version": "0301",
+      "permute_extensions": true,
+      "ciphers": ["grease", "1301", "1302", "1303", "c02b", "c02f", "c02c", "c030", "cca9", "cca8", "c013", "c014", "009c", "009d", "002f", "0035"],
+      "extensions": ["grease", "000d", "ca34:0000", "002b", "000b", "44cd", "0017", "001b", "0000", "002d", "0010", "0033", "ff01", "000a", "0023", "0005", "0012", "grease:00"],
+      "signature_algorithms": ["0403", "0804", "0401", "0503", "0805", "0501", "0806", "0601"],
+      "groups": ["grease", "11ec", "001d", "0017", "0018"],
+      "key_shares": ["grease", "11ec", "001d"],
+      "versions": ["grease", "0304", "0303"],
+      "alpn": ["h2", "http/1.1"],
+      "alps": ["h2"],
+      "cert_compression": [2],
+      "psk_modes": [1]
+    },
+    {
+      "id": "chrome_legacy",
+      "name": "Chrome 99 / Android TV",
+      "source": "BoringSSL defaults of Chrome 96-109 (no kyber, ALPS 0x4469, padding)",
+      "record_version": "0301",
+      "ciphers": ["grease", "1301", "1302", "1303", "c02b", "c02f", "c02c", "c030", "cca9", "cca8", "c013", "c014", "009c", "009d", "002f", "0035"],
+      "extensions": ["grease", "0000", "0017", "ff01", "000a", "000b", "0023", "0010", "0005", "000d", "0012", "0033", "002d", "002b", "001b", "4469", "grease:00", "0015"],
+      "signature_algorithms": ["0403", "0804", "0401", "0503", "0805", "0501", "0806", "0601"],
+      "groups": ["grease", "001d", "0017", "0018"],
+      "key_shares": ["grease", "001d"],
+      "versions": ["grease", "0304", "0303"],
+      "alpn": ["h2", "http/1.1"],
+      "alps": ["h2"],
+      "cert_compression": [2],
+      "psk_modes": [1]
+    },
+    {
+      "id": "firefox",
+      "name": "Firefox 13x",
+      "source": "NSS defaults of Firefox 128-140",
+      "record_version": "0301",
+      "ciphers": ["1301", "1303", "1302", "c02b", "c02f", "cca9", "cca8", "c02c", "c030", "c00a", "c009", "c013", "c014", "009c", "009d", "002f", "0035"],
+      "extensions": ["0000", "0017", "ff01", "000a", "000b", "0023", "0010", "0005", "0022", "0012", "0033", "002b", "000d", "002d", "001c", "001b", "fe0d"],
+      "signature_algorithms": ["0403", "0503", "0603", "0804", "0805", "0806", "0401", "0501", "0601", "0203", "0201"],
+      "delegated_credentials": ["0403", "0503", "0603", "0203"],
+      "groups": ["11ec", "001d", "0017", "0018", "0019", "0100", "0101"],
+      "key_shares": ["11ec", "001d", "0017"],
+      "versions": ["0304", "0303"],
+      "alpn": ["h2", "http/1.1"],
+      "cert_compression": [1, 2, 3],
+      "record_size_limit": 16385,
+      "psk_modes": [1]
+    },
+    {
+      "id": "safari",
+      "name": "Safari 18 / iOS 18",
+      "source": "Apple SecureTransport/Network.framework defaults (Safari 17-18)",
+      "record_version": "0301",
+      "ciphers": ["grease", "1301", "1302", "1303", "c02c", "c02b", "cca9", "c030", "c02f", "cca8", "c00a", "c009", "c014", "c013", "009d", "009c", "0035", "002f", "c008", "c012", "000a"],
+      "extensions": ["grease", "0000", "0017", "ff01", "000a", "000b", "0010", "0005", "000d", "0012", "0033", "002d", "002b", "001b", "grease:00", "0015"],
+      "signature_algorithms": ["0403", "0804", "0401", "0503", "0203", "0805", "0805", "0501", "0806", "0601", "0201"],
+      "groups": ["grease", "001d", "0017", "0018", "0019"],
+      "key_shares": ["grease", "001d"],
+      "versions": ["grease", "0304", "0303", "0302", "0301"],
+      "alpn": ["h2", "http/1.1"],
+      "cert_compression": [1],
+      "psk_modes": [1]
+    },
+    {
+      "id": "tv_tls12",
+      "name": "Old TV, TLS 1.2 only",
+      "source": "OpenSSL 1.0.2 style hello of old Smart TV and set-top boxes",
+      "record_version": "0301",
+      "legacy_version": "0303",
+      "session_id": false,
+      "ciphers": ["c02b", "c02f", "c02c", "c030", "cca9", "cca8", "c009", "c013", "c00a", "c014", "009c", "009d", "002f", "0035", "000a"],
+      "extensions": ["ff01", "0000", "0017", "0023", "000d", "0005", "0012", "0010", "000b", "000a"],
+      "signature_algorithms": ["0401", "0501", "0601", "0403", "0503", "0603", "0201", "0203"],
+      "groups": ["001d", "0017", "0018"],
+      "alpn": ["http/1.1"]
+    }
+  ]
+}

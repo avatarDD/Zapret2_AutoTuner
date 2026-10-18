@@ -1,0 +1,12 @@
+{
+  // Client subnets of large access networks in other regions, for the EDNS Client Subnet search of other CDN edges
+  // (dpi-diagnostics §2a). Only the region matters; any /24 of the operator works.
+  "subnets": [
+    { "region": "DE", "operator": "Deutsche Telekom", "subnet": "80.128.0.0/24" },
+    { "region": "NL", "operator": "KPN", "subnet": "77.160.0.0/24" },
+    { "region": "GB", "operator": "BT", "subnet": "86.128.0.0/24" },
+    { "region": "TR", "operator": "Türk Telekom", "subnet": "88.224.0.0/24" },
+    { "region": "KZ", "operator": "Kazakhtelecom", "subnet": "95.56.0.0/24" },
+    { "region": "US", "operator": "Comcast", "subnet": "73.0.0.0/24" }
+  ]
+}

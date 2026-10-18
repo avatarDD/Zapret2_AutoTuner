@@ -39,6 +39,9 @@ public sealed class AgentLaunchOptions
 
     /// <summary>The process the Agent watches; default — the current one.</summary>
     public int? UiPid { get; init; }
+
+    /// <summary>Hosts file the Agent edits; default — the system one (tests use a copy).</summary>
+    public string? HostsFile { get; init; }
 }
 
 /// <summary>
@@ -113,6 +116,8 @@ public sealed class AgentConnection : IAsyncDisposable
         };
         if (o.EnginePath is not null)
             args.Add("--engine=" + o.EnginePath);
+        if (o.HostsFile is not null)
+            args.Add("--hosts-file=" + o.HostsFile);
         if (!OperatingSystem.IsWindows())
             args.Add("--owner-uid=" + GetUid());
 

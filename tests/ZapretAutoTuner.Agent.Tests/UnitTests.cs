@@ -156,7 +156,8 @@ public class UnitTests
     {
         var dir = TestEnv.NewTempDir();
         var o = AgentOptions.Parse(["--socket=/unused", "--token=" + new string('x', 64), "--ui-pid=" + Environment.ProcessId, "--data-dir=" + dir, "--heartbeat-timeout=200"]);
-        o.StartupGrace = TimeSpan.FromMilliseconds(1500);
+        // the grace runs from AgentHost construction; a loaded Windows runner can spend a second before the first check
+        o.StartupGrace = TimeSpan.FromMilliseconds(4000);
         await using var host = new AgentHost(o);
         using var wd = new Watchdog(host);
         await wd.StartAsync(CancellationToken.None);

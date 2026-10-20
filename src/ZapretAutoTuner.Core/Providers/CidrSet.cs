@@ -12,7 +12,8 @@ public readonly record struct Cidr(AddressFamily Family, UInt128 Start, int Pref
 
     public UInt128 Size => Prefix == 0 && Bits == 128 ? UInt128.MaxValue : UInt128.One << (Bits - Prefix);
 
-    public UInt128 Last => Start + (Size - 1);
+    /// <summary>The last address; <c>::/0</c> has 2^128 addresses, one more than <see cref="Size"/> can hold.</summary>
+    public UInt128 Last => Prefix == 0 && Bits == 128 ? UInt128.MaxValue : Start + (Size - 1);
 
     public static bool TryParse(string text, out Cidr cidr)
     {

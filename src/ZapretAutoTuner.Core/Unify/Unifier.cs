@@ -4,11 +4,11 @@ using ZapretAutoTuner.Core.Search;
 
 namespace ZapretAutoTuner.Core.Unify;
 
-/// <summary>What is known about one strategy on one domain: from the search, the knowledge base or a cross-check.</summary>
 /// <summary>A strategy for addresses rather than names: a provider (its ranges) or a program's servers.</summary>
 /// <param name="Name">The profile and ipset name: a provider id or a program endpoint name.</param>
 public sealed record IpResult(string Name, IReadOnlyList<string> Cidrs, L4Kind L4, string Ports, IReadOnlyList<string> L7, Strategy Strategy);
 
+/// <summary>What is known about one strategy on one domain: from the search, the knowledge base or a cross-check.</summary>
 public sealed record DomainResult(string Domain, L4Kind L4, Strategy Strategy, Efficiency Efficiency, double Score);
 
 /// <summary>One profile of the unified config: a strategy and the domains it serves.</summary>

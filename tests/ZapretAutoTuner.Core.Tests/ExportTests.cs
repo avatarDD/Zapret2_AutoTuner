@@ -130,7 +130,7 @@ public sealed class ExportTests
         Assert.Equal(["discord.com"], back.Solution.Profiles[0].HostlistDomains);
         Assert.Equal(WhiteBlob, back.Solution.Blobs["tls_wl"]);
         Assert.Equal(s.Profiles.Select(p => p.Strategy.ToString()), back.Solution.Profiles.Select(p => p.Strategy.ToString()));
-        var v = new StrategyValidator(new ValidationContext()).ValidateArgv(ArgTokenizer.Split(pkg.Text));
+        var v = new StrategyValidator(new ValidationContext { Platform = EnginePlatform.Linux }).ValidateArgv(ArgTokenizer.Split(pkg.Text));
         Assert.True(v.Ok, string.Join("\n", v.Errors));
     }
 
@@ -167,7 +167,7 @@ public sealed class ExportTests
         Assert.Contains(pkg.Warnings, w => w.Contains("NFQWS_ARGS_UDP", StringComparison.Ordinal));
         var argv = StrategyImporter.KeeneticArgv(new Dictionary<string, string>(vars) { ["NFQWS_ARGS_UDP"] = "" });
         argv.Remove("--fastpath-workaround=auto");
-        var v = new StrategyValidator(new ValidationContext()).ValidateArgv(argv);
+        var v = new StrategyValidator(new ValidationContext { Platform = EnginePlatform.Linux }).ValidateArgv(argv);
         Assert.True(v.Ok, string.Join("\n", v.Errors));
 
         // the fragment alone (no NFQWS_ARGS_IPSET, no UDP profile) gives exactly our profiles

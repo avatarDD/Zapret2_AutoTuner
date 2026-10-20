@@ -4,6 +4,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using ZapretAutoTuner.Core.Model;
+using ZapretAutoTuner.Core.Validation;
 
 namespace ZapretAutoTuner.Agent.Os;
 
@@ -21,7 +22,7 @@ internal static partial class WinwsService
     private const long MaxBytes = 16 * 1024 * 1024;
 
     private static readonly string[] EngineFiles = ["winws2.exe", "cygwin1.dll", "WinDivert.dll", "WinDivert64.sys"];
-    private static readonly string[] PathOptions = ["--hostlist", "--hostlist-exclude", "--hostlist-auto", "--ipset", "--ipset-exclude"];
+    private static readonly string[] PathOptions = ["--hostlist", "--hostlist-exclude", "--hostlist-auto", "--hostlist-auto-debug", "--ipset", "--ipset-exclude"];
 
     [GeneratedRegex("^(zt-config\\.txt|lists/[A-Za-z0-9_.-]+|files/[A-Za-z0-9_.-]+)$")]
     private static partial Regex SafeFile();
@@ -42,12 +43,15 @@ internal static partial class WinwsService
         return files.Values.Sum(v => (long)v.Length) > MaxBytes ? "файлы больше 16 MB" : null;
     }
 
-    /// <summary>The @config with every relative path made absolute under <paramref name="dir"/>.</summary>
+    /// <summary>
+    /// The @config with every relative path made absolute under <paramref name="dir"/>, in forward slashes (wordexp
+    /// takes an unquoted <c>\</c> for an escape; Cygwin understands <c>C:/…</c>), every word quoted where it needs it.
+    /// </summary>
     public static string RewriteConfig(string config, string dir)
     {
-        string Abs(string p) => Path.IsPathRooted(p) || p.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+        string Abs(string p) => (Path.IsPathRooted(p) || p.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
             ? p
-            : Path.Combine(dir, p.Replace('/', Path.DirectorySeparatorChar));
+            : Path.Combine(dir, p)).Replace('\\', '/');
         var lines = new List<string>();
         foreach (var line in config.ReplaceLineEndings("\n").Split('\n'))
         {
@@ -64,13 +68,40 @@ internal static partial class WinwsService
                     return $"{name}={Abs(value)}";
                 return t;
             });
-            lines.Add(string.Join(' ', tokens.Select(t => t.Contains(' ', StringComparison.Ordinal) ? $"'{t}'" : t)));
+            lines.Add(string.Join(' ', tokens.Select(ArgTokenizer.Quote)));
         }
         return string.Join("\n", lines.Where(l => l.Length > 0)) + "\n";
     }
 
     /// <summary>The argv the service will run, for the precheck.</summary>
     public static List<string> Argv(string config) => ArgTokenizer.Split(config);
+
+    /// <summary>
+    /// Every file the service would read from outside <paramref name="dir"/>: the service runs as LocalSystem on every
+    /// boot, so lua, blobs and lists must be the copies in its protected directory, never a path the user can write.
+    /// </summary>
+    public static List<string> OutsideFiles(IEnumerable<string> argv, string dir)
+    {
+        var root = Path.GetFullPath(dir).Replace('\\', '/').TrimEnd('/') + "/";
+        var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var bad = new List<string>();
+        foreach (var t in argv)
+        {
+            var (name, value) = ArgTokenizer.SplitOption(t);
+            string? path = name switch
+            {
+                "--lua-init" when value?.StartsWith('@') == true => value[1..],
+                "--blob" when value?.IndexOf(":@", StringComparison.Ordinal) is int at and > 0 => value[(at + 2)..],
+                "--debug" when value?.StartsWith('@') == true => value[1..],
+                "--writable" => value ?? "",
+                _ when PathOptions.Contains(name) => value,
+                _ => null,
+            };
+            if (path is not null && (path.Length == 0 || !Path.IsPathRooted(path) || !Path.GetFullPath(path).Replace('\\', '/').StartsWith(root, cmp)))
+                bad.Add(t);
+        }
+        return bad;
+    }
 
     [SupportedOSPlatform("windows")]
     public static async Task<string> InstallAsync(IReadOnlyDictionary<string, byte[]> files, string enginePath, Func<IReadOnlyList<string>, string?> precheck, CancellationToken ct)
@@ -98,13 +129,13 @@ internal static partial class WinwsService
             }
             // the precheck sees the files where they are; the installed service is untouched until it passes
             var text = Encoding.UTF8.GetString(files[ConfigFile]);
-            if (precheck(Argv(RewriteConfig(text, staging))) is { } problems)
+            var staged = RewriteConfig(text, staging);
+            if (OutsideFiles(Argv(staged), staging) is { Count: > 0 } outside)
+                throw new ArgumentException("файлы вне каталога службы: " + string.Join(' ', outside));
+            if (precheck(Argv(staged)) is { } problems)
                 throw new ArgumentException(problems);
-            await RemoveAsync(ct);
-            if (System.IO.Directory.Exists(dir))
-                System.IO.Directory.Delete(dir, true);
-            System.IO.Directory.Move(staging, dir);
-            await File.WriteAllTextAsync(Path.Combine(dir, ConfigFile), RewriteConfig(text, dir), new UTF8Encoding(false), ct);
+            if (Encoding.UTF8.GetByteCount(RewriteConfig(text, dir)) > StrategyValidator.MaxConfigFileSize)
+                throw new ArgumentException("@config с абсолютными путями длиннее 16384 байт");
         }
         catch
         {
@@ -113,17 +144,70 @@ internal static partial class WinwsService
             throw;
         }
 
-        var exe = Path.Combine(dir, "winws2.exe");
-        var cfg = Path.Combine(dir, ConfigFile);
-        var bin = $"\"{exe}\" @\"{cfg}\"";
+        // replace the installed service so that any failure puts the old one back: it is stopped and deleted, its
+        // directory set aside, and both come back if the new one does not start
+        var old = dir + ".old";
+        if (System.IO.Directory.Exists(old))
+            System.IO.Directory.Delete(old, true);
+        var hadService = (await QueryAsync(ct)).Installed;
+        var log = new StringBuilder();
+        try
+        {
+            log.Append(await RemoveAsync(ct));
+            if (System.IO.Directory.Exists(dir))
+                System.IO.Directory.Move(dir, old);
+        }
+        catch
+        {
+            System.IO.Directory.Delete(staging, true);
+            throw;
+        }
+        try
+        {
+            System.IO.Directory.Move(staging, dir);
+            await File.WriteAllTextAsync(Path.Combine(dir, ConfigFile), RewriteConfig(Encoding.UTF8.GetString(files[ConfigFile]), dir), new UTF8Encoding(false), ct);
+            log.Append(await CreateAndStartAsync(dir, ct));
+        }
+        catch (Exception e)
+        {
+            log.Append("\nновая служба не запустилась / the new service did not start: ").Append(e.Message);
+            try
+            {
+                await RemoveAsync(CancellationToken.None);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            if (System.IO.Directory.Exists(dir))
+                System.IO.Directory.Delete(dir, true);
+            if (System.IO.Directory.Exists(old))
+            {
+                System.IO.Directory.Move(old, dir);
+                if (hadService)
+                    log.Append('\n').Append(await CreateAndStartAsync(dir, CancellationToken.None));
+            }
+            throw new InvalidOperationException(log.ToString(), e);
+        }
+        if (System.IO.Directory.Exists(old))
+            System.IO.Directory.Delete(old, true);
+        return log.ToString();
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static async Task<string> CreateAndStartAsync(string dir, CancellationToken ct)
+    {
+        var bin = $"\"{Path.Combine(dir, "winws2.exe")}\" @\"{Path.Combine(dir, ConfigFile)}\"";
         var create = await Cmd.RunAsync("sc.exe", ["create", Name, "binPath=", bin, "start=", "auto", "DisplayName=", "Zapret2 AutoTuner (winws2)"], ct: ct);
         if (!create.Ok)
             throw new InvalidOperationException("sc create: " + create.Output);
         await Cmd.RunAsync("sc.exe", ["description", Name, "winws2 with the strategy chosen by Zapret2 AutoTuner"], ct: ct);
         var start = await Cmd.RunAsync("sc.exe", ["start", Name], ct: ct);
+        if (!start.Ok)
+            throw new InvalidOperationException("sc start: " + start.Output);
         return create.Output + "\n" + start.Output;
     }
 
+    /// <summary>Stops and deletes the service and waits until it is gone; throws if it will not stop.</summary>
     [SupportedOSPlatform("windows")]
     public static async Task<string> RemoveAsync(CancellationToken ct)
     {
@@ -131,9 +215,20 @@ internal static partial class WinwsService
         if (!query.Ok)
             return "";
         var stop = await Cmd.RunAsync("sc.exe", ["stop", Name], ct: ct);
-        for (int i = 0; i < 20 && (await Cmd.RunAsync("sc.exe", ["query", Name], ct: ct)).Stdout.Contains("STOP_PENDING", StringComparison.Ordinal); i++)
-            await Task.Delay(250, ct);
+        bool stopped = false;
+        for (int i = 0; i < 120 && !stopped; i++)
+        {
+            var q = await Cmd.RunAsync("sc.exe", ["query", Name], ct: ct);
+            stopped = !q.Ok || q.Stdout.Contains("STOPPED", StringComparison.Ordinal);
+            if (!stopped)
+                await Task.Delay(250, ct);
+        }
+        if (!stopped)
+            throw new InvalidOperationException($"служба {Name} не остановилась / did not stop: {stop.Output}");
         var delete = await Cmd.RunAsync("sc.exe", ["delete", Name], ct: ct);
+        // a service marked for deletion blocks sc create (1072) until the SCM lets it go
+        for (int i = 0; i < 40 && (await Cmd.RunAsync("sc.exe", ["query", Name], ct: ct)).Ok; i++)
+            await Task.Delay(250, ct);
         return stop.Output + "\n" + delete.Output;
     }
 

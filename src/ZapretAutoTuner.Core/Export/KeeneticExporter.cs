@@ -19,6 +19,8 @@ public static partial class KeeneticExporter
 
     public static string ListFile(string name) => $"lists/zt-{name}.list";
 
+    public static string IpsetFile(string name) => $"lists/zt-{name}-ipset.list";
+
     public static string BlobFile(string name) => $"blobs/{name}.bin";
 
     /// <summary>The package's default nfqws2.conf (1.3.1), the base of the full file.</summary>
@@ -38,7 +40,7 @@ public static partial class KeeneticExporter
         var quic = main is null ? null : s.Profiles.FirstOrDefault(p => p.UdpPorts is not null && p.TcpPorts is null && p.Hostlists.Count == 1 && p.Ipsets.Count == 0
             && s.Hostlists[p.Hostlists[0].Name].ToHashSet(StringComparer.Ordinal).SetEquals(mainDomains!));
 
-        string Path(ListRef r, bool ipset) => $"{Root}/{ListFile(r.Name)}";
+        string Path(ListRef r, bool ipset) => $"{Root}/{(ipset ? IpsetFile(r.Name) : ListFile(r.Name))}";
         string Line(Profile p, bool own) => string.Join(' ', (own ? p : WithoutLists(p)).ToArgs(Path));
 
         var custom = s.Profiles.Where(p => p != main && p != quic).Select(p => Line(p, true)).ToList();
@@ -89,8 +91,13 @@ public static partial class KeeneticExporter
 
         if (main is not null)
             pkg.AddText("lists/user.list", ExportCommon.ListLines(mainDomains!));
-        foreach (var name in s.Profiles.Where(p => p != main && p != quic).SelectMany(p => p.Hostlists.Concat(p.HostlistExcludes).Concat(p.Ipsets).Concat(p.IpsetExcludes)).Select(r => r.Name).Distinct())
-            pkg.AddText(ListFile(name), ExportCommon.ListLines(s.Hostlists.TryGetValue(name, out var d) ? d : s.Ipsets[name]));
+        // every list a line refers to: the main and QUIC hostlists are user.list, their excludes are not
+        var hostlists = s.Profiles.SelectMany(p => (p == main || p == quic ? [] : p.Hostlists).Concat(p.HostlistExcludes)).Select(r => r.Name).Distinct();
+        var ipsets = s.Profiles.SelectMany(p => p.Ipsets.Concat(p.IpsetExcludes)).Select(r => r.Name).Distinct();
+        foreach (var name in hostlists)
+            pkg.AddText(ListFile(name), ExportCommon.ListLines(s.Hostlists[name]));
+        foreach (var name in ipsets)
+            pkg.AddText(IpsetFile(name), ExportCommon.ListLines(s.Ipsets[name]));
         foreach (var (name, bytes) in s.Blobs)
             pkg.Files[BlobFile(name)] = bytes;
         if (mode == "MODE_ALL" && main is not null)
@@ -144,15 +151,16 @@ public static partial class KeeneticExporter
         return d;
     }
 
-    /// <summary>Replaces the value of the first assignment of <paramref name="name"/> (quoted values may span lines).</summary>
+    /// <summary>
+    /// Replaces the value of the last assignment of <paramref name="name"/>, the one the shell keeps (quoted values may
+    /// span lines); appends one if there is none.
+    /// </summary>
     public static string ReplaceVar(string conf, string name, string value)
     {
-        foreach (Match m in AssignRe().Matches(conf))
-        {
-            if (m.Groups[1].Value == name)
-                return conf[..m.Groups[2].Index] + value + conf[(m.Groups[2].Index + m.Groups[2].Length)..];
-        }
-        return conf.TrimEnd('\n') + $"\n{name}={value}\n";
+        var m = AssignRe().Matches(conf).LastOrDefault(m => m.Groups[1].Value == name);
+        return m is null
+            ? conf.TrimEnd('\n') + $"\n{name}={value}\n"
+            : conf[..m.Groups[2].Index] + value + conf[(m.Groups[2].Index + m.Groups[2].Length)..];
     }
 
     private static string ReadDefault()

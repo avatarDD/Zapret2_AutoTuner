@@ -34,7 +34,17 @@ public static partial class StrategyImporter
         text ??= "";
         var trimmed = text.TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
         if (trimmed.StartsWith('{'))
-            return ImportJson(trimmed, files, warnings);
+        {
+            try
+            {
+                return ImportJson(trimmed, files, warnings);
+            }
+            catch (Exception e) when (e is InvalidOperationException or FormatException)
+            {
+                // a section of the wrong type (AsArray on an object, a string where a number is) or bad base64
+                return Fail("json", "JSON неверной формы / malformed JSON: " + e.Message, warnings);
+            }
+        }
 
         string kind;
         List<string> argv;

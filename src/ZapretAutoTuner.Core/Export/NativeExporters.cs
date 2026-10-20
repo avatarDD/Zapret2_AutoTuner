@@ -12,7 +12,8 @@ public static class Zapret2Exporter
 
     public static string HostlistFile(string name) => $"ipset/zt-{name}.txt";
 
-    public static string IpsetFile(string name) => $"ipset/zt-{name}.txt";
+    /// <summary>Its own file, so a hostlist and an ipset of the same name do not overwrite each other.</summary>
+    public static string IpsetFile(string name) => $"ipset/zt-{name}-ipset.txt";
 
     public static string BlobFile(string name) => $"files/fake/{(name.StartsWith("zt_", StringComparison.Ordinal) ? name : "zt_" + name)}.bin";
 
@@ -74,6 +75,8 @@ public static class WinwsExporter
 
     public static string HostlistFile(string name) => $"lists/zt-{name}.txt";
 
+    public static string IpsetFile(string name) => $"lists/zt-{name}-ipset.txt";
+
     public static string BlobFile(string name) => $"files/{name}.bin";
 
     public static ExportPackage Build(Solution s)
@@ -86,7 +89,7 @@ public static class WinwsExporter
             LuaDir = "lua",
             Blobs = s.Blobs.Keys.ToDictionary(n => n, BlobFile, StringComparer.Ordinal),
             Profiles = s.Profiles,
-            ListPath = (r, _) => HostlistFile(r.Name),
+            ListPath = (r, ipset) => ipset ? IpsetFile(r.Name) : HostlistFile(r.Name),
             IpcacheHostname = Unify.Unifier.NeedsIpcacheHostname(s),
         };
         var argv = EngineArgsBuilder.Build(launch);
@@ -111,6 +114,8 @@ public static class WinwsExporter
         pkg.AddText("zt-start.cmd", "@echo off\r\ncd /d \"%~dp0\"\r\nwinws2.exe @\"%~dp0zt-config.txt\"\r\n");
         foreach (var (name, domains) in s.Hostlists)
             pkg.AddText(HostlistFile(name), ExportCommon.ListLines(domains));
+        foreach (var (name, cidrs) in s.Ipsets)
+            pkg.AddText(IpsetFile(name), ExportCommon.ListLines(cidrs));
         foreach (var (name, bytes) in s.Blobs)
             pkg.Files[BlobFile(name)] = bytes;
         pkg.AddText("README.txt", ExportCommon.Header(s) + """
@@ -131,8 +136,8 @@ public static class WinwsExporter
     private static bool IsProfileStart(string a) =>
         a != "--ipcache-hostname" && !a.StartsWith("--wf-", StringComparison.Ordinal) && !a.StartsWith("--lua-init=", StringComparison.Ordinal) && !a.StartsWith("--blob=", StringComparison.Ordinal);
 
-    /// <summary>@config words: a value with spaces goes in single quotes.</summary>
-    private static string Quote(string a) => a.Contains(' ', StringComparison.Ordinal) ? "'" + a + "'" : a;
+    /// <summary>@config words, quoted where wordexp would split or refuse them (spaces, <c>&lt;</c> of a range).</summary>
+    private static string Quote(string a) => ArgTokenizer.Quote(a);
 }
 
 /// <summary>A one-line argv to copy (strategy-export §1.3): globals first, profiles joined by --new.</summary>
@@ -155,6 +160,12 @@ public static class ArgvExporter
                 c.Hostlists = [];
                 c.IpsetIps.AddRange(p.Ipsets.SelectMany(l => s.Ipsets[l.Name]));
                 c.Ipsets = [];
+                if (p.HostlistExcludes.Count > 0)
+                    c.ExtraOptions.Insert(0, "--hostlist-exclude-domains=" + string.Join(',', p.HostlistExcludes.SelectMany(l => s.Hostlists[l.Name])));
+                if (p.IpsetExcludes.Count > 0)
+                    c.ExtraOptions.Insert(0, "--ipset-exclude-ip=" + string.Join(',', p.IpsetExcludes.SelectMany(l => s.Ipsets[l.Name])));
+                c.HostlistExcludes = [];
+                c.IpsetExcludes = [];
                 return c;
             }).ToList(),
             IpcacheHostname = Unify.Unifier.NeedsIpcacheHostname(s),
@@ -162,7 +173,9 @@ public static class ArgvExporter
         var argv = EngineArgsBuilder.Build(launch);
         // the engine's runner adds the queue; a copied line carries only what the strategy needs
         argv.RemoveAll(a => a.StartsWith("--qnum=", StringComparison.Ordinal) || a.StartsWith("--fwmark=", StringComparison.Ordinal));
-        var pkg = new ExportPackage { Format = "argv", Text = EngineArgsBuilder.ToCommandLine(argv) };
+        // cmd.exe ignores single quotes: a '<' of a range would become a redirection there
+        var line = platform == EnginePlatform.Windows ? EngineArgsBuilder.ToWindowsCommandLine(argv) : EngineArgsBuilder.ToCommandLine(argv);
+        var pkg = new ExportPackage { Format = "argv", Text = line };
         pkg.AddText("args.txt", pkg.Text + "\n");
         pkg.AddText("README.txt", ExportCommon.Header(s) + "\nСтрока аргументов nfqws2/winws2 / nfqws2/winws2 argument line.\n" + ExportCommon.PinsSection(s, "hosts"));
         return pkg;

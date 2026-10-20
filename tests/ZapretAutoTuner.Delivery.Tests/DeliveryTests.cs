@@ -18,6 +18,8 @@ internal sealed class FakeShell : IRemoteShell
 
     public Task<(int Code, string Output)> RunAsync(string command, CancellationToken ct)
     {
+        if (Dead)
+            throw new Renci.SshNet.Common.SshConnectionException("connection lost");
         Commands.Add(command);
         var words = command.Split(' ');
         string Arg(int i) => words[i].Trim('\'');
@@ -48,8 +50,16 @@ internal sealed class FakeShell : IRemoteShell
 
     public Task<byte[]?> ReadAsync(string path, CancellationToken ct) => Task.FromResult(Files.GetValueOrDefault(path));
 
+    /// <summary>A write to a path that matches throws, as a dropped connection would.</summary>
+    public Func<string, bool> WriteFails { get; set; } = _ => false;
+
+    /// <summary>After a failed write every command throws too (the connection is gone).</summary>
+    public bool Dead { get; set; }
+
     public Task WriteAsync(string path, byte[] data, CancellationToken ct)
     {
+        if (WriteFails(path))
+            throw new Renci.SshNet.Common.SshConnectionException("connection lost");
         Files[path] = data;
         return Task.CompletedTask;
     }
@@ -93,7 +103,7 @@ public sealed class KeeneticDeployerTests
         Assert.Equal("ppp0", conf["ISP_INTERFACE"]); // the user's own setting stays
         Assert.Equal("$MODE_LIST", conf["NFQWS_EXTRA_ARGS"]);
         Assert.Contains("--name=tcp2", conf["NFQWS_ARGS"], StringComparison.Ordinal);
-        Assert.Equal("youtube.com\n", Encoding.UTF8.GetString(sh.Files["/opt/etc/nfqws2/lists/user.list"]));
+        Assert.Equal("my.site\nyoutube.com\n", Encoding.UTF8.GetString(sh.Files["/opt/etc/nfqws2/lists/user.list"])); // theirs stay
         Assert.Equal("my.site\n", Encoding.UTF8.GetString(sh.Files["/opt/etc/nfqws2/lists/user.list.bak"]));
         Assert.True(sh.Files.ContainsKey(KeeneticDeployer.Conf + ".bak"));
         Assert.Equal([0x16, 0x03, 0x01], sh.Files["/opt/etc/nfqws2/blobs/tls_wl.bin"]);
@@ -108,10 +118,52 @@ public sealed class KeeneticDeployerTests
         var r = await KeeneticDeployer.DeployAsync(sh, KeeneticExporter.Build(Sample()), confirmedByUser: true);
         Assert.False(r.Ok);
         Assert.True(r.RolledBack);
-        Assert.Equal(before.Keys.Order(StringComparer.Ordinal), sh.Files.Keys.Order(StringComparer.Ordinal));
+        // the originals are back, files we added are gone; the .bak copies stay next to them
+        Assert.Equal(before.Keys.Order(StringComparer.Ordinal), sh.Files.Keys.Where(k => !k.EndsWith(".bak", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
         foreach (var (k, v) in before)
             Assert.Equal(v, sh.Files[k]);
         Assert.Contains(sh.Commands, c => c.StartsWith("/opt/etc/init.d/S51nfqws2 restart", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_lost_connection_mid_write_rolls_back_and_a_failed_rollback_says_so()
+    {
+        var sh = Router();
+        var before = sh.Files.ToDictionary(kv => kv.Key, kv => kv.Value);
+        sh.WriteFails = p => p == KeeneticDeployer.Conf;
+        var r = await KeeneticDeployer.DeployAsync(sh, KeeneticExporter.Build(Sample()), confirmedByUser: true);
+        Assert.False(r.Ok);
+        Assert.True(r.RolledBack);
+        Assert.Equal(before[KeeneticDeployer.Conf], sh.Files[KeeneticDeployer.Conf]);
+        Assert.False(sh.Files.ContainsKey("/opt/etc/nfqws2/blobs/tls_wl.bin"));
+
+        var dead = Router();
+        dead.WriteFails = p =>
+        {
+            dead.Dead = p == KeeneticDeployer.Conf;
+            return dead.Dead;
+        };
+        r = await KeeneticDeployer.DeployAsync(dead, KeeneticExporter.Build(Sample()), confirmedByUser: true);
+        Assert.False(r.Ok);
+        Assert.False(r.RolledBack);
+        Assert.Contains(".bak", r.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Merge_keeps_the_users_udp_ports_and_declarations_and_edits_the_last_assignment()
+    {
+        var conf = KeeneticExporter.DefaultConf;
+        conf = KeeneticExporter.ReplaceVar(conf, "NFQWS_ARGS_UDP", "\"--filter-udp=40000-40100 --lua-desync=fake:blob=my_stun\"");
+        conf = KeeneticExporter.ReplaceVar(conf, "UDP_PORTS", "443,1234");
+        conf = KeeneticExporter.ReplaceVar(conf, "NFQWS_BASE_ARGS", "\"--blob=my_stun:@/opt/etc/nfqws2/blobs/my_stun.bin\"");
+        conf += "NFQWS_EXTRA_ARGS=\"$MODE_AUTO\"\n"; // set again further down: the shell keeps this one
+        var merged = KeeneticExporter.ParseVars(KeeneticDeployer.Merge(conf, KeeneticExporter.Build(Sample()).Text));
+        var ports = merged["UDP_PORTS"].Split(',');
+        Assert.Contains("1234", ports);
+        Assert.Contains("40000:40100", ports);
+        Assert.Contains("--blob=my_stun:@/opt/etc/nfqws2/blobs/my_stun.bin", merged["NFQWS_BASE_ARGS"], StringComparison.Ordinal);
+        Assert.Contains("--blob=tls_wl:", merged["NFQWS_BASE_ARGS"], StringComparison.Ordinal);
+        Assert.Equal("$MODE_LIST", merged["NFQWS_EXTRA_ARGS"]);
     }
 
     [Fact]
@@ -143,14 +195,19 @@ public sealed class ZapretGuiClientTests
 
         public HashSet<string> Existing { get; } = [];
 
+        public string Strategies { get; set; } = "{\"ok\":true,\"strategies\":[]}";
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
             var path = request.RequestUri!.AbsolutePath;
             Calls.Add($"{request.Method} {path} {body}");
             Assert.Equal("Basic YWRtaW46c2VjcmV0", request.Headers.Authorization?.ToString());
+            if (request.Method == HttpMethod.Get && path == "/api/strategies")
+                return Json(HttpStatusCode.OK, Strategies);
+            // Bottle's JSON plugin escapes non-ASCII: the body has no Cyrillic letters
             if (request.Method == HttpMethod.Post && path == "/api/hostlists/create" && Existing.Contains((string)JsonNode.Parse(body)!["name"]!))
-                return Json(HttpStatusCode.BadRequest, "{\"ok\":false,\"error\":\"Список уже существует\"}");
+                return Json(HttpStatusCode.BadRequest, "{\"ok\": false, \"error\": \"\\u0421\\u043f\\u0438\\u0441\\u043e\\u043a \\u0443\\u0436\\u0435 \\u0441\\u0443\\u0449\\u0435\\u0441\\u0442\\u0432\\u0443\\u0435\\u0442\"}");
             if (request.Method == HttpMethod.Post && path == "/api/blobs" && Existing.Contains("blob"))
                 return Json(HttpStatusCode.Conflict, "{\"ok\":false,\"error\":\"Блоб с таким именем уже существует\"}");
             return Json(HttpStatusCode.OK, "{\"ok\":true}");
@@ -176,7 +233,9 @@ public sealed class ZapretGuiClientTests
         var gui = new Gui();
         gui.Existing.UnionWith(["zt-tcp1", "blob"]);
         var client = new ZapretGuiClient(new HttpClient(gui) { BaseAddress = new Uri("http://router:8080/") }, password: "secret");
-        var id = await client.SaveAsync(Sample(), confirmedByUser: true);
+        var plan = await client.PlanAsync(Sample());
+        gui.Calls.Clear();
+        var id = await client.SaveAsync(Sample(), plan, confirmedByUser: true);
         Assert.Equal("zt_discord_com_2026_10_17", id);
         Assert.Equal(
         [
@@ -199,9 +258,26 @@ public sealed class ZapretGuiClientTests
     {
         var gui = new Gui();
         var client = new ZapretGuiClient(new HttpClient(gui) { BaseAddress = new Uri("http://router:8080/") }, password: "secret");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SaveAsync(Sample(), confirmedByUser: false));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SaveAsync(Sample(), new GuiSavePlan("x", []), confirmedByUser: false));
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.ApplyAsync("x", confirmedByUser: false));
         Assert.Empty(gui.Calls);
-        Assert.Equal(4, ZapretGuiClient.Plan(Sample()).Count + 1);
+    }
+
+    [Fact]
+    public async Task Plan_never_reuses_a_strategy_id_and_names_lists_the_active_strategy_uses()
+    {
+        var gui = new Gui
+        {
+            Strategies = """
+                {"ok":true,"strategies":[
+                  {"id":"zt_discord_com_2026_10_17","is_active":true,"profiles":[{"args":"--hostlist=lists/zt-tcp1.txt --lua-desync=fake"}]},
+                  {"id":"zt_discord_com_2026_10_17_2","is_active":false,"profiles":[]}]}
+                """,
+        };
+        var client = new ZapretGuiClient(new HttpClient(gui) { BaseAddress = new Uri("http://router:8080/") }, password: "secret");
+        var plan = await client.PlanAsync(Sample());
+        Assert.Equal("zt_discord_com_2026_10_17_3", plan.Id);
+        Assert.Contains(plan.Steps, st => st.Ru.Contains("zt-tcp1", StringComparison.Ordinal) && st.Ru.Contains("активная", StringComparison.Ordinal));
+        Assert.Equal(3, plan.Steps.Count);
     }
 }

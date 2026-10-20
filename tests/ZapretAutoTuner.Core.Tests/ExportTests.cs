@@ -259,6 +259,59 @@ public sealed class ExportTests
         Assert.Contains(zip.Entries, e => e.FullName == "nfqws2.conf");
     }
 
+    /// <summary>Sample plus a provider ipset with the same name as a hostlist, an exclude and a "&lt;" range.</summary>
+    private static Solution WithIpsetAndExclude()
+    {
+        var s = Sample();
+        s.Ipsets["tcp1"] = ["162.159.128.0/24"];
+        s.Hostlists["skip"] = ["status.discord.com"];
+        s.Profiles.Insert(0, new Profile
+        {
+            Name = "ip1", TcpPorts = "443", Ipsets = [new ListRef("tcp1")], HostlistExcludes = [new ListRef("skip")],
+            Strategy = Strategy.Parse("--out-range=<n3 --lua-desync=multisplit:pos=1"),
+        });
+        return s;
+    }
+
+    [Fact]
+    public void Ipsets_and_excludes_get_their_own_files_and_ranges_are_quoted()
+    {
+        var s = WithIpsetAndExclude();
+        var z = Zapret2Exporter.Build(s);
+        Assert.Equal("discord.com\n", Encoding.UTF8.GetString(z.Files["ipset/zt-tcp1.txt"]));
+        Assert.Equal("162.159.128.0/24\n", Encoding.UTF8.GetString(z.Files["ipset/zt-tcp1-ipset.txt"]));
+
+        var w = WinwsExporter.Build(s);
+        Assert.Contains("--ipset=lists/zt-tcp1-ipset.txt", w.Text, StringComparison.Ordinal);
+        Assert.True(w.Files.ContainsKey("lists/zt-tcp1-ipset.txt"));
+        Assert.True(w.Files.ContainsKey("lists/zt-skip.txt"));
+        Assert.Contains("'--out-range=<n3'", w.Text, StringComparison.Ordinal);
+        Assert.Contains("--out-range=<n3", ArgTokenizer.Split(w.Text));
+
+        var k = KeeneticExporter.Build(s);
+        Assert.True(k.Files.ContainsKey("lists/zt-tcp1-ipset.list"));
+        Assert.True(k.Files.ContainsKey("lists/zt-skip.list"));
+
+        var a = ArgvExporter.Build(s);
+        Assert.Contains("--hostlist-exclude-domains=status.discord.com", a.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("--hostlist-exclude=", a.Text, StringComparison.Ordinal);
+        var win = ArgvExporter.Build(s, EnginePlatform.Windows, "lua").Text;
+        Assert.Contains("\"--out-range=<n3\"", win, StringComparison.Ordinal);
+        Assert.DoesNotContain("'", win, StringComparison.Ordinal);
+
+        // and they come back
+        var back = StrategyImporter.Import(Encoding.UTF8.GetString(z.Files["config.fragment"]), z.Files.ToDictionary(f => "/opt/zapret2/" + f.Key, f => f.Value)).Solution;
+        Assert.Equal(["162.159.128.0/24"], back.Ipsets["tcp1"]);
+        Assert.Equal(["discord.com"], back.Hostlists["tcp1"]);
+    }
+
+    [Fact]
+    public void Malformed_json_is_a_failed_import_not_a_crash()
+    {
+        Assert.Empty(StrategyImporter.Import("""{"format":"zapret-autotuner-bundle","strategy":{"profiles":[]},"blobs":[{"name":"b","base64":"!!"}]}""").Solution.Profiles);
+        Assert.Empty(StrategyImporter.Import("""{"format":"zapret-gui-backup","strategies":{"a":1}}""").Solution.Profiles);
+    }
+
     [Fact]
     public void Import_reports_what_it_could_not_carry()
     {

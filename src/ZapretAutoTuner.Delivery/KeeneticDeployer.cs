@@ -19,6 +19,7 @@ public static partial class KeeneticDeployer
 {
     public const string Conf = KeeneticExporter.Root + "/nfqws2.conf";
     public const string Service = "/opt/etc/init.d/S51nfqws2";
+    public const string UserList = "lists/user.list";
 
     [GeneratedRegex("^(lists/[A-Za-z0-9_.-]+\\.list|blobs/[A-Za-z0-9_]+\\.bin)$")]
     private static partial Regex SafeFile();
@@ -33,7 +34,10 @@ public static partial class KeeneticDeployer
         [
             new($"Резервная копия {Conf} → nfqws2.conf.bak и заменяемых файлов", $"Back up {Conf} to nfqws2.conf.bak and the files being replaced"),
             new($"Заменить в nfqws2.conf только {string.Join(", ", vars)}", $"Replace only {string.Join(", ", vars)} in nfqws2.conf"),
-            new($"Записать {string.Join(", ", files)}", $"Write {string.Join(", ", files)}"),
+            .. files.Contains(UserList)
+                ? new DeliveryStep[] { new($"Дописать наши домены в {UserList} (ваши остаются)", $"Add our domains to {UserList} (yours stay)") }
+                : [],
+            new($"Записать {string.Join(", ", files.Where(f => f != UserList))}", $"Write {string.Join(", ", files.Where(f => f != UserList))}"),
             new($"Перезапустить {Service} и проверить, что nfqws2 работает", $"Restart {Service} and check nfqws2 runs"),
             new("Если не поднялся — вернуть резервные копии и перезапустить", "If it fails, restore the backups and restart"),
         ];
@@ -88,7 +92,10 @@ public static partial class KeeneticDeployer
             await sh.RunAsync($"mkdir -p {KeeneticExporter.Root}/lists {KeeneticExporter.Root}/blobs", ct).ConfigureAwait(false);
             foreach (var f in files)
             {
-                await sh.WriteAsync($"{KeeneticExporter.Root}/{f}", pkg.Files[f], ct).ConfigureAwait(false);
+                var data = pkg.Files[f];
+                if (f == UserList && await sh.ReadAsync($"{KeeneticExporter.Root}/{f}", ct).ConfigureAwait(false) is { } theirs)
+                    data = MergeList(theirs, data);
+                await sh.WriteAsync($"{KeeneticExporter.Root}/{f}", data, ct).ConfigureAwait(false);
                 log.Add($"write {f}");
             }
             await sh.WriteAsync(Conf, Encoding.UTF8.GetBytes(merged), ct).ConfigureAwait(false);
@@ -97,41 +104,110 @@ public static partial class KeeneticDeployer
             log.Add(output.Trim());
             if (code == 0)
                 return new DeliveryResult(true, false, log, null);
-            await RollbackAsync(sh, backups, log).ConfigureAwait(false);
-            return new DeliveryResult(false, true, log, "nfqws2 не запустился с новым конфигом, возвращён прежний / nfqws2 did not start, the previous config is back");
+            return await RollbackAsync(sh, backups, log, "nfqws2 не запустился с новым конфигом / nfqws2 did not start with the new config").ConfigureAwait(false);
         }
-        catch (Exception e) when (e is IOException or OperationCanceledException or Renci.SshNet.Common.SshException)
+        catch (Exception e)
         {
-            await RollbackAsync(sh, backups, log).ConfigureAwait(false);
-            return new DeliveryResult(false, true, log, e.Message);
+            // whatever broke the delivery, the router must not stay with half of it
+            return await RollbackAsync(sh, backups, log, e.Message).ConfigureAwait(false);
         }
     }
 
-    /// <summary>The user's conf with only the fragment's variables replaced.</summary>
+    /// <summary>The user's list with our domains appended (theirs first, no duplicates).</summary>
+    public static byte[] MergeList(byte[] theirs, byte[] ours)
+    {
+        static IEnumerable<string> Lines(byte[] b) => Encoding.UTF8.GetString(b).ReplaceLineEndings("\n").Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var all = Lines(theirs).Concat(Lines(ours)).Where(l => l.StartsWith('#') || seen.Add(l));
+        return Encoding.UTF8.GetBytes(string.Join("\n", all) + "\n");
+    }
+
+    /// <summary>
+    /// The user's conf with only the fragment's variables replaced. Their <c>NFQWS_ARGS_UDP</c> stays, so its ports stay
+    /// in <c>UDP_PORTS</c> together with the ones they listed, and the <c>--blob</c>/<c>--lua-init</c> lines of their
+    /// <c>NFQWS_BASE_ARGS</c> that we do not declare stay too (their UDP profile may use them).
+    /// </summary>
     public static string Merge(string conf, string fragment)
     {
+        var theirs = KeeneticExporter.ParseVars(conf);
         foreach (var (name, value) in KeeneticExporter.ParseVars(fragment))
-            conf = KeeneticExporter.ReplaceVar(conf, name, NeedsQuotes(name) ? $"\"{value}\"" : value);
+        {
+            var v = name switch
+            {
+                "UDP_PORTS" => UnionPorts(value, theirs.GetValueOrDefault("UDP_PORTS"), UdpFilter(theirs.GetValueOrDefault("NFQWS_ARGS_UDP", ""))),
+                "NFQWS_BASE_ARGS" => KeepTheirDeclarations(value, theirs.GetValueOrDefault("NFQWS_BASE_ARGS", "")),
+                _ => value,
+            };
+            conf = KeeneticExporter.ReplaceVar(conf, name, NeedsQuotes(name) ? $"\"{v}\"" : v);
+        }
         return conf;
+    }
+
+    private static string UnionPorts(params string?[] lists)
+    {
+        // iptables "a:b" back to nfqws2 "a-b" for the union, then back
+        var nfq = lists.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l!.Replace(':', '-'));
+        return KeeneticExporter.ToIptables(ZapretAutoTuner.Core.Model.PortList.Union(nfq));
+    }
+
+    private static string? UdpFilter(string args) =>
+        Regex.Match(args, "--filter-udp=(\\S+)") is { Success: true } m ? m.Groups[1].Value : null;
+
+    private static string KeepTheirDeclarations(string ours, string theirs)
+    {
+        var tokens = ZapretAutoTuner.Core.Model.ArgTokenizer.Split(ours);
+        string? Key(string t) => t.StartsWith("--blob=", StringComparison.Ordinal) ? "b:" + t[7..].Split(':')[0]
+            : t.StartsWith("--lua-init=", StringComparison.Ordinal) ? "l:" + t[11..] : null;
+        var have = tokens.Select(Key).Where(k => k is not null).ToHashSet(StringComparer.Ordinal);
+        List<string> theirTokens;
+        try
+        {
+            theirTokens = ZapretAutoTuner.Core.Model.ArgTokenizer.Split(theirs);
+        }
+        catch (FormatException)
+        {
+            return ours;
+        }
+        var keep = theirTokens.Where(t => Key(t) is { } k && have.Add(k)).ToList();
+        return keep.Count == 0 ? ours : ours + "\n" + string.Join("\n", keep);
     }
 
     private static bool NeedsQuotes(string name) => name is not ("TCP_PORTS" or "UDP_PORTS");
 
     private static async Task<(int, string)> RestartAsync(IRemoteShell sh, CancellationToken ct)
     {
-        var (code, output) = await sh.RunAsync($"{Service} restart 2>&1; sleep 2; pidof nfqws2 >/dev/null", ct).ConfigureAwait(false);
+        // our nfqws2, not another one on the router (zapret-gui runs its own): its argv has our lua paths
+        var (code, output) = await sh.RunAsync($"{Service} restart 2>&1; sleep 2; ps w | grep '[n]fqws2' | grep -q {SshRemoteShell.Quote(KeeneticExporter.Root + "/lua/")}", ct).ConfigureAwait(false);
         return (code, output);
     }
 
-    private static async Task RollbackAsync(IRemoteShell sh, List<(string Path, bool Existed)> backups, List<string> log)
+    private static async Task<DeliveryResult> RollbackAsync(IRemoteShell sh, List<(string Path, bool Existed)> backups, List<string> log, string error)
     {
-        // the rollback runs even if the delivery was cancelled
-        foreach (var (path, existed) in backups)
+        // the rollback runs even if the delivery was cancelled; every step is checked, and a rollback that could not
+        // finish (the connection is gone) is reported as such: the .bak files are still on the router
+        var failed = new List<string>();
+        try
         {
-            var q = SshRemoteShell.Quote(path);
-            await sh.RunAsync(existed ? $"mv {SshRemoteShell.Quote(path + ".bak")} {q}" : $"rm -f {q}", CancellationToken.None).ConfigureAwait(false);
+            foreach (var (path, existed) in backups)
+            {
+                var q = SshRemoteShell.Quote(path);
+                var (code, output) = await sh.RunAsync(existed ? $"cp -p {SshRemoteShell.Quote(path + ".bak")} {q}" : $"rm -f {q}", CancellationToken.None).ConfigureAwait(false);
+                if (code != 0)
+                    failed.Add($"{path}: {output.Trim()}");
+            }
+            var (rc, restart) = await RestartAsync(sh, CancellationToken.None).ConfigureAwait(false);
+            log.Add("rollback: " + restart.Trim());
+            if (rc != 0)
+                failed.Add("nfqws2 не запустился и с прежним конфигом / did not start with the previous config either");
         }
-        var (_, output) = await RestartAsync(sh, CancellationToken.None).ConfigureAwait(false);
-        log.Add("rollback: " + output.Trim());
+        catch (Exception e)
+        {
+            failed.Add(e.Message);
+        }
+        if (failed.Count == 0)
+            return new DeliveryResult(false, true, log, $"{error}; возвращён прежний конфиг / the previous config is back");
+        log.AddRange(failed.Select(f => "rollback failed: " + f));
+        return new DeliveryResult(false, false, log,
+            $"{error}; откат не завершён, копии лежат рядом с файлами (*.bak) / the rollback did not finish, the backups are next to the files (*.bak): {string.Join("; ", failed)}");
     }
 }

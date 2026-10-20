@@ -115,14 +115,20 @@ public sealed class SshRemoteShell : IRemoteShell
 
     public async Task WriteAsync(string path, byte[] data, CancellationToken ct)
     {
+        // always a temporary file renamed into place: a dropped connection never leaves half a conf
+        var tmp = path + ".zt-tmp";
+        int code;
+        string output;
         if (_sftp is not null)
         {
             using var ms = new MemoryStream(data);
-            await _sftp.UploadFileAsync(ms, path, ct).ConfigureAwait(false);
+            await _sftp.UploadFileAsync(ms, tmp, ct).ConfigureAwait(false);
+            (code, output) = await RunAsync($"mv {Quote(tmp)} {Quote(path)}", ct).ConfigureAwait(false);
+            if (code != 0)
+                throw new IOException($"запись {path}: {output}");
             return;
         }
-        var tmp = path + ".zt-tmp";
-        var (code, output) = await RunAsync($": > {Quote(tmp)}", ct).ConfigureAwait(false);
+        (code, output) = await RunAsync($": > {Quote(tmp)}", ct).ConfigureAwait(false);
         for (int ofs = 0; code == 0 && ofs < data.Length; ofs += ChunkBytes)
             (code, output) = await RunAsync($"printf '{Octal(data.AsSpan(ofs, Math.Min(ChunkBytes, data.Length - ofs)))}' >> {Quote(tmp)}", ct).ConfigureAwait(false);
         if (code == 0)

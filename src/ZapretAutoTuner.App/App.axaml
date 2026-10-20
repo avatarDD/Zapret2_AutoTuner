@@ -1,8 +1,42 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:v="using:ZapretAutoTuner.App.Views"
              x:Class="ZapretAutoTuner.App.App"
              RequestedThemeVariant="Default">
+  <Application.DataTemplates>
+    <DataTemplate DataType="vm:HomeViewModel"><v:HomeView /></DataTemplate>
+    <DataTemplate DataType="vm:WizardViewModel"><v:WizardView /></DataTemplate>
+    <DataTemplate DataType="vm:MonitorViewModel"><v:MonitorView /></DataTemplate>
+    <DataTemplate DataType="vm:ReportsViewModel"><v:ReportsView /></DataTemplate>
+    <DataTemplate DataType="vm:ExpertViewModel"><v:ExpertView /></DataTemplate>
+    <DataTemplate DataType="vm:SettingsViewModel"><v:SettingsView /></DataTemplate>
+  </Application.DataTemplates>
   <Application.Styles>
     <FluentTheme />
+    <Style Selector="TextBlock.h1">
+      <Setter Property="FontSize" Value="24" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Opacity" Value="0.7" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.error">
+      <Setter Property="Foreground" Value="#D0443E" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="12" />
+    </Style>
   </Application.Styles>
 </Application>

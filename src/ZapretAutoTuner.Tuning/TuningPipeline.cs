@@ -89,9 +89,21 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
         var executors = new Dictionary<string, ITrialExecutor>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < hosts.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
+            // "Остановить и взять лучшее": a stop ends the run, what was found so far still becomes a solution
+            if (ct.IsCancellationRequested)
+                break;
             var host = hosts[i];
-            var (outcome, executor) = await TargetAsync(host, i, hosts.Count, sw, ct).ConfigureAwait(false);
+            TargetOutcome outcome;
+            ITrialExecutor? executor;
+            try
+            {
+                (outcome, executor) = await TargetAsync(host, i, hosts.Count, sw, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                Stage(host, PipelineStage.Skipped, "Остановлено", "Stopped");
+                break;
+            }
             outcomes.Add(outcome);
             if (executor is not null)
                 executors[host] = executor;
@@ -103,7 +115,7 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
         if (results.Count == 0)
             return new PipelineResult(outcomes, null, null);
         UnifyPlan plan;
-        if (options.Unify && results.Count > 1)
+        if (options.Unify && results.Count > 1 && !ct.IsCancellationRequested)
         {
             Publish(new StageChanged("*", DateTime.UtcNow, PipelineStage.Unify, "Объединяю стратегии доменов", "Unifying the domains' strategies"));
             var checker = new ExecutorCrossChecker(d => executors[d]);
@@ -149,7 +161,7 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
             Publish(new CandidateFound(host, DateTime.UtcNow, f));
 
         IReadOnlyList<FinalCheckResult> final = [];
-        if (result.Working.Count > 0 && services.FinalCheckAsync(host, executor, result.Working, ct) is { } check)
+        if (result.Working.Count > 0 && !ct.IsCancellationRequested && services.FinalCheckAsync(host, executor, result.Working, ct) is { } check)
         {
             Stage(host, PipelineStage.FinalCheck, "Финальная проверка найденных стратегий", "Final check of the found strategies");
             final = await check.ConfigureAwait(false);

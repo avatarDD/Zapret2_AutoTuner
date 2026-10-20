@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Net;
 using Xunit.Abstractions;
 using ZapretAutoTuner.Core.Diagnostics;
+using ZapretAutoTuner.Core.Model;
+using ZapretAutoTuner.Core.Unify;
 using ZapretAutoTuner.Core.Search;
 using ZapretAutoTuner.Probes.Http;
 using ZapretAutoTuner.Protocol;
@@ -124,9 +126,11 @@ public sealed class StandSearchTests(ITestOutputHelper output) : IAsyncLifetime
             return (r, session);
         }
 
+        var history = new List<DomainResult>();
         foreach (var (host, ip) in new[] { ("sni.test", $"{Net}.12"), ("drop.test", $"{Net}.13") })
         {
             var (r, _) = await Search(host, ip);
+            history.AddRange(r.Working.Select(f => new DomainResult(host, L4Kind.Tcp, f.Candidate.Strategy, f.Efficiency, f.Score.Total)));
             Assert.True(r.Best is not null, $"{host}: nothing found");
             var check = await FinalCheck.RunAsync(Executor(host, ip), [r.Best], host, openPage: null);
             Assert.True(check[0].Passed, $"{host}: final check {check[0].L2}");
@@ -144,5 +148,26 @@ public sealed class StandSearchTests(ITestOutputHelper output) : IAsyncLifetime
         Assert.Contains(kb.TuningSteps(flakySession), s => s.Accepted || s.Efficiency.Successes == s.Efficiency.Attempts);
         var flakyCheck = await FinalCheck.RunAsync(Executor("flaky.test", $"{Net}.21"), [flaky.Best], "flaky.test", openPage: null);
         Assert.True(flakyCheck[0].Passed, $"flaky.test: final check {flakyCheck[0].L2}");
+        history.AddRange(flaky.Working.Select(f => new DomainResult("flaky.test", L4Kind.Tcp, f.Candidate.Strategy, f.Efficiency, f.Score.Total)));
+
+        // PLAN 4.1-4.2: the cross-check shows midsld+1 works on all three, so one profile; one engine run confirms it
+        var ips = new Dictionary<string, string> { ["sni.test"] = $"{Net}.12", ["drop.test"] = $"{Net}.13", ["flaky.test"] = $"{Net}.21" };
+        var plan = await UnifyRunner.RunAsync(history, [.. ips.Keys], new ExecutorCrossChecker(d => Executor(d, ips[d])));
+        output.WriteLine("unified: " + string.Join(" | ", plan.Profiles));
+        var profile = Assert.Single(plan.Profiles);
+        Assert.Equal(3, profile.Domains.Count);
+        var targets = ips.Select(kv => new TrialTarget { Host = kv.Key, Addresses = [IPAddress.Parse(kv.Value)], Path = "/big" }).ToList();
+        var config = await ConfigCheck.RunAsync(engine, Unifier.ToSolution(plan), targets, new AgentTrialOptions { LuaDir = lua, Blobs = blobs, TweakHttp = Tweak });
+        output.WriteLine(string.Join(" ", config.Argv));
+        Assert.True(config.Passed, string.Join("; ", config.Domains.Select(d => $"{d.Domain} {d.L2}")));
+
+        // the adaptive variant must start in the real engine (dry-run and lua init through the Agent)
+        var circular = Unifier.Circular([Core.Model.Strategy.Parse("--payload=tls_client_hello --lua-desync=fake:blob=fake_default_tls:tcp_md5"), flaky.Best.Candidate.Strategy]);
+        var adaptive = Unifier.ToSolution(new UnifyPlan([], [], [new UnifiedProfile(circular, [.. ips.Keys], L4Kind.Tcp, 0, Adaptive: true)]), adaptive: true);
+        var (circularArgv, _) = ConfigCheck.BuildLaunch(adaptive, targets, new AgentTrialOptions { LuaDir = lua, Blobs = blobs });
+        var dryRun = new CheckEngineArgsRequest();
+        dryRun.Argv.AddRange(circularArgv);
+        var cr = await conn.Client.CheckEngineArgsAsync(dryRun);
+        Assert.True(cr.Ok, cr.Stage + ": " + string.Join("\n", cr.Output));
     }
 }

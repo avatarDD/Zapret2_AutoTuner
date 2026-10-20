@@ -82,7 +82,7 @@ public sealed class UnifyTests
         Assert.Equal("443", queue.TcpPorts);
         Assert.Equal("443", queue.UdpPorts);
         Assert.Equal(["10.0.0.1", "10.0.0.2"], queue.Targets);
-        var v = new StrategyValidator(new ValidationContext()).ValidateArgv(argv);
+        var v = new StrategyValidator(new ValidationContext { Platform = EnginePlatform.Linux }).ValidateArgv(argv);
         Assert.True(v.Ok, string.Join("\n", v.Errors));
     }
 
@@ -114,7 +114,7 @@ public sealed class UnifyTests
         var targets = new[] { new TrialTarget { Host = "a.test", Addresses = [IPAddress.Parse("10.0.0.1")] } };
         var (argv, _) = ConfigCheck.BuildLaunch(solution, targets, new AgentTrialOptions { LuaDir = "/lua", Platform = EnginePlatform.Linux });
         Assert.Contains(argv, a => a.StartsWith("--ipcache-hostname", StringComparison.Ordinal));
-        var v = new StrategyValidator(new ValidationContext()).ValidateArgv(argv);
+        var v = new StrategyValidator(new ValidationContext { Platform = EnginePlatform.Linux }).ValidateArgv(argv);
         Assert.True(v.Ok, string.Join("\n", v.Errors));
     }
 }

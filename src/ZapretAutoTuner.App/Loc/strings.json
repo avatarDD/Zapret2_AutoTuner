@@ -403,6 +403,14 @@
   "Крупный шрифт",
   "Large font"
  ],
+ "settings.learning": [
+  "Учиться на своих результатах: сначала пробовать то, что срабатывало",
+  "Learn from my results: try what worked before first"
+ ],
+ "settings.learning_hint": [
+  "Порядок перебора подстраивается под вашего провайдера и тип блокировки. Всё хранится локально, ничего не отправляется.",
+  "The search order adapts to your provider and block type. Everything stays on this computer; nothing is sent."
+ ],
  "settings.mode": [
   "Глубина подбора",
   "Search depth"
@@ -422,6 +430,10 @@
  "settings.privacy": [
   "Телеметрии нет. Данные хранятся только локально:",
   "No telemetry. Data stays on this computer only:"
+ ],
+ "settings.provider_asn": [
+  "ASN провайдера, например AS12389 (необязательно)",
+  "Provider ASN, e.g. AS12389 (optional)"
  ],
  "settings.remember_token": [
   "Запомнить токен на этом компьютере",

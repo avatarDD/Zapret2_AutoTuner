@@ -23,7 +23,7 @@ public sealed class MonitorJournalTests
             }
             using (var kb = KnowledgeBase.Open(path))
             {
-                Assert.Equal(2, kb.SchemaVersion);
+                Assert.Equal(Schema.Version, kb.SchemaVersion);
                 Assert.Equal("en", kb.GetSetting("ui.language"));
                 kb.AddMonitorWindow("example.com", T0, 5, 4, 1, 0, 0, 0, 2);
                 kb.AddChange("example.com", "degraded", "неудач 3/5");

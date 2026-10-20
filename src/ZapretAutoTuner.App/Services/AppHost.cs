@@ -127,6 +127,26 @@ public sealed class AppSettings(KnowledgeBase kb)
         set => kb.SetSetting("router.host", value);
     }
 
+    /// <summary>Learned search order (PLAN 4a.1): on by default; off is the generator's static order.</summary>
+    public bool Learning
+    {
+        get => kb.GetSetting("search.learning") != "0";
+        set => kb.SetSetting("search.learning", value ? "1" : "0");
+    }
+
+    /// <summary>The provider's ASN as the user entered it ("AS12389" or "12389"); empty when unknown. Nothing is looked up online.</summary>
+    public string ProviderAsn
+    {
+        get => kb.GetSetting("search.asn") ?? "";
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                kb.RemoveSetting("search.asn");
+            else
+                kb.SetSetting("search.asn", value.Trim());
+        }
+    }
+
     public bool LargeFont
     {
         get => kb.GetSetting("ui.large_font") == "1";

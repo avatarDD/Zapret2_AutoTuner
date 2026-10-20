@@ -8,7 +8,7 @@ using ZapretAutoTuner.Tuning;
 namespace ZapretAutoTuner.App.Services;
 
 /// <summary>The pipeline on this PC: probes from the UI, the engine in the Agent, the knowledge base for memory.</summary>
-public sealed class PcPipelineServices(AppHost host, IEngineControl engine, bool openPages) : IPipelineServices
+public sealed class PcPipelineServices(AppHost host, IEngineControl engine, bool openPages, SearchContext? context = null) : IPipelineServices
 {
     private readonly Dictionary<string, (long Session, TrialTarget Target)> _sessions = new(StringComparer.OrdinalIgnoreCase);
 
@@ -38,14 +38,18 @@ public sealed class PcPipelineServices(AppHost host, IEngineControl engine, bool
     public ISearchLog? LogFor(string domain, ClassifierVerdict verdict)
     {
         var target = _sessions.TryGetValue(domain, out var s) ? s.Target : new TrialTarget { Host = domain, Addresses = [] };
-        var id = host.Kb.StartSession(domain, host.Settings.SearchMode, blockLabel: verdict.Primary.ToString());
+        var id = host.Kb.StartSession(domain, host.Settings.SearchMode, context?.NetworkId, verdict.Primary.ToString());
         _sessions[domain] = (id, target);
-        return new KnowledgeBaseSearchLog(host.Kb, id, target, blockLabel: verdict.Primary.ToString());
+        return new KnowledgeBaseSearchLog(host.Kb, id, target, context?.NetworkId, verdict.Primary.ToString());
     }
+
+    /// <summary>What worked on this provider goes in as priors (§6.2); the learned order decides where they stand.</summary>
+    public SearchOptions OptionsFor(string domain, ClassifierVerdict verdict, SearchOptions options) =>
+        _sessions.TryGetValue(domain, out var s) && s.Session != 0 ? TuningSession.Prepare(host.Kb, options, s.Session, context?.Asn) : options;
 
     public void Finished(string domain, SearchResult result)
     {
         if (_sessions.TryGetValue(domain, out var s) && s.Session != 0)
-            TuningSession.Finish(host.Kb, s.Session, domain, result);
+            TuningSession.Finish(host.Kb, s.Session, domain, result, context?.NetworkId);
     }
 }

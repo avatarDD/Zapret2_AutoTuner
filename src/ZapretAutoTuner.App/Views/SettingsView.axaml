@@ -25,6 +25,9 @@
           <ComboBoxItem Content="{l:T settings.mode_full}" />
         </ComboBox>
       </StackPanel>
+      <CheckBox Content="{l:T settings.learning}" IsChecked="{Binding Learning}" />
+      <TextBlock Classes="muted" Text="{l:T settings.learning_hint}" TextWrapping="Wrap" />
+      <TextBox Text="{Binding ProviderAsn}" Watermark="{l:T settings.provider_asn}" MaxWidth="320" HorizontalAlignment="Left" />
       <CheckBox Content="{l:T monitor.auto_apply}" IsChecked="{Binding AutoApply}" />
       <TextBlock Classes="muted" Text="{l:T settings.auto_apply_hint}" />
       <TextBlock Classes="h2" Text="zapret-gui" />

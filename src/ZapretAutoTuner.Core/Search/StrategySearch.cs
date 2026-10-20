@@ -143,8 +143,14 @@ public sealed record SearchOptions
     /// <summary>Pauses per punishment before the search gives up; the count starts again with every punishment.</summary>
     public int MaxPunishPauses { get; init; } = 3;
 
-    /// <summary>Strategies that worked for others on this provider, tried first.</summary>
+    /// <summary>
+    /// Candidates from outside the generator (what worked on this provider, an LLM's suggestions): tried first in the
+    /// static order; with <see cref="Learning"/> each source is an arm that competes with the families.
+    /// </summary>
     public IReadOnlyList<StrategyCandidate> Priors { get; init; } = [];
+
+    /// <summary>The learned search order (PLAN 4a.1); null keeps the static order.</summary>
+    public SearchLearning? Learning { get; init; }
 
     /// <summary>A resumed session: strategies already tried and their efficiency are not run again.</summary>
     public IReadOnlyDictionary<string, Efficiency> AlreadyTried { get; init; } = new Dictionary<string, Efficiency>();
@@ -154,7 +160,7 @@ public sealed record SearchOptions
 
 /// <summary>
 /// The strategy search for one target (PLAN 3.2–3.3a, dpi-diagnostics §6): priors first, then the generated families in
-/// order, standard-mode cut-offs by success, refinement of partly working strategies before moving on, a punishment
+/// order (or in the learned order, PLAN 4a.1), standard-mode cut-offs by success, refinement of partly working strategies before moving on, a punishment
 /// pause, early exit, ranking. The engine and the probe are behind <see cref="ITrialExecutor"/>.
 /// </summary>
 public sealed class StrategySearch(ITrialExecutor executor, SearchOptions options, ISearchLog? log = null, IProgress<SearchProgress>? progress = null)
@@ -175,7 +181,9 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
         _sw.Start();
         Report(SearchStage.Preparing, null, 0, "Готовлю список стратегий", "Preparing the strategy list");
         var set = StrategyGenerator.Generate(options.Generator);
-        var plan = options.Priors.Concat(set.Candidates).ToList();
+        var external = options.Priors.Select(c => c.Source == CandidateSource.Generator ? c with { Source = CandidateSource.Prior } : c).ToList();
+        List<StrategyCandidate> plan = options.Learning is { } learning ? new ThompsonOrder(learning).Arrange(external, set.Candidates) : [.. external, .. set.Candidates];
+        var fromOutside = external.ToHashSet(ReferenceEqualityComparer.Instance);
         var catalog = FamilyCatalog.Default;
         var reason = SearchStopReason.Exhausted;
         _nextAsk = options.StopAfterFound;
@@ -189,7 +197,7 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
                     continue;
                 var skippedFamilies = plan.Select(x => x.Family).Distinct().Where(f => Skipped(f, catalog)).ToHashSet();
                 int remaining = plan.Skip(i + 1).Count(x => !_tried.Contains(x.Key) && !skippedFamilies.Contains(x.Family)) + 1;
-                var stage = i < options.Priors.Count ? SearchStage.Priors : SearchStage.Screening;
+                var stage = fromOutside.Contains(c) ? SearchStage.Priors : SearchStage.Screening;
                 Report(stage, c, remaining,
                     stage == SearchStage.Priors ? $"Проверяю стратегию, которая сработала у вашего провайдера: {c.Family}" : $"Пробую {c.Family}: {c.Strategy}",
                     stage == SearchStage.Priors ? $"Trying a strategy that worked on your provider: {c.Family}" : $"Trying {c.Family}: {c.Strategy}");
@@ -303,7 +311,7 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
                     if (!_tried.Add(m.Strategy.ToString()))
                         continue;
                     budget--;
-                    var child = c with { Strategy = m.Strategy };
+                    var child = c with { Strategy = m.Strategy, Source = CandidateSource.Mutation };
                     Report(SearchStage.Refining, child, remaining,
                         $"Довожу частично рабочую ({e}): {m.What}", $"Refining a partly working one ({e}): {m.What}");
                     Efficiency ce;

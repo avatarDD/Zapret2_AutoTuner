@@ -221,8 +221,9 @@ public sealed partial class WizardViewModel : PageViewModel
             var agent = await _host.AgentAsync(_cts.Token);
             var engine = new AgentEngineControl(agent.Client);
             var mode = Enum.TryParse<SearchMode>(_host.Settings.SearchMode, out var m) ? m : SearchMode.Standard;
-            var options = new PipelineOptions { Search = new SearchOptions { Generator = new GeneratorOptions { Mode = mode } } };
-            var pipeline = new TuningPipeline(new PcPipelineServices(_host, engine, OpenPages), options);
+            var context = SearchContext.For(_host);
+            var options = new PipelineOptions { Search = new SearchOptions { Generator = new GeneratorOptions { Mode = mode }, Learning = context.Learning } };
+            var pipeline = new TuningPipeline(new PcPipelineServices(_host, engine, OpenPages, context), options);
             pipeline.Event += e => Avalonia.Threading.Dispatcher.UIThread.Post(() => OnEvent(e));
             var result = await Task.Run(() => pipeline.RunAsync(hosts, _cts.Token));
             if (providers.Count > 0 && !_cts.IsCancellationRequested)
@@ -271,7 +272,8 @@ public sealed partial class WizardViewModel : PageViewModel
             row.Stage = PipelineStage.Search;
             var executor = new ProviderTrialExecutor(engine, targets, new AgentTrialOptions { LuaDir = _host.Bundle.LuaDir });
             var mode = Enum.TryParse<SearchMode>(_host.Settings.SearchMode, out var m) ? m : SearchMode.Standard;
-            var search = await new StrategySearch(executor, new SearchOptions { Generator = new GeneratorOptions { Mode = mode, Labels = [Core.Diagnostics.BlockLabel.Cutoff16K] } },
+            var learning = SearchContext.For(_host, nameof(Core.Diagnostics.BlockLabel.Cutoff16K)).Learning;
+            var search = await new StrategySearch(executor, new SearchOptions { Generator = new GeneratorOptions { Mode = mode, Labels = [Core.Diagnostics.BlockLabel.Cutoff16K] }, Learning = learning },
                 null, new Progress<SearchProgress>(sp => row.Message = L.Pick(sp.MessageRu, sp.MessageEn))).RunAsync(ct);
             if (search.Best is { } best)
             {

@@ -7,7 +7,7 @@ namespace ZapretAutoTuner.Storage;
 /// </summary>
 internal static class Schema
 {
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>Migrations by target version; each runs once, in order, inside a transaction.</summary>
     public static readonly IReadOnlyList<(int Version, string Sql)> Migrations =
@@ -165,6 +165,16 @@ internal static class Schema
                 applied INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX change_journal_time ON change_journal(created_at);
+            """),
+        (3, """
+            -- learned search order (PLAN 4a.1): the block label and where the candidate came from, per attempt
+            ALTER TABLE trials ADD COLUMN block_label TEXT;
+            ALTER TABLE trials ADD COLUMN source TEXT NOT NULL DEFAULT 'generator';  -- generator | mutation | prior | llm
+            UPDATE trials SET block_label = (SELECT ss.block_label FROM search_sessions ss WHERE ss.id = trials.session_id)
+                WHERE session_id IS NOT NULL;
+            UPDATE trials SET source = 'mutation'
+                WHERE strategy_id IN (SELECT ts.strategy_id FROM tuning_steps ts WHERE ts.session_id = trials.session_id);
+            CREATE INDEX trials_time ON trials(created_at);
             """),
     ];
 }

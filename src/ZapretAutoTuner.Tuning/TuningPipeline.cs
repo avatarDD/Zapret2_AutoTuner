@@ -59,6 +59,9 @@ public interface IPipelineServices
     /// <summary>Where the search writes what it learns; null for none.</summary>
     ISearchLog? LogFor(string host, ClassifierVerdict verdict) => null;
 
+    /// <summary>Last say on a target's search options (priors from the knowledge base, a resumed session); called after <see cref="LogFor"/>.</summary>
+    SearchOptions OptionsFor(string host, ClassifierVerdict verdict, SearchOptions options) => options;
+
     /// <summary>Called when a search ends, to store the ranking.</summary>
     void Finished(string host, SearchResult result)
     {
@@ -151,9 +154,15 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
 
         var addresses = verdict.LiveAddresses.Select(IPAddress.Parse).ToList();
         var executor = services.ExecutorFor(host, addresses);
-        var searchOptions = options.Search with { Generator = options.Search.Generator with { Labels = verdict.Labels } };
+        var searchOptions = options.Search with
+        {
+            Generator = options.Search.Generator with { Labels = verdict.Labels },
+            Learning = options.Search.Learning is { } learning ? learning with { Context = learning.Context with { Label = verdict.Primary.ToString() } } : null,
+        };
         var progress = new Progress<SearchProgress>(p => OnSearch(host, p, index, count, sw));
-        var search = new StrategySearch(new ObservedExecutor(executor, host, Publish), searchOptions, services.LogFor(host, verdict), progress);
+        var log = services.LogFor(host, verdict);
+        searchOptions = services.OptionsFor(host, verdict, searchOptions);
+        var search = new StrategySearch(new ObservedExecutor(executor, host, Publish), searchOptions, log, progress);
         Stage(host, PipelineStage.Search, $"Подбираю стратегию: {verdict.SummaryRu}", $"Searching a strategy: {verdict.SummaryEn}");
         var result = await search.RunAsync(ct).ConfigureAwait(false);
         services.Finished(host, result);

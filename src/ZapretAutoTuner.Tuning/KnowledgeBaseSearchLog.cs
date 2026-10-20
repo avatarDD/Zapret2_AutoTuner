@@ -28,6 +28,7 @@ public sealed class KnowledgeBaseSearchLog(KnowledgeBase kb, long sessionId, Tri
             SessionId = sessionId,
             NetworkId = networkId,
             BlockLabel = blockLabel,
+            Source = candidate.Source,
         });
 
     public void Tuning(Strategy parent, Mutation child, Efficiency efficiency, bool accepted) =>
@@ -46,7 +47,7 @@ public static class TuningSession
     public static SearchOptions Prepare(KnowledgeBase kb, SearchOptions options, long sessionId, int? asn, L4Kind l4 = L4Kind.Tcp)
     {
         var priors = kb.WorkedOnNetwork(asn, l4 == L4Kind.Udp ? "udp" : "tcp")
-            .Select(p => new StrategyCandidate(p.Strategy, p.Family ?? "prior", 0, ["prior"], l4))
+            .Select(p => new StrategyCandidate(p.Strategy, p.Family ?? "prior", 0, ["prior"], l4) { Source = CandidateSource.Prior })
             .ToList();
         return options with
         {
@@ -54,6 +55,17 @@ public static class TuningSession
             AlreadyTried = kb.SessionTrials(sessionId),
         };
     }
+
+    /// <summary>
+    /// The learned search order (PLAN 4a.1) from this base's trials of the last year; the decay makes older ones
+    /// count for next to nothing anyway.
+    /// </summary>
+    public static SearchLearning Learning(KnowledgeBase kb, LearningContext context, DateTimeOffset? now = null) => new()
+    {
+        History = kb.LearningHistory((now ?? DateTimeOffset.UtcNow) - TimeSpan.FromDays(365)),
+        Context = context,
+        Now = now,
+    };
 
     /// <summary>Stores the ranking of the found strategies and closes the session.</summary>
     public static void Finish(KnowledgeBase kb, long sessionId, string host, SearchResult result, long? networkId = null)

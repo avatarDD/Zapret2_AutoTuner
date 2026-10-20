@@ -68,6 +68,12 @@ public sealed record TrialRecord
     public long? NetworkId { get; init; }
 
     public string? BlockLabel { get; init; }
+
+    /// <summary>Where the candidate came from (<see cref="CandidateSource"/>).</summary>
+    public string Source { get; init; } = CandidateSource.Generator;
+
+    /// <summary>When the attempt happened; now when not set.</summary>
+    public DateTimeOffset? At { get; init; }
 }
 
 /// <summary>
@@ -225,11 +231,12 @@ public sealed class KnowledgeBase : IDisposable
             long tid = TargetId(t.Host, t.Port, t.L4);
             using var tx = _db.BeginTransaction();
             Exec("""
-                INSERT INTO trials(uid,session_id,strategy_id,target_id,network_id,client_profile,level,ok,error,bytes_in,duration_ms,created_at)
-                VALUES($u,$s,$st,$tg,$n,$c,$lv,$ok,$e,$b,$d,$t)
+                INSERT INTO trials(uid,session_id,strategy_id,target_id,network_id,client_profile,level,ok,error,bytes_in,duration_ms,created_at,block_label,source)
+                VALUES($u,$s,$st,$tg,$n,$c,$lv,$ok,$e,$b,$d,$t,$bl,$src)
                 """, tx,
                 ("$u", Guid.NewGuid().ToString("N")), ("$s", t.SessionId), ("$st", sid), ("$tg", tid), ("$n", t.NetworkId), ("$c", t.ClientProfile),
-                ("$lv", t.Level), ("$ok", t.Ok ? 1 : 0), ("$e", t.Error), ("$b", t.BytesIn), ("$d", (long)t.Duration.TotalMilliseconds), ("$t", Now()));
+                ("$lv", t.Level), ("$ok", t.Ok ? 1 : 0), ("$e", t.Error), ("$b", t.BytesIn), ("$d", (long)t.Duration.TotalMilliseconds),
+                ("$t", t.At is { } at ? Iso(at) : Now()), ("$bl", t.BlockLabel), ("$src", t.Source));
             Exec("""
                 INSERT INTO results(uid,strategy_id,target_id,network_id,client_profile,successes,attempts,status,block_label,updated_at)
                 VALUES($u,$st,$tg,$n,$c,$ok,1,'failed',$bl,$t)
@@ -297,6 +304,28 @@ public sealed class KnowledgeBase : IDisposable
                     list.Add((s, (string?)r[1], (int)(long)r[2]!));
             }
             return list;
+        }
+    }
+
+    /// <summary>
+    /// Every trial since <paramref name="since"/>, counted per strategy, provider, block label, client profile, source
+    /// and day: what the learned search order (PLAN 4a.1) is built from.
+    /// </summary>
+    public List<ArmStat> LearningHistory(DateTimeOffset since)
+    {
+        lock (_gate)
+        {
+            var sql = """
+                SELECT s.args, s.family, tr.source, nw.asn, tr.block_label, tr.client_profile, substr(tr.created_at, 1, 10) AS day, SUM(tr.ok), COUNT(*)
+                FROM trials tr JOIN strategies s ON s.id=tr.strategy_id LEFT JOIN networks nw ON nw.id=tr.network_id
+                WHERE tr.created_at >= $since
+                GROUP BY s.id, tr.source, nw.asn, tr.block_label, tr.client_profile, day
+                """;
+            return Rows(sql, null, ("$since", Iso(since)))
+                .Select(r => new ArmStat((string)r[0]!, (string?)r[1], (string)r[2]!, r[3] is long a ? (int)a : null, (string?)r[4], (string)r[5]!,
+                    DateTimeOffset.ParseExact((string)r[6]!, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal),
+                    (int)(long)r[7]!, (int)(long)r[8]!))
+                .ToList();
         }
     }
 
@@ -479,7 +508,9 @@ public sealed class KnowledgeBase : IDisposable
         }
     }
 
-    private static string Now() => DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+    private static string Now() => Iso(DateTimeOffset.UtcNow);
+
+    private static string Iso(DateTimeOffset t) => t.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
     private static DateTimeOffset Time(object? v) => DateTimeOffset.Parse((string)v!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 

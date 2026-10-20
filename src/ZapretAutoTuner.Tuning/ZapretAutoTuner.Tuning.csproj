@@ -7,6 +7,7 @@
     <ProjectReference Include="..\ZapretAutoTuner.Probes\ZapretAutoTuner.Probes.csproj" />
     <ProjectReference Include="..\ZapretAutoTuner.Protocol\ZapretAutoTuner.Protocol.csproj" />
     <ProjectReference Include="..\ZapretAutoTuner.Storage\ZapretAutoTuner.Storage.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Delivery\ZapretAutoTuner.Delivery.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ZapretAutoTuner.Tuning.Tests" />

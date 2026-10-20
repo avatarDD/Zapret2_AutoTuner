@@ -73,6 +73,9 @@ public sealed class DegradationDetector(DetectorOptions options)
 
     public DetectorOptions Options => options;
 
+    /// <summary>A window with enough sessions closed (for the chart and the knowledge base).</summary>
+    public event Action<WindowStats>? WindowClosed;
+
     public bool IsDegraded(string domain) => _domains.TryGetValue(domain, out var s) && s.Degraded;
 
     public IReadOnlyList<WindowStats> History(string domain) => _domains.TryGetValue(domain, out var s) ? s.History : [];
@@ -114,6 +117,7 @@ public sealed class DegradationDetector(DetectorOptions options)
                 continue;
             }
             st.History.Add(w);
+            WindowClosed?.Invoke(w);
             if (st.History.Count > 288)
                 st.History.RemoveAt(0);
             bool bad = w.FailureRate > options.FailureThreshold;

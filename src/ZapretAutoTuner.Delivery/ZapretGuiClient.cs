@@ -143,4 +143,8 @@ public sealed class ZapretGuiClient
     }
 }
 
-public sealed class ZapretGuiException(string message) : Exception(message);
+public sealed class ZapretGuiException(string message) : Exception(message)
+{
+    /// <summary>The GUI's <c>error_code</c> (e.g. <c>busy</c>) or the JSON-RPC error code, when it gave one.</summary>
+    public string? Code { get; init; }
+}

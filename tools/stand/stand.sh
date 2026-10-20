@@ -11,7 +11,9 @@
 #   .18 fingerprint hellos with Chrome's new ALPS extension are reset     (FINGERPRINT)
 #   .19 redirect    plain HTTP for redirect.test answers 302 elsewhere    (HTTP_BLOCK, by the server)
 #   .20 volume      the flow dies after 16000 bytes in both directions     (CUTOFF_16K on a small page, padded probe)
-# Usage: stand.sh up CERT KEY | down. Needs root, iproute2, iptables (string, connbytes, u32, length) and python3.
+#   .21 balancing   two DPI branches take turns per connection: one resets "flaky.test", the other "aky.test",
+#                   so a split inside the name passes one branch only (PLAN 3.3: refining a partial strategy)
+# Usage: stand.sh up CERT KEY | down. Needs root, iproute2, iptables (string, connbytes, u32, length, statistic, connmark) and python3.
 set -eu
 NS=${ZT_STAND_NS:-ztstand}
 NET=${ZT_STAND_NET:-10.124.0}
@@ -34,7 +36,7 @@ up() {
     x ip link set lo up
     x ip link set zts1 up
     x ip addr add "$NET.2/24" dev zts1
-    for i in 11 12 13 14 15 16 17 18 19 20; do x ip addr add "$NET.$i/32" dev zts1; done
+    for i in 11 12 13 14 15 16 17 18 19 20 21; do x ip addr add "$NET.$i/32" dev zts1; done
     x sysctl -qw net.netfilter.nf_conntrack_acct=1 2>/dev/null || true
 
     T="-p tcp --dport 443"
@@ -45,6 +47,10 @@ up() {
     x iptables -A OUTPUT -s "$NET.16" -p tcp --sport 443 -m connbytes --connbytes 20000: --connbytes-dir reply --connbytes-mode bytes -j DROP
     x iptables -A INPUT -d "$NET.20" $T -m connbytes --connbytes 16000: --connbytes-dir both --connbytes-mode bytes -j DROP
     x iptables -A OUTPUT -s "$NET.20" -p tcp --sport 443 -m connbytes --connbytes 16000: --connbytes-dir both --connbytes-mode bytes -j DROP
+    # every second new connection goes to branch 1 (connmark 1), the rest to branch 2
+    x iptables -t mangle -A PREROUTING -d "$NET.21" $T -m conntrack --ctstate NEW -m statistic --mode nth --every 2 --packet 0 -j CONNMARK --set-mark 1
+    x iptables -A INPUT -d "$NET.21" $T -m connmark --mark 1 -m string --string flaky.test --algo bm -j REJECT --reject-with tcp-reset
+    x iptables -A INPUT -d "$NET.21" $T -m connmark ! --mark 1 -m string --string aky.test --algo bm -j REJECT --reject-with tcp-reset
     # first byte of the TCP payload is 0x16 (TLS handshake) and the packet is 1400 bytes or more
     x iptables -A INPUT -d "$NET.17" $T -m length --length 1400: -m u32 --u32 "0>>22&0x3C@12>>26&0x3C@0>>24=0x16" -j DROP
     # application_settings 0x44cd with a 5-byte body: only Chrome 120+ sends it

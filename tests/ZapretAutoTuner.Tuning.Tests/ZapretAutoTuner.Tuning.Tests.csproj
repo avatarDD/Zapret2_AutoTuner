@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZapretAutoTuner.Tuning\ZapretAutoTuner.Tuning.csproj" />
+    <!-- the stand test launches the real Agent from the test output -->
+    <ProjectReference Include="..\..\src\ZapretAutoTuner.Agent\ZapretAutoTuner.Agent.csproj" />
+  </ItemGroup>
+</Project>

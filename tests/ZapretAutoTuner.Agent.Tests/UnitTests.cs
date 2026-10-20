@@ -139,12 +139,13 @@ public class UnitTests
     public async Task Watchdog_stops_when_heartbeats_stop()
     {
         var dir = TestEnv.NewTempDir();
-        var o = AgentOptions.Parse(["--socket=/unused", "--token=" + new string('x', 64), "--ui-pid=" + Environment.ProcessId, "--data-dir=" + dir, "--heartbeat-timeout=400"]);
+        var o = AgentOptions.Parse(["--socket=/unused", "--token=" + new string('x', 64), "--ui-pid=" + Environment.ProcessId, "--data-dir=" + dir, "--heartbeat-timeout=2000"]);
         await using var host = new AgentHost(o);
         using var wd = new Watchdog(host);
         await wd.StartAsync(CancellationToken.None);
         host.Heartbeat();
-        Assert.False(await TestEnv.WaitUntil(() => host.Stopping.IsCancellationRequested, TimeSpan.FromMilliseconds(200)));
+        // the timeout is well above the check window: a loaded Windows runner stretches 300 ms to over a second
+        Assert.False(await TestEnv.WaitUntil(() => host.Stopping.IsCancellationRequested, TimeSpan.FromMilliseconds(300)));
         // generous: a loaded Windows runner delays the 250 ms watchdog ticks while other tests start Agents
         Assert.True(await TestEnv.WaitUntil(() => host.Stopping.IsCancellationRequested, TimeSpan.FromSeconds(10)));
         Assert.Equal("no heartbeat", host.StopReason);
@@ -156,7 +157,8 @@ public class UnitTests
     {
         var dir = TestEnv.NewTempDir();
         var o = AgentOptions.Parse(["--socket=/unused", "--token=" + new string('x', 64), "--ui-pid=" + Environment.ProcessId, "--data-dir=" + dir, "--heartbeat-timeout=200"]);
-        o.StartupGrace = TimeSpan.FromMilliseconds(1500);
+        // the grace runs from AgentHost construction; a loaded Windows runner can spend a second before the first check
+        o.StartupGrace = TimeSpan.FromMilliseconds(4000);
         await using var host = new AgentHost(o);
         using var wd = new Watchdog(host);
         await wd.StartAsync(CancellationToken.None);

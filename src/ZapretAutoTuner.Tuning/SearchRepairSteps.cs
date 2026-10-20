@@ -28,7 +28,7 @@ public sealed class SearchRepairSteps(
     /// <summary>The current strategy's mutations first, then the quick set (§6.2a: a changed block is often a neighbour).</summary>
     public async Task<StrategyCandidate?> LocalSearchAsync(string domain, StrategyCandidate current, CancellationToken ct)
     {
-        var neighbours = StrategyMutator.Mutate(current.Strategy, options.Generator)
+        var neighbours = StrategyMutator.Mutate(current.Strategy, options.Generator, l4: current.L4)
             .Select((m, i) => current with { Strategy = m.Strategy, Family = current.Family, Order = i, Tags = [.. current.Tags, "repair:" + m.What] })
             .ToList();
         return await SearchAsync(domain, options with

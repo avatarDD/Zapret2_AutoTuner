@@ -5,7 +5,10 @@
 # list. "@name" in an axis pulls in a shared set from `sets`; "@pos" and "@pos1" pick the set of the protocol being
 # generated (pos_tls or pos_http). "{white}" is the whitelisted SNI (an option, by default www.google.com) and the
 # blob tls_white is a real ClientHello for it, built by ClientHelloBuilder and declared with --blob. The family's `payload` becomes "--payload=…" in front of
-# the template; `payload: none` leaves the strategy without a payload filter (phase-0 techniques).
+# the template; `payload: none` leaves the strategy without a payload filter (phase-0 techniques). "{lpayload}" is the
+# per-instance payload filter: ":payload=unknown" when the target's payload is unknown (UDP or TCP the engine does not
+# recognise; the antidpi functions skip unknown payloads by default), empty otherwise. Such strategies also get
+# "--out-range=-d2" so only the first data packets are touched.
 #
 # Fields: order (blockcheck2 file number, cheap first), l4 (tcp|udp), protocols (tls|http|quic: what the target
 # speaks), modes (where the family is used at all), first_for (block labels that move it to the front), skip_for
@@ -280,10 +283,10 @@ families:
     l4: udp
     protocols: [stun, wireguard, discord, dtls, udp]
     templates:
-      - "--lua-desync=fake:blob=0x00000000000000000000000000000000:repeats={rep}"
-      - "--lua-desync=fake:blob=fake_default_quic:repeats={rep}"
-      - "--lua-desync=udplen:increment={inc}"
-      - "--lua-desync=fake:blob=0x00000000000000000000000000000000:repeats={rep} --lua-desync=udplen:increment={inc}"
+      - "--lua-desync=fake:blob=0x00000000000000000000000000000000{lpayload}:repeats={rep}"
+      - "--lua-desync=fake:blob=fake_default_quic{lpayload}:repeats={rep}"
+      - "--lua-desync=udplen{lpayload}:increment={inc}"
+      - "--lua-desync=fake:blob=0x00000000000000000000000000000000{lpayload}:repeats={rep} --lua-desync=udplen{lpayload}:increment={inc}"
     axes:
       rep: {quick: ["6"], standard: ["2", "6", "11"], full: ["1", "2", "4", "6", "11", "20"]}
       inc: {quick: ["2"], standard: ["2", "8"], full: ["2", "4", "8", "16", "-2"]}
@@ -298,6 +301,22 @@ families:
       - "--lua-desync=multidisorder:pos={mpos}"
       - "--lua-desync=fake:blob=0x00000000000000000000000000000000:{fool}:repeats={rep}"
       - "--lua-desync=fake:blob=0x00000000000000000000000000000000:{fool} --lua-desync=multisplit:pos={mpos}"
+    axes:
+      mpos: {quick: ["1"], standard: ["1", "2", "8"], full: ["1", "2", "4", "8", "32"]}
+      fool: "@fooling"
+      rep: {quick: ["1"], standard: ["1", "6"]}
+
+  # TCP the engine does not recognise (games, custom protocols): no SNI or Host, plain offsets; every instance gets
+  # payload=unknown through {lpayload}, or the functions would skip the unknown payload.
+  - id: tcp_generic
+    order: 96
+    l4: tcp
+    protocols: [tcp]
+    templates:
+      - "--lua-desync=multisplit:pos={mpos}{lpayload}"
+      - "--lua-desync=multidisorder:pos={mpos}{lpayload}"
+      - "--lua-desync=fake:blob=0x00000000000000000000000000000000:{fool}{lpayload}:repeats={rep}"
+      - "--lua-desync=fake:blob=0x00000000000000000000000000000000:{fool}{lpayload} --lua-desync=multisplit:pos={mpos}{lpayload}"
     axes:
       mpos: {quick: ["1"], standard: ["1", "2", "8"], full: ["1", "2", "4", "8", "32"]}
       fool: "@fooling"

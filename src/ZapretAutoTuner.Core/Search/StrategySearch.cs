@@ -296,7 +296,7 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
             var next = new List<(StrategyCandidate C, Efficiency E, string Path)>();
             foreach (var (c, e, path) in beam)
             {
-                foreach (var m in StrategyMutator.Mutate(c.Strategy, options.Generator))
+                foreach (var m in StrategyMutator.Mutate(c.Strategy, options.Generator, l4: c.L4))
                 {
                     if (budget <= 0 || _sw.Elapsed >= deadline)
                         break;

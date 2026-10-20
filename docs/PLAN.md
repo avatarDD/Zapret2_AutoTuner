@@ -551,6 +551,15 @@ WinDivert sniff или AF_PACKET (только заголовки и CH, без 
   «VirtualBox NAT»).
 - Телеметрии нет. База знаний выгружается только вручную.
 
+**Сделано (фаза 9):** `.github/workflows/release.yml` по тегу `v*` собирает
+и публикует релиз (тесты, бандл по lock-файлу с `--strict`, проверка
+`--version` движка и Agent, Inno Setup + portable zip, .deb/.rpm/AppImage/
+tar.gz для x64 и arm64, `SHA256SUMS.txt`). Agent в Linux запускается через
+pkexec по требованию, поэтому вместо systemd-юнита в пакетах polkit-правило
+`org.zapret.autotuner.policy`. Браузеры Playwright в релиз не кладутся
+(размер): L3 берёт установленный Chrome/Chromium/Edge. MSIX и подпись кода —
+когда появится сертификат. Руководство — `docs/USER.md`.
+
 ### Отчёт для разбора неудачи (релиз 1)
 
 Если рабочая стратегия не нашлась, кнопка **«Собрать отчёт»** упаковывает в

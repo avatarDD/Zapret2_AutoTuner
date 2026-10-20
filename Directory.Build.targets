@@ -1,0 +1,4 @@
+<Project>
+  <!-- No telemetry (AGENTS.md rule 7), at build time too: Avalonia.BuildServices sends build stats otherwise. -->
+  <Target Name="AvaloniaStats" />
+</Project>

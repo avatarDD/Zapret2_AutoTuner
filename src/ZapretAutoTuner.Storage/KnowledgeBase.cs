@@ -395,6 +395,60 @@ public sealed class KnowledgeBase : IDisposable
         }
     }
 
+    // ---- live monitor ----
+
+    public void AddMonitorWindow(string domain, DateTimeOffset start, int sessions, int ok, int reset, int stalled16k, int stalled, int noReply, int retransmissions)
+    {
+        lock (_gate)
+        {
+            Exec("""
+                INSERT INTO monitor_windows(domain,started_at,sessions,ok,reset,stalled16k,stalled,no_reply,retransmissions)
+                VALUES($d,$s,$n,$ok,$r,$s16,$st,$nr,$rt)
+                ON CONFLICT(domain,started_at) DO UPDATE SET sessions=$n, ok=$ok, reset=$r, stalled16k=$s16, stalled=$st, no_reply=$nr, retransmissions=$rt
+                """,
+                ("$d", domain), ("$s", start.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)), ("$n", sessions), ("$ok", ok), ("$r", reset),
+                ("$s16", stalled16k), ("$st", stalled), ("$nr", noReply), ("$rt", retransmissions));
+        }
+    }
+
+    /// <summary>Windows since <paramref name="since"/>, oldest first: (domain, start, sessions, ok).</summary>
+    public List<(string Domain, DateTimeOffset Start, int Sessions, int Ok)> MonitorWindows(DateTimeOffset since, string? domain = null)
+    {
+        lock (_gate)
+        {
+            return Rows("SELECT domain, started_at, sessions, ok FROM monitor_windows WHERE started_at >= $s AND ($d IS NULL OR domain = $d) ORDER BY started_at",
+                    null, ("$s", since.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)), ("$d", domain))
+                .Select(r => ((string)r[0]!, Time(r[1]), (int)(long)r[2]!, (int)(long)r[3]!))
+                .ToList();
+        }
+    }
+
+    /// <summary>Drops windows older than <paramref name="before"/>: the monitor keeps a rolling history, not an archive.</summary>
+    public void PruneMonitorWindows(DateTimeOffset before)
+    {
+        lock (_gate)
+            Exec("DELETE FROM monitor_windows WHERE started_at < $s", ("$s", before.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)));
+    }
+
+    public void AddChange(string domain, string kind, string reason, string? oldArgs = null, string? newArgs = null, bool applied = false)
+    {
+        lock (_gate)
+        {
+            Exec("INSERT INTO change_journal(uid,created_at,domain,kind,old_args,new_args,reason,applied) VALUES($u,$t,$d,$k,$o,$n,$r,$a)",
+                ("$u", Guid.NewGuid().ToString("N")), ("$t", Now()), ("$d", domain), ("$k", kind), ("$o", oldArgs), ("$n", newArgs), ("$r", reason), ("$a", applied ? 1 : 0));
+        }
+    }
+
+    public List<(DateTimeOffset Time, string Domain, string Kind, string? OldArgs, string? NewArgs, string Reason, bool Applied)> Changes(int limit = 100)
+    {
+        lock (_gate)
+        {
+            return Rows("SELECT created_at, domain, kind, old_args, new_args, reason, applied FROM change_journal ORDER BY created_at DESC, id DESC LIMIT $l", null, ("$l", limit))
+                .Select(r => (Time(r[0]), (string)r[1]!, (string)r[2]!, (string?)r[3], (string?)r[4], (string)r[5]!, (long)r[6]! != 0))
+                .ToList();
+        }
+    }
+
     // ---- plumbing ----
 
     private static StoredResult ToResult(object?[] r) => new()

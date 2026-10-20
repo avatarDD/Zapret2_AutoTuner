@@ -7,7 +7,7 @@ namespace ZapretAutoTuner.Storage;
 /// </summary>
 internal static class Schema
 {
-    public const int Version = 1;
+    public const int Version = 2;
 
     /// <summary>Migrations by target version; each runs once, in order, inside a transaction.</summary>
     public static readonly IReadOnlyList<(int Version, string Sql)> Migrations =
@@ -134,6 +134,37 @@ internal static class Schema
                 trust INTEGER NOT NULL DEFAULT 0,
                 last_seen TEXT
             );
+            """),
+        (2, """
+            -- live monitor (PLAN 7.1-7.2): closed windows per domain, no addresses
+            CREATE TABLE monitor_windows (
+                id INTEGER PRIMARY KEY,
+                domain TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                sessions INTEGER NOT NULL,
+                ok INTEGER NOT NULL,
+                reset INTEGER NOT NULL,
+                stalled16k INTEGER NOT NULL,
+                stalled INTEGER NOT NULL,
+                no_reply INTEGER NOT NULL,
+                retransmissions INTEGER NOT NULL,
+                UNIQUE (domain, started_at)
+            );
+            CREATE INDEX monitor_windows_time ON monitor_windows(started_at);
+
+            -- what changed and why (PLAN 7.3.5)
+            CREATE TABLE change_journal (
+                id INTEGER PRIMARY KEY,
+                uid TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                domain TEXT NOT NULL,
+                kind TEXT NOT NULL,             -- degraded | recovered | repaired | block_lifted | site_down | not_found | applied | declined | router_outdated
+                old_args TEXT,
+                new_args TEXT,
+                reason TEXT NOT NULL,
+                applied INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX change_journal_time ON change_journal(created_at);
             """),
     ];
 }

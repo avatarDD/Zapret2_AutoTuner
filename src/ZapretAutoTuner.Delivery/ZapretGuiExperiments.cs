@@ -137,13 +137,24 @@ public sealed class ZapretGuiExperiments(ZapretGuiMcp mcp)
             var probes = (o["per_target"] as JsonArray ?? []).OfType<JsonObject>().Select(p => new ExperimentProbe(
                 (string?)p["target"] ?? "", (bool?)p["ok"] ?? false, p["code"]?.ToString() ?? "", (string?)p["code_desc"] ?? "",
                 (double?)p["latency_ms"] ?? 0, (long?)p["bytes_read"] ?? 0, (int?)p["attempts"] ?? 0, (int?)p["ok_count"] ?? 0)).ToList();
-            var validation = o["validation"] as JsonObject;
             variants.Add(new ExperimentVariantResult((string?)o["label"] ?? "", (bool?)o["started_nfqws"] ?? false, (bool?)o["skipped"] ?? false,
                 (string?)o["skip_reason"] ?? "", (string?)o["engine_error"], probes, (double?)o["success_rate"] ?? 0, (double?)o["score"] ?? 0,
-                Strings(o["hints"]), Strings(o["nfqws_log"]), Strings(validation?["errors"])));
+                Strings(o["hints"]), Strings(o["nfqws_log"]), ValidationErrors(o["validation"] as JsonObject)));
         }
         return new ExperimentReport((string?)r["run_id"] ?? "", (string?)r["state"] ?? "", variants, Strings(r["baseline"]?["open_without_bypass"]),
             (string?)r["best"] ?? "", (bool?)r["awaiting_commit"] ?? false, (bool?)r["committed"] ?? false, r["restored"]?.ToString(),
             (string?)r["restore_error"] ?? "", (string?)r["reverted_reason"] ?? "", (string?)r["error"] ?? "");
+    }
+
+    /// <summary>
+    /// The GUI's dry run (<c>_validate</c>: <c>{available, ok, returncode, output}</c>): when nfqws2 ran and refused the
+    /// argv, its output lines are the errors. A dry run that could not run at all is not a refusal.
+    /// </summary>
+    private static List<string> ValidationErrors(JsonObject? v)
+    {
+        if (v is null || (bool?)v["available"] != true || (bool?)v["ok"] != false)
+            return [];
+        var lines = ((string?)v["output"] ?? "").Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+        return lines.Count > 0 ? lines : [$"nfqws2 exit code {v["returncode"]?.ToJsonString() ?? "?"}"];
     }
 }

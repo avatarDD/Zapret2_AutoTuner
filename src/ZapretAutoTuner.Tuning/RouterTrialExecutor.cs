@@ -56,6 +56,9 @@ public sealed class RouterTrialExecutor(ZapretGuiExperiments experiments, Router
                     Variants = variants,
                     Targets = options.Targets.Take(10).ToList(),
                     Repeats = Math.Clamp(attempts, 1, 5),
+                    // AGENTS.md rule 5: the router measures without bypass first, so a target that opens anyway
+                    // lands in open_without_bypass and is left out of the outcomes (it says nothing about the strategy)
+                    Baseline = true,
                     TtlSec = options.TtlSec,
                 }, ct).ConfigureAwait(false);
                 report = await experiments.WaitAsync(runId, options.Poll, ct).ConfigureAwait(false);

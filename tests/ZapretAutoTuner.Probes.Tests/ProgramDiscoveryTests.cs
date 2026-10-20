@@ -47,6 +47,65 @@ public sealed class ProgramDiscoveryTests
         Assert.Equal(new HashSet<int> { 7, 8 }, ProcessTree.Closure(7, parents));
     }
 
+    [Theory]
+    [InlineData("1234 (Web Content) S 42 1234 1234 0 -1 4194304 100 0 0 0 5 3 0 0 20 0 4 0 987654 1000 10", 987654L)]
+    [InlineData("777 (a) b) (c) R 9 777 777 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 55 0 0", 55L)]
+    public void Stat_start_time_is_field_22(string stat, long start) => Assert.Equal(start, ProcessTree.ParseStatStart(stat));
+
+    [Fact]
+    public void Stat_without_start_time_gives_null() => Assert.Null(ProcessTree.ParseStatStart("5 (x) S 1 5 5"));
+
+    private static Dictionary<int, ProcessEntry> Snap(params (int Pid, int Parent, long Start)[] list) =>
+        list.ToDictionary(x => x.Pid, x => new ProcessEntry(x.Pid, x.Parent, x.Start));
+
+    [Fact]
+    public void Keyed_closure_follows_children_that_started_after_their_parent()
+    {
+        var snap = Snap((10, 1, 100), (11, 10, 110), (12, 11, 120), (13, 10, 50));
+        // 13 claims parent 10 but is older: its real parent had pid 10 before
+        Assert.Equal(new HashSet<int> { 10, 11, 12 }, ProcessTree.Closure(new ProcessKey(10, 100), snap).Select(k => k.Pid).ToHashSet());
+    }
+
+    [Fact]
+    public void Keyed_closure_ignores_a_reused_root_pid()
+    {
+        // the root (10, started at 100) exited; its orphan 11 stays; pid 10 is now another program with its own child
+        var snap = Snap((10, 1, 500), (11, 10, 110), (14, 10, 510));
+        var keys = ProcessTree.Closure(new ProcessKey(10, 100), snap);
+        Assert.Equal(new HashSet<ProcessKey> { new(11, 110) }, keys);
+        Assert.Empty(ProcessTree.Alive([new ProcessKey(10, 100)], snap));
+        Assert.Equal([new ProcessKey(11, 110)], ProcessTree.Alive([new ProcessKey(11, 110), new ProcessKey(12, 1)], snap));
+        // an unknown start time matches any process with the pid
+        Assert.Single(ProcessTree.Alive([new ProcessKey(10, 0)], snap));
+    }
+
+    [Fact]
+    public void Image_cache_reads_each_process_once_and_again_after_pid_reuse()
+    {
+        var root = OperatingSystem.IsWindows() ? @"C:\Apps\Game" : "/opt/game";
+        var paths = new Dictionary<int, string> { [1] = Path.Combine(root, "game.exe"), [2] = OperatingSystem.IsWindows() ? @"C:\Apps\Other\x.exe" : "/opt/other/x", [3] = Path.Combine(root, "sub", "helper") };
+        var cache = new ProcessImageCache(pid => paths.GetValueOrDefault(pid));
+        var snap = Snap((1, 0, 10), (2, 0, 20), (3, 1, 30));
+        Assert.Equal(new HashSet<int> { 1, 3 }, cache.UnderDirectory(root, snap));
+        Assert.Equal(3, cache.Reads);
+        Assert.Equal(new HashSet<int> { 1, 3 }, cache.UnderDirectory(root, snap));
+        Assert.Equal(3, cache.Reads); // nothing read again
+        paths[3] = "/elsewhere/x";
+        var reused = Snap((1, 0, 10), (2, 0, 20), (3, 2, 99));
+        Assert.Equal(new HashSet<int> { 1 }, cache.UnderDirectory(root, reused));
+        Assert.Equal(4, cache.Reads);
+    }
+
+    [Fact]
+    public void Own_process_has_a_start_time_and_an_image()
+    {
+        var key = ProcessTree.KeyOf(Environment.ProcessId);
+        Assert.NotNull(key);
+        Assert.NotEqual(0, key.Value.Start);
+        Assert.Contains(key.Value, ProcessTree.Alive([key.Value]));
+        Assert.False(string.IsNullOrEmpty(ProcessTree.ImagePath(Environment.ProcessId)));
+    }
+
     [Fact]
     public void Own_process_is_in_its_tree()
     {

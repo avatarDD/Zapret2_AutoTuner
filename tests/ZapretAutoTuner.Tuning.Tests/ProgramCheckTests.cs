@@ -72,6 +72,18 @@ public sealed class ProgramCheckTests
         Assert.False(withError.Passed);
     }
 
+    [Fact]
+    public void A_reached_endpoint_too_young_to_judge_does_not_fail_the_check()
+    {
+        // the rerun opened the Telegram connection just before the recording ended: not judged, not broken
+        var r = ProgramCheck.Compare([Stun, Telegram], Rerun(Seen("198.51.100.7", 3478, L4Kind.Udp, FlowHealth.Ok), Seen("149.154.167.51", 443, L4Kind.Tcp, FlowHealth.Unknown)));
+        Assert.NotNull(r.Endpoints[1].After);
+        Assert.False(r.Endpoints[1].Fixed);
+        Assert.True(r.Passed);
+        // but something must be fixed
+        Assert.False(ProgramCheck.Compare([Telegram], Rerun(Seen("149.154.167.51", 443, L4Kind.Tcp, FlowHealth.Unknown))).Passed);
+    }
+
     private static ProgramCheckResult Compare(EndpointStrategy f) => ProgramCheck.Compare([f], Rerun(f.Endpoint with { Health = FlowHealth.Ok }));
 
     private static AgentTrialOptions Options(EnginePlatform platform) => new()
@@ -143,11 +155,13 @@ public sealed class ProgramCheckTests
         var monitor = new FakeMonitor(packets, new Dictionary<int, ObservedSocket[]> { [42] = [new ObservedSocket(L4Kind.Udp, new IPEndPoint(IPAddress.Any, 50000), null)] });
         int launched = 0;
 
-        var r = await ProgramCheck.RunAsync(engine, monitor, [Stun], () =>
+        var first = new ProgramRecording([], [42], 1, 10, 0, [new Probes.Programs.ProcessKey(42, 1000)]);
+        static IReadOnlyCollection<Probes.Programs.ProcessKey> Gone(IReadOnlyCollection<Probes.Programs.ProcessKey> k) => [];
+        var r = await ProgramCheck.RunAsync(engine, monitor, [Stun], first, () =>
         {
             launched++;
             return new RecordOptions { Duration = TimeSpan.FromMilliseconds(100), PollInterval = TimeSpan.FromMilliseconds(30), Pids = () => new HashSet<int> { 42 } };
-        }, Options(EnginePlatform.Linux), "discord");
+        }, Options(EnginePlatform.Linux), "discord", stillRunning: Gone);
 
         Assert.True(r.Passed, string.Join("; ", r.Recording.Endpoints));
         Assert.Equal(1, launched);
@@ -155,9 +169,36 @@ public sealed class ProgramCheckTests
         Assert.Equal("program:discord", tag);
         Assert.Equal(["e1"], engine.Stopped);
 
-        var refused = await ProgramCheck.RunAsync(new RecordingEngine { Refuse = "validator: no" }, monitor, [Stun], () => throw new InvalidOperationException(), Options(EnginePlatform.Linux), "x");
+        var refused = await ProgramCheck.RunAsync(new RecordingEngine { Refuse = "validator: no" }, monitor, [Stun], first, () => throw new InvalidOperationException(), Options(EnginePlatform.Linux), "x", stillRunning: Gone);
         Assert.False(refused.Passed);
         Assert.Contains("no", refused.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Check_refuses_while_the_first_instance_still_runs()
+    {
+        var engine = new RecordingEngine();
+        var monitor = new FakeMonitor([], new Dictionary<int, ObservedSocket[]>());
+        var key = new Probes.Programs.ProcessKey(42, 1000);
+        var first = new ProgramRecording([], [42], 1, 10, 0, [key]);
+        int launched = 0;
+        var r = await ProgramCheck.RunAsync(engine, monitor, [Stun], first, () =>
+        {
+            launched++;
+            return new RecordOptions();
+        }, Options(EnginePlatform.Linux), "x", stillRunning: k => [.. k]);
+        Assert.False(r.Passed);
+        Assert.Equal(ProgramCheck.StillRunningError, r.Error);
+        Assert.Contains("закройте", r.Error, StringComparison.Ordinal);
+        Assert.Contains("close it", r.Error, StringComparison.Ordinal);
+        Assert.Equal(0, launched);
+        Assert.Empty(engine.Started);
+
+        // the real check: our own process is alive, a reused pid is not ours
+        var self = Probes.Programs.ProcessTree.KeyOf(Environment.ProcessId)!.Value;
+        var alive = await ProgramCheck.RunAsync(engine, monitor, [Stun], new ProgramRecording([], [self.Pid], 0, 0, 0, [self]), () => new RecordOptions(), Options(EnginePlatform.Linux), "x");
+        Assert.Equal(ProgramCheck.StillRunningError, alive.Error);
+        Assert.Empty(Probes.Programs.ProcessTree.Alive([self with { Start = self.Start + 1 }]));
     }
 
     // ---- AddressResults ----

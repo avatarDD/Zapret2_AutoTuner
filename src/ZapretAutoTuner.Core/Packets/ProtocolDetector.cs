@@ -19,13 +19,15 @@ public enum AppProtocol
 }
 
 /// <summary>
-/// Recognises the first client payload of a flow the way nfqws2's <c>protocol.c</c> does, so that a program's flows
-/// map to the engine's <c>--filter-l7</c> and <c>--payload</c> names (dpi-diagnostics §8). MTProto has no signature
-/// (obfuscated2 is 64 random bytes): it is guessed from the length and Telegram's networks.
+/// Recognises the first client payload of a flow exactly the way nfqws2's <c>protocol.c</c> does (the testers and their
+/// order in <c>desync.c</c>), so that a program's flows map to the engine's <c>--filter-l7</c> and <c>--payload</c>
+/// names (dpi-diagnostics §8). A flow the engine would call unknown is unknown here too: a strategy filtered by a
+/// payload type the engine never assigns would do nothing.
 /// </summary>
 public static class ProtocolDetector
 {
-    /// <summary>Telegram's announced networks (AS62041, AS59930, AS62014, AS211157, AS44907).</summary>
+    /// <summary>Telegram's announced networks (AS62041, AS59930, AS62014, AS211157, AS44907). Not used for detection
+    /// (the engine does not look at addresses); kept for reports and provider lists.</summary>
     public static IReadOnlyList<(IPAddress Network, int Prefix)> TelegramNetworks { get; } =
     [
         .. new[]
@@ -36,64 +38,163 @@ public static class ProtocolDetector
         }.Select(c => (IPAddress.Parse(c[..c.IndexOf('/', StringComparison.Ordinal)]), int.Parse(c[(c.IndexOf('/', StringComparison.Ordinal) + 1)..], System.Globalization.CultureInfo.InvariantCulture))),
     ];
 
-    public static AppProtocol DetectUdp(ReadOnlySpan<byte> p, int serverPort)
+    /// <summary>
+    /// udp_standard_protocol_probe: QUIC Initial, Discord IP discovery, STUN, DNS query/response, (DHT), DTLS
+    /// ClientHello/ServerHello, (uTP), WireGuard initiation/response/cookie/keepalive. WireGuard data is recognised by
+    /// the engine only in a flow already known as WireGuard (<paramref name="knownWireGuard"/>).
+    /// </summary>
+    public static AppProtocol DetectUdp(ReadOnlySpan<byte> p, bool knownWireGuard = false)
     {
         if (QuicInitial.IsInitial(p))
             return AppProtocol.Quic;
-        if (IsStun(p))
-            return AppProtocol.Stun;
         if (IsDiscordIpDiscovery(p))
             return AppProtocol.Discord;
-        if (IsWireGuard(p))
-            return AppProtocol.WireGuard;
-        if (p.Length >= 13 && p[0] is >= 20 and <= 23 && p[1] == 0xFE)
+        if (IsStun(p))
+            return AppProtocol.Stun;
+        if (IsDnsQuery(p) || IsDnsResponse(p))
+            return AppProtocol.Dns;
+        if (IsDtls(p) && p[0] == 0x16 && p[13] is 1 or 2)
             return AppProtocol.Dtls;
-        return serverPort == 53 ? AppProtocol.Dns : AppProtocol.Unknown;
+        if (IsWireGuard(p) || (knownWireGuard && IsWireGuardData(p)))
+            return AppProtocol.WireGuard;
+        return AppProtocol.Unknown;
     }
 
-    public static AppProtocol DetectTcp(ReadOnlySpan<byte> p, IPAddress server)
+    /// <summary>The TCP testers: TLS ClientHello (partial is fine), HTTP request, then MTProto on the first data packet.</summary>
+    public static AppProtocol DetectTcp(ReadOnlySpan<byte> p)
     {
-        if (p.Length >= 3 && p[0] == 0x16 && p[1] == 0x03)
+        if (IsTlsClientHelloPartial(p))
             return AppProtocol.Tls;
         if (IsHttpRequest(p))
             return AppProtocol.Http;
-        // abridged (0xef) and intermediate/padded (0xee×4, 0xdd×4) transports start with a tag; obfuscated2 is 64
-        // random bytes, told apart only by where it goes
-        if (p.Length > 0 && (p[0] == 0xef || (p.Length >= 4 && (BinaryPrimitives.ReadUInt32BigEndian(p) is 0xeeeeeeee or 0xdddddddd))))
-            return AppProtocol.Mtproto;
-        if (p.Length >= 64 && InTelegram(server))
+        if (IsMtproto(p))
             return AppProtocol.Mtproto;
         return AppProtocol.Unknown;
     }
 
-    /// <summary>RFC 5389: two zero bits, a length that matches, the magic cookie.</summary>
+    /// <summary>IsStunMessage: two zero bits, a length that is a multiple of 4 and fits, the magic cookie.</summary>
     public static bool IsStun(ReadOnlySpan<byte> p) =>
-        p.Length >= 20 && (p[0] & 0xC0) == 0 && BinaryPrimitives.ReadUInt32BigEndian(p[4..]) == 0x2112A442
-        && BinaryPrimitives.ReadUInt16BigEndian(p[2..]) + 20 == p.Length;
+        p.Length >= 20 && (p[0] & 0xC0) == 0 && (p[3] & 3) == 0 && BinaryPrimitives.ReadUInt32BigEndian(p[4..]) == 0x2112A442
+        && BinaryPrimitives.ReadUInt16BigEndian(p[2..]) <= p.Length - 20;
 
-    /// <summary>Discord voice IP discovery: type 1, length 70, 74 bytes in all.</summary>
+    /// <summary>IsDiscordIpDiscoveryRequest: type 1, length 70, 74 bytes in all, the 64-byte address still zero.</summary>
     public static bool IsDiscordIpDiscovery(ReadOnlySpan<byte> p) =>
-        p.Length == 74 && BinaryPrimitives.ReadUInt16BigEndian(p) == 1 && BinaryPrimitives.ReadUInt16BigEndian(p[2..]) == 70;
+        p.Length == 74 && p[0] == 0 && p[1] == 1 && p[2] == 0 && p[3] == 70 && !p.Slice(8, 64).ContainsAnyExcept((byte)0);
 
-    /// <summary>WireGuard: message type 1–4, three reserved zero bytes, the fixed size of the type.</summary>
+    /// <summary>The WireGuard messages the engine recognises in any flow: initiation 148, response 92, cookie 64,
+    /// keepalive 32 bytes, each with its type and three zero bytes.</summary>
     public static bool IsWireGuard(ReadOnlySpan<byte> p) =>
-        p.Length >= 32 && p[1] == 0 && p[2] == 0 && p[3] == 0 && p[0] switch
+        p.Length >= 4 && BinaryPrimitives.ReadUInt32BigEndian(p) switch
         {
-            1 => p.Length == 148,
-            2 => p.Length == 92,
-            3 => p.Length == 64,
-            4 => p.Length % 16 == 0,
+            0x01000000 => p.Length == 148,
+            0x02000000 => p.Length == 92,
+            0x03000000 => p.Length == 64,
+            0x04000000 => p.Length == 32,
             _ => false,
         };
 
-    private static bool IsHttpRequest(ReadOnlySpan<byte> p)
+    /// <summary>IsWireguardData: type 4 and at least 52 bytes (only in a flow already known as WireGuard).</summary>
+    public static bool IsWireGuardData(ReadOnlySpan<byte> p) => p.Length >= 52 && BinaryPrimitives.ReadUInt32BigEndian(p) == 0x04000000;
+
+    /// <summary>IsDTLS: a record type 20–23, version fe ff / fe fd / fe fc / 01 00, a record length that fits.</summary>
+    public static bool IsDtls(ReadOnlySpan<byte> p) =>
+        p.Length > 13 && p[0] is >= 0x14 and <= 0x17
+        && ((p[1] == 0xFE && p[2] is 0xFF or 0xFD or 0xFC) || (p[1] == 0x01 && p[2] == 0x00))
+        && BinaryPrimitives.ReadUInt16BigEndian(p[11..]) + 13 <= p.Length;
+
+    /// <summary>IsDNSQuery: QR 0 and standard opcode, one question, no answers or authority, at most 3 additional.</summary>
+    public static bool IsDnsQuery(ReadOnlySpan<byte> p) =>
+        p.Length >= 12 && (p[2] & 0xFE) == 0 && p.Slice(4, 6).SequenceEqual((ReadOnlySpan<byte>)[0, 1, 0, 0, 0, 0])
+        && BinaryPrimitives.ReadUInt16BigEndian(p[10..]) <= 3;
+
+    /// <summary>IsDNSResponse: QR 1 and standard opcode, one question, at most 100 records of each kind.</summary>
+    public static bool IsDnsResponse(ReadOnlySpan<byte> p) =>
+        p.Length >= 12 && (p[2] & 0xF8) == 0x80 && BinaryPrimitives.ReadUInt16BigEndian(p[4..]) == 1
+        && BinaryPrimitives.ReadUInt16BigEndian(p[6..]) <= 100 && BinaryPrimitives.ReadUInt16BigEndian(p[8..]) <= 100
+        && BinaryPrimitives.ReadUInt16BigEndian(p[10..]) <= 100;
+
+    /// <summary>IsTLSClientHelloPartial: a handshake record of version 3.x (x ≤ 3) holding a ClientHello header.</summary>
+    public static bool IsTlsClientHelloPartial(ReadOnlySpan<byte> p) =>
+        p.Length >= 6 && p[0] == 0x16 && p[1] == 0x03 && p[2] <= 0x03
+        && p.Length - 5 >= 6 && p[5] == 0x01 && p[9] == 0x03 && p[10] <= 0x03;
+
+    /// <summary>
+    /// IsMTProto: the obfuscated2 header is 64 bytes; AES-256-CTR with the key at 8..40 and the IV at 40..56 turns
+    /// bytes 56..60 into <c>EF EF EF EF</c> (the engine accepts only this tag). Only block 3 of the keystream is needed:
+    /// AES(IV + 3), bytes 8..12, XOR the payload at 56..60.
+    /// </summary>
+    public static bool IsMtproto(ReadOnlySpan<byte> p)
     {
-        foreach (var m in new[] { "GET ", "POST ", "HEAD ", "PUT ", "OPTIONS ", "DELETE ", "CONNECT ", "PATCH " })
+        if (p.Length < 64)
+            return false;
+        Span<byte> keystream = stackalloc byte[16];
+        Obfuscated2Keystream(p, keystream);
+        for (int i = 0; i < 4; i++)
         {
-            if (p.Length >= m.Length && p[..m.Length].SequenceEqual(System.Text.Encoding.ASCII.GetBytes(m)))
-                return true;
+            if ((keystream[8 + i] ^ p[56 + i]) != 0xEF)
+                return false;
         }
-        return false;
+        return true;
+    }
+
+    /// <summary>Keystream block 3 of an obfuscated2 header (it covers bytes 48..64).</summary>
+    public static void Obfuscated2Keystream(ReadOnlySpan<byte> header, Span<byte> block)
+    {
+        Span<byte> counter = stackalloc byte[16];
+        header.Slice(40, 16).CopyTo(counter);
+        // ctr_add(iv, 3): a 128-bit big-endian counter
+        ulong lo = BinaryPrimitives.ReadUInt64BigEndian(counter[8..]);
+        ulong sum = lo + 3;
+        BinaryPrimitives.WriteUInt64BigEndian(counter[8..], sum);
+        if (sum < lo)
+            BinaryPrimitives.WriteUInt64BigEndian(counter, BinaryPrimitives.ReadUInt64BigEndian(counter) + 1);
+        using var aes = System.Security.Cryptography.Aes.Create();
+        aes.Key = header.Slice(8, 32).ToArray();
+        aes.EncryptEcb(counter, block, System.Security.Cryptography.PaddingMode.None);
+    }
+
+    private static readonly string[] HttpMethods = ["GET ", "POST ", "HEAD ", "OPTIONS ", "PUT ", "DELETE ", "CONNECT ", "TRACE ", "PATCH "];
+
+    /// <summary>IsHttp: a known method, a URI, then <c>HTTP/1.</c>.</summary>
+    public static bool IsHttpRequest(ReadOnlySpan<byte> p)
+    {
+        if (p.Length < 4)
+            return false;
+        bool method = false;
+        foreach (var m in HttpMethods)
+            method |= StartsWithAscii(p, m);
+        if (!method)
+            return false;
+        int i = 0;
+        static bool Space(byte c) => c is (byte)' ' or (byte)'\t';
+        static bool Eol(byte c) => c is (byte)'\r' or (byte)'\n';
+        while (i < p.Length && !Space(p[i]) && !Eol(p[i]))
+            i++;
+        if (i == p.Length || !Space(p[i]))
+            return false;
+        while (i < p.Length && Space(p[i]))
+            i++;
+        while (i < p.Length && !Space(p[i]) && !Eol(p[i]))
+            i++;
+        if (i == p.Length || !Space(p[i]))
+            return false;
+        while (i < p.Length && Space(p[i]))
+            i++;
+        if (p.Length - i < 10 || Eol(p[i]))
+            return false;
+        return StartsWithAscii(p[i..], "HTTP/1.");
+    }
+
+    private static bool StartsWithAscii(ReadOnlySpan<byte> p, string s)
+    {
+        if (p.Length < s.Length)
+            return false;
+        for (int i = 0; i < s.Length; i++)
+        {
+            if (p[i] != s[i])
+                return false;
+        }
+        return true;
     }
 
     public static bool InTelegram(IPAddress a) => TelegramNetworks.Any(n => InNetwork(a, n.Network, n.Prefix));

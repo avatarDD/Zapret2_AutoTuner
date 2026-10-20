@@ -12,10 +12,10 @@ namespace ZapretAutoTuner.Probes.Tests;
 public sealed class ProviderTargetsTests
 {
     [Fact]
-    public void Candidate_names_put_exact_names_first_and_turn_wildcards_into_www()
+    public void Candidate_names_put_exact_names_first_and_turn_wildcards_into_www_and_the_base()
     {
-        var names = ProviderTargets.CandidateNames(["*.cdn.test", "1.2.3.4", "", "edge.test", "2001:db8::1", "*.x.test", "y.test"]).ToList();
-        Assert.Equal(["edge.test", "y.test", "www.cdn.test", "www.x.test"], names);
+        var names = ProviderTargets.CandidateNames(["*.cdn.test", "1.2.3.4", "", "edge.test", "2001:db8::1", "*.x.test", "y.test", "x.test"]).ToList();
+        Assert.Equal(["edge.test", "y.test", "x.test", "www.cdn.test", "cdn.test", "www.x.test"], names);
         Assert.Empty(ProviderTargets.CandidateNames([]));
     }
 
@@ -40,7 +40,8 @@ public sealed class ProviderTargetsTests
         _ => throw new SocketException((int)SocketError.HostNotFound),
     };
 
-    /// <summary>192.0.2.x: a wildcard certificate; 198.51.100.x: nothing; 203.0.113.x: three names, the second valid.</summary>
+    /// <summary>192.0.2.x: a wildcard certificate, a large response; 198.51.100.x: nothing; 203.0.113.x: three names,
+    /// the second valid, a small (2 KB) response.</summary>
     private sealed class FakeTls
     {
         public ConcurrentQueue<HttpProbeOptions> Calls { get; } = new();
@@ -62,7 +63,14 @@ public sealed class ProviderTargetsTests
                     },
                 });
             }
-            return Task.FromResult(r with { CertValid = o.Host is "www.cdn.test" or "b.test" });
+            return Task.FromResult(r with
+            {
+                CertValid = o.Host is "www.cdn.test" or "b.test",
+                HttpStatus = 200,
+                ContentLength = o.Host == "www.cdn.test" ? 10_000_000 : 2048,
+                BodyBytes = o.Host == "www.cdn.test" ? 128 * 1024 : 2048,
+                Complete = o.Host != "www.cdn.test",
+            });
         }
     }
 
@@ -74,6 +82,7 @@ public sealed class ProviderTargetsTests
 
         var targets = await ProviderTargets.FindAsync(TestProvider(), nets, 2, Resolve, tls.Probe);
 
+        // only one large response among the networks: the small one fills up, padded
         Assert.Equal(3, targets.Count);
         var ep = targets[0];
         Assert.Equal("endpoint", ep.Source);
@@ -87,12 +96,20 @@ public sealed class ProviderTargetsTests
         Assert.Equal("www.cdn.test", cdn.Host);
         Assert.Equal("192.0.2.0/24", cdn.Source);
         Assert.True(nets[0].Contains(cdn.Address));
-        Assert.Equal(1, cdn.MinBytes);
-        Assert.Equal(32 * 1024, cdn.PadBytes);
+        Assert.Equal(ProviderTargets.LargeBytes, cdn.MinBytes);
+        Assert.Equal(0, cdn.PadBytes); // a large response needs no padding
 
         var b = targets[2];
         Assert.Equal("b.test", b.Host);
         Assert.Equal("203.0.113.0/24", b.Source);
+        // a small response: padded request, and only the whole response passes (a 2 KB 403 is not 1 byte of success)
+        Assert.Equal(ProviderTargets.LargeBytes, b.MinBytes);
+        Assert.Equal(ProviderTargets.SmallPadBytes, b.PadBytes);
+        var half = new ProbeResult { Host = "b.test", Address = "203.0.113.1", ConnectOk = true, TlsOk = true, CertValid = true, HttpStatus = 403, BodyBytes = 1000 };
+        Assert.False(half.Passes(ProbeLevel.L2Body, b.MinBytes));
+        Assert.True((half with { Complete = true }).Passes(ProbeLevel.L2Body, b.MinBytes));
+        // the name check is a GET that shows the size
+        Assert.All(tls.Calls.Where(c => c.Sni != ""), c => Assert.Equal(ProbeLevel.L2Body, c.Level));
 
         // the bare probe asks without SNI, at L1; only two names of a certificate are tried
         Assert.All(tls.Calls.Where(c => c.Sni == ""), c =>
@@ -102,6 +119,29 @@ public sealed class ProviderTargetsTests
         });
         Assert.DoesNotContain(tls.Calls, c => c.Host == "c.test");
         Assert.Contains(tls.Calls, c => c.Host == "a.test" && c.Sni is null && c.Address.Equals(b.Address));
+    }
+
+    [Fact]
+    public async Task Large_responses_are_preferred_over_small_ones()
+    {
+        var tls = new FakeTls();
+        // the small-response network comes first in the sample, the large one later
+        var targets = await ProviderTargets.FindAsync(new Provider { Id = "p", Name = "P" }, Networks("203.0.113.0/24", "192.0.2.0/24"), 1, Resolve, tls.Probe);
+        var t = Assert.Single(targets);
+        Assert.Equal("www.cdn.test", t.Host);
+        Assert.Equal(0, t.PadBytes);
+    }
+
+    [Theory]
+    [InlineData(200_000L, 16_000L, null, true)]       // Content-Length says large, the cut-off stopped it
+    [InlineData(null, 16_000L, 16_000L, true)]        // chunked, cut at 16 KB: larger than the cut
+    [InlineData(null, 140_000L, null, true)]
+    [InlineData(2048L, 2048L, null, false)]           // a small error page
+    [InlineData(null, 3000L, 3000L, false)]
+    public void Large_means_by_length_by_bytes_or_by_a_cutoff(long? contentLength, long body, long? stalledAt, bool expected)
+    {
+        var r = new ProbeResult { Host = "h", Address = "192.0.2.1", ContentLength = contentLength, BodyBytes = body, StalledAt = stalledAt };
+        Assert.Equal(expected, ProviderTargets.IsLarge(r));
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using ZapretAutoTuner.Core.Diagnostics;
 using ZapretAutoTuner.Core.Model;
 using ZapretAutoTuner.Core.Packets;
 using ZapretAutoTuner.Core.Programs;
+using ZapretAutoTuner.Probes.Programs;
 using static ZapretAutoTuner.Tuning.Tests.ProgramFixtures;
 
 namespace ZapretAutoTuner.Tuning.Tests;
@@ -130,6 +131,42 @@ public sealed class ProgramRecorderTests
         var self = Environment.ProcessId;
         var pids = ProgramRecorder.DefaultPids(new ProgramInfo { Id = "u", Name = "U", Source = ProgramSource.Uwp, Executable = "explorer.exe" }, self)();
         Assert.Contains(self, pids);
+    }
+
+    [Fact]
+    public void A_packaged_app_is_found_by_its_install_folder()
+    {
+        var dir = OperatingSystem.IsWindows() ? @"C:\Program Files\WindowsApps\Vendor.App_1.0_x64" : "/opt/windowsapps/vendor.app";
+        var app = new ProgramInfo { Id = "Vendor.App!App", Name = "App", Source = ProgramSource.Uwp, Executable = "explorer.exe", Arguments = [@"shell:AppsFolder\Vendor.App!App"], InstallDirectory = dir };
+        Assert.Equal(dir, ProgramRecorder.OwnDirectory(app));
+        var snaps = new Queue<Dictionary<int, ProcessEntry>>();
+        Dictionary<int, ProcessEntry> Snap(params (int Pid, int Parent, long Start)[] l) => l.ToDictionary(x => x.Pid, x => new ProcessEntry(x.Pid, x.Parent, x.Start));
+        // explorer (5) starts the shell launch and exits; the app (40) is started by the broker (8), not by us
+        snaps.Enqueue(Snap((5, 1, 10), (8, 1, 5)));
+        snaps.Enqueue(Snap((8, 1, 5), (40, 8, 20), (41, 40, 21), (50, 8, 22)));
+        snaps.Enqueue(Snap((8, 1, 5), (41, 40, 21), (50, 8, 22)));
+        var images = new ProcessImageCache(pid => pid is 40 or 41 ? Path.Combine(dir, "app.exe") : "/usr/bin/other");
+        var pids = ProgramRecorder.DefaultPids(app, 5, () => snaps.Dequeue(), images);
+        Assert.Equal(new HashSet<int> { 40, 41 }, pids());
+        Assert.Equal(new HashSet<int> { 41 }, pids()); // 40 exited
+        // without the install folder nothing of the app would be seen
+        Assert.Null(ProgramRecorder.OwnDirectory(app with { InstallDirectory = null }));
+    }
+
+    [Fact]
+    public void Default_pids_do_not_pick_up_a_reused_pid()
+    {
+        var snaps = new Queue<Dictionary<int, ProcessEntry>>();
+        Dictionary<int, ProcessEntry> Snap(params (int Pid, int Parent, long Start)[] l) => l.ToDictionary(x => x.Pid, x => new ProcessEntry(x.Pid, x.Parent, x.Start));
+        snaps.Enqueue(Snap((7, 1, 100)));
+        snaps.Enqueue(Snap((7, 1, 100), (9, 7, 101)));
+        snaps.Enqueue(Snap((9, 7, 101)));
+        snaps.Enqueue(Snap((7, 1, 900), (9, 7, 101), (12, 7, 901))); // pid 7 reused by another program
+        var program = new ProgramInfo { Id = "p", Name = "P", Source = ProgramSource.Path, Executable = "/usr/bin/p" };
+        var pids = ProgramRecorder.DefaultPids(program, 7, () => snaps.Dequeue(), new ProcessImageCache(_ => null));
+        Assert.Equal(new HashSet<int> { 7, 9 }, pids());
+        Assert.Equal(new HashSet<int> { 9 }, pids());
+        Assert.Equal(new HashSet<int> { 9 }, pids());
     }
 
     /// <summary>IProgress without a synchronization context hop.</summary>

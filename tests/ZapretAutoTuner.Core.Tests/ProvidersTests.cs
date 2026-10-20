@@ -65,7 +65,15 @@ public sealed class ProvidersTests
             {
                 Assert.True(Samples.ContainsKey(r.Format), $"{p.Id}: unknown range format {r.Format}");
                 Assert.StartsWith("https://", r.Url, StringComparison.Ordinal);
+                if (r.Link is not null)
+                    _ = new System.Text.RegularExpressions.Regex(r.Link);
             }
+            // a provider is not only a fallback; a fallback says what is wrong with it
+            Assert.Contains(p.Ranges, r => !r.Fallback);
+            Assert.All(p.Ranges.Where(r => r.Fallback), r => Assert.False(string.IsNullOrWhiteSpace(r.Warning)));
+            // ranges from announcements cover every ASN of the provider
+            if (p.Ranges.Where(r => !r.Fallback).All(r => r.Format == "ripestat"))
+                Assert.All(p.Asn, asn => Assert.Contains(p.Ranges, r => r.Url.EndsWith($"resource=AS{asn}", StringComparison.Ordinal)));
             foreach (var e in p.TestEndpoints)
             {
                 var uri = new Uri(e.Url);
@@ -79,6 +87,14 @@ public sealed class ProvidersTests
         Assert.Equal("Cloudflare", cf.Name);
         Assert.Contains(13335, cf.Asn);
         Assert.Null(c.Find("nope"));
+
+        // Azure: the Service Tags file found on its download page (dated name), AS8075 only as a fallback
+        var azure = c.Find("azure")!;
+        var tags = Assert.Single(azure.Ranges, r => !r.Fallback);
+        Assert.Equal("azure", tags.Format);
+        Assert.Matches(tags.Link!, "<a href=\"https://download.microsoft.com/download/7/1/D/71D86715-5596-4529-9B13-DA13A5DE5B63/ServiceTags_Public_20261019.json\">");
+        Assert.Contains(azure.Ranges, r => r.Fallback && r.Url.EndsWith("AS8075", StringComparison.Ordinal));
+        Assert.Contains(c.Find("hetzner")!.Ranges, r => r.Url.EndsWith("AS213230", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -104,7 +120,10 @@ public sealed class ProvidersTests
     [InlineData("192.0.2.77/0", "0.0.0.0/0")]
     [InlineData("2001:db8:1:2::5/32", "2001:db8::/32")]
     [InlineData("2001:db8::1", "2001:db8::1/128")]
-    [InlineData("::ffff:198.51.100.1/32", "198.51.100.1/32")]
+    [InlineData("::ffff:198.51.100.1/128", "198.51.100.1/32")]
+    [InlineData("::ffff:198.51.100.1/120", "198.51.100.0/24")]
+    [InlineData("::ffff:198.51.100.1/96", "0.0.0.0/0")]
+    [InlineData("::ffff:198.51.100.1", "198.51.100.1/32")]
     public void Cidr_parses_and_masks_the_host_bits(string text, string expected)
     {
         Assert.True(Cidr.TryParse(text, out var c));
@@ -116,6 +135,7 @@ public sealed class ProvidersTests
     [InlineData("2001:db8::/129")]
     [InlineData("10.0.0.0/-1")]
     [InlineData("10.0.0.0/8/9")]
+    [InlineData("::ffff:198.51.100.1/32")] // shorter than the mapping prefix: not an IPv4 network
     [InlineData("10.0.0.0/x")]
     [InlineData("example.com")]
     [InlineData("")]
@@ -191,6 +211,10 @@ public sealed class ProvidersTests
         }
         // the same input gives the same picks; another seed may move them inside the networks
         Assert.Equal(picks, CidrSet.Sample(nets, 6));
+        // stable across processes too (no per-process HashCode seed): the exact offsets are fixed
+        Assert.Equal(187360325u, CidrSet.StableHash(0, 0, 0)); // FNV-1a, pinned
+        Assert.Equal(CidrSet.StableHash(3, 1, 12345), CidrSet.StableHash(3, 1, 12345));
+        Assert.NotEqual(CidrSet.StableHash(3, 1, 12345), CidrSet.StableHash(3, 2, 12345));
         Assert.All(CidrSet.Sample(nets, 6, seed: 7), p => Assert.Contains(nets, n => n.Contains(p)));
     }
 

@@ -27,18 +27,36 @@ public sealed class ProtocolDetectorTests
         return b;
     }
 
+    /// <summary>A real obfuscated2 header: random, with bytes 56..60 set so that they decrypt to the given tag.</summary>
+    internal static byte[] Obfuscated2(int seed, uint tag = 0xEFEFEFEF, int length = 64)
+    {
+        var b = new byte[length];
+        new Random(seed).NextBytes(b);
+        Span<byte> ks = stackalloc byte[16];
+        ProtocolDetector.Obfuscated2Keystream(b, ks);
+        Span<byte> t = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(t, tag);
+        for (int i = 0; i < 4; i++)
+            b[56 + i] = (byte)(ks[8 + i] ^ t[i]);
+        return b;
+    }
+
     [Fact]
-    public void Stun_needs_the_magic_cookie_and_a_matching_length()
+    public void Stun_like_the_engine_length_fits_and_is_a_multiple_of_four()
     {
         Assert.True(ProtocolDetector.IsStun(TestPackets.Stun()));
         Assert.True(ProtocolDetector.IsStun(TestPackets.Stun(8)));
-        Assert.Equal(AppProtocol.Stun, ProtocolDetector.DetectUdp(TestPackets.Stun(), 3478));
+        Assert.Equal(AppProtocol.Stun, ProtocolDetector.DetectUdp(TestPackets.Stun()));
 
         var noCookie = TestPackets.Stun();
         noCookie[4] = 0;
         Assert.False(ProtocolDetector.IsStun(noCookie));
-        var badLength = TestPackets.Stun(8).AsSpan(0, 24);
-        Assert.False(ProtocolDetector.IsStun(badLength));
+        // the length may be shorter than the datagram (protocol.c: len field <= len-20), not longer
+        Assert.True(ProtocolDetector.IsStun(TestPackets.Stun(4).Concat(new byte[8]).ToArray()));
+        Assert.False(ProtocolDetector.IsStun(TestPackets.Stun(8).AsSpan(0, 24)));
+        var notMultipleOf4 = TestPackets.Stun(8);
+        notMultipleOf4[3] = 6;
+        Assert.False(ProtocolDetector.IsStun(notMultipleOf4));
         var highBits = TestPackets.Stun();
         highBits[0] = 0x40;
         Assert.False(ProtocolDetector.IsStun(highBits));
@@ -46,10 +64,10 @@ public sealed class ProtocolDetectorTests
     }
 
     [Fact]
-    public void Discord_ip_discovery_is_exactly_74_bytes_of_type_1_length_70()
+    public void Discord_ip_discovery_is_74_bytes_of_type_1_length_70_with_an_empty_address()
     {
         Assert.True(ProtocolDetector.IsDiscordIpDiscovery(Discord()));
-        Assert.Equal(AppProtocol.Discord, ProtocolDetector.DetectUdp(Discord(), 50001));
+        Assert.Equal(AppProtocol.Discord, ProtocolDetector.DetectUdp(Discord()));
         Assert.False(ProtocolDetector.IsDiscordIpDiscovery(Discord().AsSpan(0, 73)));
         var wrongType = Discord();
         wrongType[1] = 2;
@@ -57,6 +75,16 @@ public sealed class ProtocolDetectorTests
         var wrongLength = Discord();
         wrongLength[3] = 71;
         Assert.False(ProtocolDetector.IsDiscordIpDiscovery(wrongLength));
+        // the response carries the address: not a request
+        var withAddress = Discord();
+        withAddress[8] = (byte)'1';
+        Assert.False(ProtocolDetector.IsDiscordIpDiscovery(withAddress));
+        var lastAddressByte = Discord();
+        lastAddressByte[71] = 1;
+        Assert.False(ProtocolDetector.IsDiscordIpDiscovery(lastAddressByte));
+        var port = Discord();
+        port[72] = 0xC3; // the port after the address is not checked
+        Assert.True(ProtocolDetector.IsDiscordIpDiscovery(port));
     }
 
     [Theory]
@@ -64,7 +92,8 @@ public sealed class ProtocolDetectorTests
     [InlineData(2, 92, true)]
     [InlineData(3, 64, true)]
     [InlineData(4, 32, true)]
-    [InlineData(4, 96, true)]
+    [InlineData(4, 96, false)]  // data: only in a flow already known as WireGuard
+    [InlineData(4, 52, false)]
     [InlineData(1, 147, false)]
     [InlineData(1, 92, false)]
     [InlineData(2, 148, false)]
@@ -72,11 +101,21 @@ public sealed class ProtocolDetectorTests
     [InlineData(4, 50, false)]
     [InlineData(5, 64, false)]
     [InlineData(0, 148, false)]
-    public void WireGuard_type_byte_goes_with_its_size(byte type, int length, bool expected)
+    public void WireGuard_type_goes_with_its_size(byte type, int length, bool expected)
     {
         Assert.Equal(expected, ProtocolDetector.IsWireGuard(WireGuard(type, length)));
-        if (expected)
-            Assert.Equal(AppProtocol.WireGuard, ProtocolDetector.DetectUdp(WireGuard(type, length), 51820));
+        Assert.Equal(expected ? AppProtocol.WireGuard : AppProtocol.Unknown, ProtocolDetector.DetectUdp(WireGuard(type, length)));
+    }
+
+    [Theory]
+    [InlineData(52, true)]
+    [InlineData(96, true)]
+    [InlineData(51, false)]
+    [InlineData(40, false)]
+    public void WireGuard_data_is_type_4_of_at_least_52_bytes_in_a_wireguard_flow(int length, bool expected)
+    {
+        Assert.Equal(expected, ProtocolDetector.IsWireGuardData(WireGuard(4, length)));
+        Assert.Equal(expected ? AppProtocol.WireGuard : AppProtocol.Unknown, ProtocolDetector.DetectUdp(WireGuard(4, length), knownWireGuard: true));
     }
 
     [Fact]
@@ -87,48 +126,111 @@ public sealed class ProtocolDetectorTests
         Assert.False(ProtocolDetector.IsWireGuard(b));
     }
 
-    [Fact]
-    public void Dtls_record_is_recognised_and_dns_goes_by_port()
+    private static byte[] DtlsRecord(byte type, byte v1, byte v2, int recordLength, int total, byte handshake = 1)
     {
-        var dtls = new byte[100];
-        dtls[0] = 0x16;
-        dtls[1] = 0xFE;
-        dtls[2] = 0xFD;
-        Assert.Equal(AppProtocol.Dtls, ProtocolDetector.DetectUdp(dtls, 443));
-        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectUdp(dtls.AsSpan(0, 12), 443));
-        dtls[0] = 0x18;
-        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectUdp(dtls, 443));
+        var b = new byte[total];
+        b[0] = type;
+        b[1] = v1;
+        b[2] = v2;
+        BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(11), (ushort)recordLength);
+        if (total > 13)
+            b[13] = handshake;
+        return b;
+    }
 
+    [Theory]
+    [InlineData(0xFE, 0xFF, true)]
+    [InlineData(0xFE, 0xFD, true)]
+    [InlineData(0xFE, 0xFC, true)]
+    [InlineData(0x01, 0x00, true)]
+    [InlineData(0xFE, 0xFE, false)]
+    [InlineData(0x03, 0x03, false)]
+    public void Dtls_versions_are_those_of_the_engine(byte v1, byte v2, bool expected)
+    {
+        Assert.Equal(expected, ProtocolDetector.IsDtls(DtlsRecord(0x16, v1, v2, 80, 100)));
+        Assert.Equal(expected ? AppProtocol.Dtls : AppProtocol.Unknown, ProtocolDetector.DetectUdp(DtlsRecord(0x16, v1, v2, 80, 100)));
+    }
+
+    [Fact]
+    public void Dtls_record_length_must_fit_and_only_hellos_name_the_flow()
+    {
+        Assert.True(ProtocolDetector.IsDtls(DtlsRecord(0x16, 0xFE, 0xFD, 87, 100)));
+        Assert.False(ProtocolDetector.IsDtls(DtlsRecord(0x16, 0xFE, 0xFD, 88, 100)));
+        Assert.False(ProtocolDetector.IsDtls(DtlsRecord(0x16, 0xFE, 0xFD, 0, 13)));
+        Assert.False(ProtocolDetector.IsDtls(DtlsRecord(0x18, 0xFE, 0xFD, 10, 100)));
+        // a ServerHello is dtls too; application data or a ChangeCipherSpec is a DTLS record but the engine names
+        // the payload only for hellos
+        Assert.Equal(AppProtocol.Dtls, ProtocolDetector.DetectUdp(DtlsRecord(0x16, 0xFE, 0xFD, 80, 100, handshake: 2)));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectUdp(DtlsRecord(0x16, 0xFE, 0xFD, 80, 100, handshake: 11)));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectUdp(DtlsRecord(0x17, 0xFE, 0xFD, 80, 100)));
+    }
+
+    [Fact]
+    public void Dns_goes_by_the_header_not_the_port()
+    {
+        var query = TestPackets.DnsQuery("example.com");
+        Assert.True(ProtocolDetector.IsDnsQuery(query));
+        Assert.Equal(AppProtocol.Dns, ProtocolDetector.DetectUdp(query));
         var junk = new byte[40];
         junk[0] = 0x55;
-        Assert.Equal(AppProtocol.Dns, ProtocolDetector.DetectUdp(junk, 53));
-        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectUdp(junk, 5353));
+        junk[5] = 7;
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectUdp(junk));
     }
 
     [Fact]
-    public void Tcp_tls_http_and_mtproto_transports()
+    public void Tcp_tls_and_http_like_the_engine()
     {
-        Assert.Equal(AppProtocol.Tls, ProtocolDetector.DetectTcp(new byte[] { 0x16, 0x03, 0x01, 0, 5 }, Somewhere));
-        Assert.Equal(AppProtocol.Http, ProtocolDetector.DetectTcp("GET / HTTP/1.1\r\n"u8, Somewhere));
-        Assert.Equal(AppProtocol.Http, ProtocolDetector.DetectTcp("POST /x HTTP/1.1\r\n"u8, Somewhere));
-        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp("GETX"u8, Somewhere));
-        // abridged and intermediate/padded tags
-        Assert.Equal(AppProtocol.Mtproto, ProtocolDetector.DetectTcp(new byte[] { 0xef, 1, 2 }, Somewhere));
-        Assert.Equal(AppProtocol.Mtproto, ProtocolDetector.DetectTcp(new byte[] { 0xee, 0xee, 0xee, 0xee, 0 }, Somewhere));
-        Assert.Equal(AppProtocol.Mtproto, ProtocolDetector.DetectTcp(new byte[] { 0xdd, 0xdd, 0xdd, 0xdd }, Somewhere));
-        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(new byte[] { 0xee, 0xee, 0xee, 0x00 }, Somewhere));
+        Assert.Equal(AppProtocol.Tls, ProtocolDetector.DetectTcp(new byte[] { 0x16, 0x03, 0x01, 0, 5, 0x01, 0, 0, 0x50, 0x03, 0x03 }));
+        // a record header alone, a TLS 1.4 record or a ServerHello is not a ClientHello
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(new byte[] { 0x16, 0x03, 0x01, 0, 5 }));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(new byte[] { 0x16, 0x03, 0x04, 0, 5, 0x01, 0, 0, 0x50, 0x03, 0x03 }));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(new byte[] { 0x16, 0x03, 0x03, 0, 5, 0x02, 0, 0, 0x50, 0x03, 0x03 }));
+        Assert.Equal(AppProtocol.Http, ProtocolDetector.DetectTcp("GET / HTTP/1.1\r\n"u8));
+        Assert.Equal(AppProtocol.Http, ProtocolDetector.DetectTcp("POST /x HTTP/1.1\r\nHost: a\r\n"u8));
+        Assert.Equal(AppProtocol.Http, ProtocolDetector.DetectTcp("TRACE  /x\tHTTP/1.0\r\n"u8));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp("GET /\r\n"u8));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp("GET / HTTP/2\r\n"u8));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp("GETX"u8));
     }
 
     [Fact]
-    public void Obfuscated2_is_told_by_telegram_networks_and_length()
+    public void Mtproto_is_the_obfuscated2_header_that_decrypts_to_ef_ef_ef_ef()
     {
+        for (int seed = 1; seed < 20; seed++)
+        {
+            Assert.True(ProtocolDetector.IsMtproto(Obfuscated2(seed)));
+            Assert.Equal(AppProtocol.Mtproto, ProtocolDetector.DetectTcp(Obfuscated2(seed)));
+            Assert.Equal(AppProtocol.Mtproto, ProtocolDetector.DetectTcp(Obfuscated2(seed, length: 200))); // more data after the header
+        }
+        // the engine accepts only the abridged tag: intermediate (ee) and padded (dd) are unknown to it
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(Obfuscated2(3, 0xEEEEEEEE)));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(Obfuscated2(3, 0xDDDDDDDD)));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(Obfuscated2(3).AsSpan(0, 63)));
+        // no plain transport tags and no guessing by address
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(new byte[] { 0xef, 1, 2 }));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(new byte[] { 0xee, 0xee, 0xee, 0xee, 0 }));
         var random = new byte[64];
         new Random(5).NextBytes(random);
-        random[0] = 0x42;
-        var telegram = IPAddress.Parse("149.154.167.51");
-        Assert.Equal(AppProtocol.Mtproto, ProtocolDetector.DetectTcp(random, telegram));
-        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(random, Somewhere));
-        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(random.AsSpan(0, 63), telegram));
+        Assert.Equal(AppProtocol.Unknown, ProtocolDetector.DetectTcp(random));
+    }
+
+    [Fact]
+    public void Mtproto_counter_carries_into_the_high_half()
+    {
+        // IV low half ff..fd: +3 overflows; the engine's ctr_add carries into the high 64 bits
+        var b = Obfuscated2(7);
+        for (int i = 48; i < 56; i++)
+            b[i] = 0xFF;
+        b[55] = 0xFD;
+        Span<byte> ks = stackalloc byte[16];
+        ProtocolDetector.Obfuscated2Keystream(b, ks);
+        var counter = b.AsSpan(40, 16).ToArray();
+        for (int i = 8; i < 16; i++)
+            counter[i] = 0;
+        BinaryPrimitives.WriteUInt64BigEndian(counter, BinaryPrimitives.ReadUInt64BigEndian(counter) + 1);
+        using var aes = System.Security.Cryptography.Aes.Create();
+        aes.Key = b.AsSpan(8, 32).ToArray();
+        Assert.Equal(aes.EncryptEcb(counter, System.Security.Cryptography.PaddingMode.None), ks.ToArray());
     }
 
     [Theory]
@@ -194,9 +296,6 @@ public sealed class ProtocolDetectorTests
 
         Assert.Equal(FlowHealth.Ok, FlowVerdict.Judge(F("tcp", 3, 3, 500, 2000)));
 
-        var stalled = F("tcp", 3, 1, 500, 0);
-        stalled.SynAckTime = DateTime.UtcNow;
-        Assert.Equal(FlowHealth.Stalled, FlowVerdict.Judge(stalled));
         Assert.Equal(FlowHealth.Unknown, FlowVerdict.Judge(F("tcp", 1, 0, 500, 0)));
     }
 
@@ -234,9 +333,7 @@ public sealed class ProtocolDetectorTests
     public void Analyzer_detects_tcp_protocol_from_the_first_data_segment()
     {
         const string me = "192.168.1.2", tg = "149.154.167.51";
-        var obf = new byte[64];
-        new Random(1).NextBytes(obf);
-        obf[0] = 0x11;
+        var obf = Obfuscated2(1);
         var packets = TestPackets.Capture(
             TestPackets.Tcp(me, 40000, tg, 443, TcpFlags.Syn, 100, 0),
             TestPackets.Tcp(tg, 443, me, 40000, TcpFlags.Syn | TcpFlags.Ack, 500, 101),
@@ -253,11 +350,143 @@ public sealed class ProtocolDetectorTests
     }
 
     [Fact]
-    public void Analyzer_cuts_initial_payloads_at_1500_bytes()
+    public void Analyzer_keeps_whole_datagrams_and_segments()
     {
         var big = new byte[1600];
         var f = Assert.Single(FlowAnalyzer.Analyze(TestPackets.Capture(TestPackets.Udp("10.0.0.2", 5000, "198.51.100.7", 9000, big))));
-        Assert.Equal(1500, Assert.Single(f.InitialPayloadsOut).Length);
+        Assert.Equal(1600, Assert.Single(f.InitialPayloadsOut).Length);
+        Assert.False(f.InitialPayloadsTruncated);
         Assert.Equal(AppProtocol.Unknown, f.AppProtocol);
+
+        // a pre-LSO segment of 20 KB (WinDivert sees them before segmentation) is kept whole
+        const string me = "192.168.1.2", srv = "198.51.100.7";
+        var seg = new byte[20_000];
+        seg[0] = 0x42;
+        var tcp = Assert.Single(FlowAnalyzer.Analyze(TestPackets.Capture(
+            TestPackets.Tcp(me, 40000, srv, 9000, TcpFlags.Syn, 100, 0),
+            TestPackets.Tcp(srv, 9000, me, 40000, TcpFlags.Syn | TcpFlags.Ack, 500, 101),
+            TestPackets.Tcp(me, 40000, srv, 9000, TcpFlags.Ack | TcpFlags.Psh, 101, 501, seg))));
+        Assert.Equal(20_000, Assert.Single(tcp.InitialPayloadsOut).Length);
+        Assert.False(tcp.InitialPayloadsTruncated);
+    }
+
+    [Fact]
+    public void Analyzer_leaves_retransmissions_out_of_the_replay()
+    {
+        const string me = "192.168.1.2", srv = "198.51.100.7";
+        var data = new byte[300];
+        data[0] = 0x42;
+        var f = Assert.Single(FlowAnalyzer.Analyze(TestPackets.Capture(
+            TestPackets.Tcp(me, 40000, srv, 9000, TcpFlags.Syn, 100, 0),
+            TestPackets.Tcp(srv, 9000, me, 40000, TcpFlags.Syn | TcpFlags.Ack, 500, 101),
+            TestPackets.Tcp(me, 40000, srv, 9000, TcpFlags.Ack | TcpFlags.Psh, 101, 501, data),
+            TestPackets.Tcp(me, 40000, srv, 9000, TcpFlags.Ack | TcpFlags.Psh, 101, 501, data),
+            TestPackets.Tcp(me, 40000, srv, 9000, TcpFlags.Ack | TcpFlags.Psh, 101, 501, data),
+            TestPackets.Tcp(me, 40000, srv, 9000, TcpFlags.Ack | TcpFlags.Psh, 401, 501, new byte[10]))));
+        Assert.Equal([300, 10], f.InitialPayloadsOut.Select(p => p.Length));
+        Assert.Equal(2, f.Retransmissions);
+    }
+
+    [Fact]
+    public void Analyzer_marks_a_replay_that_does_not_fit()
+    {
+        const string me = "192.168.1.2", srv = "198.51.100.7";
+        var packets = new List<byte[]>
+        {
+            TestPackets.Tcp(me, 40000, srv, 9000, TcpFlags.Syn, 100, 0),
+            TestPackets.Tcp(srv, 9000, me, 40000, TcpFlags.Syn | TcpFlags.Ack, 500, 101),
+        };
+        uint seq = 101;
+        for (int i = 0; i < 5; i++)
+        {
+            var seg = new byte[15_000];
+            seg[0] = (byte)(i + 1);
+            packets.Add(TestPackets.Tcp(me, 40000, srv, 9000, TcpFlags.Ack, seq, 501, seg));
+            seq += 15_000;
+        }
+        var f = Assert.Single(FlowAnalyzer.Analyze(TestPackets.Capture([.. packets])));
+        Assert.True(f.InitialPayloadsTruncated);
+        Assert.True(f.InitialPayloadsOut.Sum(p => p.Length) <= FlowAnalyzer.MaxInitialBytes);
+
+        var e = Assert.Single(Programs.ProgramEndpoints.FromRecording([new Programs.ObservedSocket(Model.L4Kind.Tcp, new IPEndPoint(IPAddress.Parse(me), 40000), null)], [f]));
+        Assert.True(e.InitialPayloadsTruncated);
+        Assert.Empty(e.InitialPayloads);
+    }
+
+    [Theory]
+    [InlineData("203.0.113.9", 3478, "192.168.1.2", 50000, false)] // the server spoke first: the private end is the client
+    [InlineData("192.168.1.2", 50000, "203.0.113.9", 3478, true)]
+    [InlineData("203.0.113.9", 53, "198.51.100.7", 40000, false)]   // both public: the well-known port is the server
+    [InlineData("198.51.100.7", 3478, "203.0.113.9", 60000, false)] // the ephemeral port is the client
+    [InlineData("198.51.100.7", 27015, "203.0.113.9", 27016, true)] // nothing to tell: first sender
+    [InlineData("192.168.1.2", 5353, "224.0.0.251", 5353, true)]    // multicast is never the client
+    [InlineData("224.0.0.251", 5353, "192.168.1.2", 5353, false)]
+    public void Udp_orientation_does_not_trust_the_first_datagram(string src, int sport, string dst, int dport, bool srcIsClient)
+    {
+        Assert.Equal(srcIsClient, FlowAnalyzer.UdpSourceIsClient(new IPEndPoint(IPAddress.Parse(src), sport), new IPEndPoint(IPAddress.Parse(dst), dport)));
+    }
+
+    [Fact]
+    public void Udp_flow_whose_server_spoke_first_is_oriented_to_the_local_client()
+    {
+        const string me = "192.168.1.2", srv = "203.0.113.9";
+        var f = Assert.Single(FlowAnalyzer.Analyze(TestPackets.Capture(
+            TestPackets.Udp(srv, 3478, me, 50000, TestPackets.Stun()),
+            TestPackets.Udp(me, 50000, srv, 3478, TestPackets.Stun()),
+            TestPackets.Udp(me, 50000, srv, 3478, TestPackets.Stun()))));
+        Assert.Equal(new IPEndPoint(IPAddress.Parse(me), 50000), f.Client);
+        Assert.Equal(2, f.PacketsOut);
+        Assert.Equal(1, f.PacketsIn);
+    }
+
+    // ---- FlowVerdict over time ----
+
+    private static readonly DateTime T0 = new(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+
+    private static Flow Tcp(double lastSeen, long bytesIn = 0, double? lastDataIn = null, int retrans = 0, AppProtocol app = AppProtocol.Unknown) => new()
+    {
+        Protocol = "tcp",
+        Client = new IPEndPoint(IPAddress.Parse("192.168.1.2"), 50000),
+        Server = new IPEndPoint(Somewhere, 443),
+        FirstSeen = T0,
+        LastSeen = T0.AddSeconds(lastSeen),
+        SynTime = T0,
+        SynAckTime = T0.AddMilliseconds(20),
+        PacketsOut = 5,
+        PacketsIn = bytesIn > 0 ? 10 : 1,
+        BytesOut = 500,
+        BytesIn = bytesIn,
+        LastDataIn = lastDataIn is { } d ? T0.AddSeconds(d) : null,
+        Retransmissions = retrans,
+        AppProtocol = app,
+    };
+
+    [Fact]
+    public void Data_that_stopped_at_16_kb_while_the_client_retransmits_is_a_cutoff_not_ok()
+    {
+        Assert.Equal(FlowHealth.Cutoff, FlowVerdict.Judge(Tcp(lastSeen: 10, bytesIn: 16_000, lastDataIn: 1, retrans: 3), T0.AddSeconds(30)));
+        Assert.Equal(FlowHealth.Ok, FlowVerdict.Judge(Tcp(lastSeen: 10, bytesIn: 16_000, lastDataIn: 1, retrans: 0), T0.AddSeconds(30)));
+        Assert.Equal(FlowHealth.Ok, FlowVerdict.Judge(Tcp(lastSeen: 10, bytesIn: 500_000, lastDataIn: 1, retrans: 3), T0.AddSeconds(30)));
+    }
+
+    [Fact]
+    public void A_flow_opened_at_the_end_of_the_capture_is_not_judged()
+    {
+        var young = Tcp(lastSeen: 1, retrans: 2, app: AppProtocol.Tls);
+        Assert.Equal(FlowHealth.Unknown, FlowVerdict.Judge(young, T0.AddSeconds(1.5)));
+        // by default the flow's own last packet is the end
+        Assert.Equal(FlowHealth.Unknown, FlowVerdict.Judge(young));
+        Assert.Equal(FlowHealth.Stalled, FlowVerdict.Judge(Tcp(lastSeen: 6, retrans: 2, app: AppProtocol.Tls), T0.AddSeconds(6)));
+    }
+
+    [Fact]
+    public void A_quiet_server_that_acknowledged_is_a_long_poll_not_a_stall()
+    {
+        // unknown protocol, no retransmissions: the request was acknowledged and the server is holding the answer
+        Assert.Equal(FlowHealth.Unknown, FlowVerdict.Judge(Tcp(lastSeen: 20), T0.AddSeconds(30)));
+        Assert.Equal(FlowHealth.Stalled, FlowVerdict.Judge(Tcp(lastSeen: 20, retrans: 3), T0.AddSeconds(30)));
+        // a ClientHello or a request is answered at once: silence there is a stall
+        Assert.Equal(FlowHealth.Stalled, FlowVerdict.Judge(Tcp(lastSeen: 20, app: AppProtocol.Tls), T0.AddSeconds(30)));
+        Assert.Equal(FlowHealth.Stalled, FlowVerdict.Judge(Tcp(lastSeen: 20, app: AppProtocol.Mtproto), T0.AddSeconds(30)));
     }
 }

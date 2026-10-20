@@ -70,8 +70,9 @@ public sealed class ReplayProbeTests
     {
         await using var server = new UdpServer(answer: true);
         var r = await ReplayProbe.RunAsync(Udp(server.Port, AppProtocol.WireGuard, new byte[148], new byte[32]));
-        Assert.True(r.Ok, r.Error);
-        Assert.Null(r.Error);
+        Assert.True(r.Ok, r.ErrorEn);
+        Assert.Equal(ReplayError.None, r.Error);
+        Assert.Null(r.ErrorRu);
         Assert.True(r.PacketsIn >= 1);
         Assert.True(r.BytesIn >= 32);
         Assert.True(r.PacketsOut >= 1);
@@ -84,7 +85,9 @@ public sealed class ReplayProbeTests
         await using var server = new UdpServer(answer: false);
         var r = await ReplayProbe.RunAsync(Udp(server.Port, AppProtocol.Unknown, [1, 2, 3]) with { Timeout = TimeSpan.FromMilliseconds(600) });
         Assert.False(r.Ok);
-        Assert.Equal("нет ответа", r.Error);
+        Assert.Equal(ReplayError.NoAnswer, r.Error);
+        Assert.Equal("нет ответа", r.ErrorRu);
+        Assert.Equal("no answer", r.ErrorEn);
         Assert.Equal(0, r.PacketsIn);
         Assert.True(r.PacketsOut >= 2, $"sent {r.PacketsOut}");
         Assert.True(r.Duration < TimeSpan.FromSeconds(3));
@@ -105,7 +108,7 @@ public sealed class ReplayProbeTests
         await using var server = new UdpServer(answer: true);
         var stale = new byte[20];
         var r = await ReplayProbe.RunAsync(Udp(server.Port, AppProtocol.Stun, stale));
-        Assert.True(r.Ok, r.Error);
+        Assert.True(r.Ok, r.ErrorEn);
         var sent = server.Received.First();
         Assert.Equal(20, sent.Length);
         Assert.Equal(0x0001, BinaryPrimitives.ReadUInt16BigEndian(sent));
@@ -130,7 +133,8 @@ public sealed class ReplayProbeTests
     {
         var r = await ReplayProbe.RunAsync(Udp(9, AppProtocol.WireGuard));
         Assert.False(r.Ok);
-        Assert.StartsWith("нечего отправить", r.Error, StringComparison.Ordinal);
+        Assert.Equal(ReplayError.NothingToSend, r.Error);
+        Assert.StartsWith("нечего отправить", r.ErrorRu, StringComparison.Ordinal);
         Assert.Equal(0, r.PacketsOut);
     }
 
@@ -159,7 +163,7 @@ public sealed class ReplayProbeTests
         });
         var r = await ReplayProbe.RunAsync(Tcp(((IPEndPoint)l.LocalEndpoint).Port, new byte[64]));
         await server;
-        Assert.True(r.Ok, r.Error);
+        Assert.True(r.Ok, r.ErrorEn);
         Assert.True(r.BytesIn > 0);
         Assert.Equal(1, r.PacketsOut);
     }
@@ -177,7 +181,7 @@ public sealed class ReplayProbeTests
         var r = await ReplayProbe.RunAsync(Tcp(((IPEndPoint)l.LocalEndpoint).Port, new byte[64]));
         await server;
         Assert.False(r.Ok);
-        Assert.Contains(r.Error, new[] { "сервер закрыл соединение", "сброс (RST)" });
+        Assert.Contains(r.Error, new[] { ReplayError.ServerClosed, ReplayError.Reset });
     }
 
     [Fact]
@@ -188,11 +192,14 @@ public sealed class ReplayProbeTests
         int port = ((IPEndPoint)l.LocalEndpoint).Port;
         var r = await ReplayProbe.RunAsync(Tcp(port, new byte[64]) with { Timeout = TimeSpan.FromMilliseconds(400) });
         Assert.False(r.Ok);
-        Assert.Equal("нет ответа", r.Error);
+        Assert.Equal(ReplayError.NoAnswer, r.Error);
+        Assert.Equal("нет ответа", r.ErrorRu);
+        Assert.Equal("no answer", r.ErrorEn);
         l.Stop();
 
         var refused = await ReplayProbe.RunAsync(Tcp(port, new byte[64]));
         Assert.False(refused.Ok);
-        Assert.Equal(nameof(SocketError.ConnectionRefused), refused.Error);
+        Assert.Equal(ReplayError.NoConnection, refused.Error);
+        Assert.Equal(SocketError.ConnectionRefused, refused.Socket);
     }
 }

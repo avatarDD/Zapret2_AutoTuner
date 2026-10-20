@@ -21,12 +21,18 @@ public readonly record struct Cidr(AddressFamily Family, UInt128 Start, int Pref
         var parts = text.Trim().Split('/');
         if (parts.Length > 2 || !IPAddress.TryParse(parts[0], out var a))
             return false;
-        if (a.IsIPv4MappedToIPv6)
-            a = a.MapToIPv4();
-        int bits = a.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
-        int prefix = bits;
-        if (parts.Length == 2 && (!int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out prefix) || prefix > bits))
+        int prefix = a.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
+        if (parts.Length == 2 && (!int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out prefix) || prefix > (a.AddressFamily == AddressFamily.InterNetwork ? 32 : 128)))
             return false;
+        if (a.IsIPv4MappedToIPv6)
+        {
+            // ::ffff:a.b.c.d/120 is a.b.c.d/24: the 96 bits of the mapping prefix go; a shorter prefix is not IPv4
+            if (prefix < 96)
+                return false;
+            a = a.MapToIPv4();
+            prefix -= 96;
+        }
+        int bits = a.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
         var n = ToNumber(a);
         var mask = prefix == 0 ? UInt128.Zero : UInt128.MaxValue << (128 - prefix) >> (128 - bits);
         cidr = new Cidr(a.AddressFamily, n & mask, prefix);
@@ -131,7 +137,8 @@ public static class CidrSet
     /// <summary>
     /// Addresses to test (§4a step 2): one from each of the largest distinct networks, at most
     /// <paramref name="count"/>, half of them IPv4 when both families exist. The address is the network's first
-    /// host plus a stable offset, never the network or broadcast address.
+    /// host plus a stable offset (the same for the same networks and seed in every run, so a provider's targets do not
+    /// change between sessions), never the network or broadcast address.
     /// </summary>
     public static List<IPAddress> Sample(IReadOnlyList<Cidr> networks, int count, int seed = 0)
     {
@@ -146,10 +153,30 @@ public static class CidrSet
             {
                 var c = list[(int)((long)i * list.Count / Math.Max(1, Math.Min(want, list.Count)))];
                 var hosts = c.Size <= 2 ? UInt128.One : c.Size - 2;
-                var offset = 1 + (UInt128)(uint)HashCode.Combine(seed, i, (ulong)c.Start) % (hosts > uint.MaxValue ? uint.MaxValue : hosts);
+                var offset = 1 + (UInt128)StableHash(seed, i, c.Start) % (hosts > uint.MaxValue ? uint.MaxValue : hosts);
                 picks.Add(c.Size == 1 ? c.At(0) : c.At(offset >= c.Size ? 1 : offset));
             }
         }
         return picks;
+    }
+
+    /// <summary>FNV-1a over the seed, the index and the network start: unlike <see cref="HashCode"/> it is not
+    /// randomised per process.</summary>
+    internal static uint StableHash(int seed, int index, UInt128 start)
+    {
+        uint h = 2166136261;
+        void Add(ulong v)
+        {
+            for (int b = 0; b < 8; b++)
+            {
+                h ^= (byte)(v >> (8 * b));
+                h *= 16777619;
+            }
+        }
+        Add((ulong)(uint)seed);
+        Add((ulong)(uint)index);
+        Add((ulong)start);
+        Add((ulong)(start >> 64));
+        return h;
     }
 }

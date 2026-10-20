@@ -69,7 +69,9 @@ public sealed record RecordOptions
     public Func<IReadOnlySet<int>>? Pids { get; init; }
 }
 
-public sealed record ProgramRecording(IReadOnlyList<ProgramEndpoint> Endpoints, IReadOnlyCollection<int> Pids, int Sockets, int Packets, long Dropped)
+/// <param name="Processes">The program's processes by pid and start time, to tell later whether they still run.</param>
+public sealed record ProgramRecording(IReadOnlyList<ProgramEndpoint> Endpoints, IReadOnlyCollection<int> Pids, int Sockets, int Packets, long Dropped,
+    IReadOnlyCollection<ProcessKey>? Processes = null)
 {
     /// <summary>Endpoints worth a search: the program got no answer, a reset or a stall there.</summary>
     public IEnumerable<ProgramEndpoint> Broken => Endpoints.Where(e => e.Health is not (Core.Diagnostics.FlowHealth.Ok or Core.Diagnostics.FlowHealth.Unknown));
@@ -95,26 +97,43 @@ public static class ProgramRecorder
 
     /// <summary>
     /// The launched tree, plus processes started from the program's own folder: launchers (Discord's Update.exe, a
-    /// Steam game) exit and leave the real process to their children. A shared folder (on PATH, the Windows folder) is
-    /// not the program's own and is left out.
+    /// Steam game) exit and leave the real process to their children, and a packaged app is started by the shell, so
+    /// only its install folder finds it. A shared folder (on PATH, the Windows folder) is not the program's own and is
+    /// left out. Processes are tracked by pid and start time, so a pid reused by another program is not picked up.
     /// </summary>
-    public static Func<IReadOnlySet<int>> DefaultPids(ProgramInfo program, int rootPid)
+    public static Func<IReadOnlySet<int>> DefaultPids(ProgramInfo program, int rootPid) =>
+        DefaultPids(program, rootPid, ProcessTree.Snapshot, new ProcessImageCache());
+
+    internal static Func<IReadOnlySet<int>> DefaultPids(ProgramInfo program, int rootPid, Func<IReadOnlyDictionary<int, ProcessEntry>> snapshot, ProcessImageCache images)
     {
-        var dir = program.Executable is null || program.Source == ProgramSource.Uwp ? null : Path.GetDirectoryName(Path.GetFullPath(program.Executable));
-        if (dir is not null && IsSharedDirectory(dir))
-            dir = null;
-        var seen = new HashSet<int> { rootPid };
+        var dir = OwnDirectory(program);
+        var first = snapshot();
+        var seen = new HashSet<ProcessKey> { first.TryGetValue(rootPid, out var r) ? r.Key : new ProcessKey(rootPid, 0) };
         return () =>
         {
-            var parents = ProcessTree.Parents();
-            // a process that left the tree (its parent exited) stays in it: its pid is remembered
-            foreach (var root in seen.ToList())
-                seen.UnionWith(ProcessTree.Closure(root, parents));
+            var snap = snapshot();
+            // a process that left the tree (its parent exited) stays: its key is remembered; one that exited drops out
+            var next = new HashSet<ProcessKey>();
+            foreach (var k in seen)
+                next.UnionWith(ProcessTree.Closure(k, snap));
             if (dir is not null)
-                seen.UnionWith(ProcessTree.UnderDirectory(dir));
-            seen.IntersectWith(parents.Keys.Append(rootPid));
-            return seen.ToHashSet();
+            {
+                foreach (var pid in images.UnderDirectory(dir, snap))
+                    next.Add(snap[pid].Key);
+            }
+            seen = next;
+            return next.Select(k => k.Pid).ToHashSet();
         };
+    }
+
+    /// <summary>The folder whose processes belong to the program: its install folder, else the executable's folder
+    /// (not for a packaged app, whose executable is <c>explorer.exe</c>); null for a shared folder.</summary>
+    public static string? OwnDirectory(ProgramInfo program)
+    {
+        var dir = program.InstallDirectory
+            ?? (program.Executable is null || program.Source == ProgramSource.Uwp || !Path.IsPathRooted(program.Executable)
+                ? null : Path.GetDirectoryName(Path.GetFullPath(program.Executable)));
+        return dir is null || IsSharedDirectory(dir) ? null : dir;
     }
 
     public static bool IsSharedDirectory(string dir)
@@ -135,6 +154,7 @@ public static class ProgramRecorder
         var pidsOf = options.Pids ?? throw new ArgumentException("Pids: укажите процессы программы", nameof(options));
         var sockets = new HashSet<ObservedSocket>();
         var pids = new HashSet<int>();
+        var keys = new HashSet<ProcessKey>();
         var id = await monitor.StartCaptureAsync(ct).ConfigureAwait(false);
         byte[] pcap;
         long dropped;
@@ -143,7 +163,14 @@ public static class ProgramRecorder
             var sw = Stopwatch.StartNew();
             while (sw.Elapsed < options.Duration && !ct.IsCancellationRequested)
             {
-                foreach (var pid in pidsOf())
+                var now = pidsOf();
+                if (now.Any(p => !pids.Contains(p)))
+                {
+                    var snap = ProcessTree.Snapshot();
+                    foreach (var pid in now.Where(p => !pids.Contains(p)))
+                        keys.Add(snap.TryGetValue(pid, out var e) ? e.Key : new ProcessKey(pid, 0));
+                }
+                foreach (var pid in now)
                 {
                     pids.Add(pid);
                     try
@@ -174,6 +201,6 @@ public static class ProgramRecorder
         ct.ThrowIfCancellationRequested();
         var packets = PcapReader.Read(pcap);
         var flows = FlowAnalyzer.Analyze(packets);
-        return new ProgramRecording(ProgramEndpoints.FromRecording(sockets, flows, packets), pids, sockets.Count, packets.Count, dropped);
+        return new ProgramRecording(ProgramEndpoints.FromRecording(sockets, flows, packets), pids, sockets.Count, packets.Count, dropped, keys);
     }
 }

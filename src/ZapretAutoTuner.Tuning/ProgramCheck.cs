@@ -6,6 +6,7 @@ using ZapretAutoTuner.Core.Packets;
 using ZapretAutoTuner.Core.Programs;
 using ZapretAutoTuner.Core.Search;
 using ZapretAutoTuner.Core.Validation;
+using ZapretAutoTuner.Probes.Programs;
 using ZapretAutoTuner.Protocol;
 
 namespace ZapretAutoTuner.Tuning;
@@ -22,10 +23,12 @@ public sealed record EndpointCheck(ProgramEndpoint Before, ProgramEndpoint? Afte
 public sealed record ProgramCheckResult(IReadOnlyList<EndpointCheck> Endpoints, IReadOnlyList<ProgramEndpoint> StillBroken, ProgramRecording Recording, string? Error)
 {
     /// <summary>
-    /// Every endpoint with a strategy that the rerun reached works, at least one of them was reached, and nothing the
-    /// program used is broken now (PLAN 6.3: the program itself is the check, not the replay probe).
+    /// At least one endpoint with a strategy works in the rerun, none of the reached ones is broken (a flow too young
+    /// to judge at the end of the recording is neither), and nothing else the program used is broken now (PLAN 6.3:
+    /// the program itself is the check, not the replay probe).
     /// </summary>
-    public bool Passed => Error is null && Endpoints.Any(e => e.After is not null) && Endpoints.All(e => e.After is null || e.Fixed) && StillBroken.Count == 0;
+    public bool Passed => Error is null && Endpoints.Any(e => e.Fixed)
+        && Endpoints.All(e => e.After is null || e.After.Health is FlowHealth.Ok or FlowHealth.Unknown) && StillBroken.Count == 0;
 }
 
 /// <summary>
@@ -34,9 +37,20 @@ public sealed record ProgramCheckResult(IReadOnlyList<EndpointCheck> Endpoints, 
 /// </summary>
 public static class ProgramCheck
 {
+    /// <summary>The error when the first recording's processes still run.</summary>
+    public const string StillRunningError = "Программа ещё работает: закройте её, чтобы проверка запустила её заново со стратегией / "
+        + "The program is still running: close it so the check can start it again with the strategy";
+
+    /// <param name="first">The first recording: its processes must be gone, or a single-instance program would only
+    /// hand the rerun over to the instance that runs without the strategy.</param>
+    /// <param name="stillRunning">The processes among the given ones that still run; <see cref="ProcessTree.Alive"/> by default.</param>
     public static async Task<ProgramCheckResult> RunAsync(IEngineControl engine, IProgramMonitor monitor, IReadOnlyList<EndpointStrategy> found,
-        Func<RecordOptions> startProgram, AgentTrialOptions options, string tag, IProgress<double>? progress = null, CancellationToken ct = default)
+        ProgramRecording first, Func<RecordOptions> startProgram, AgentTrialOptions options, string tag, IProgress<double>? progress = null,
+        Func<IReadOnlyCollection<ProcessKey>, IReadOnlyCollection<ProcessKey>>? stillRunning = null, CancellationToken ct = default)
     {
+        var keys = first.Processes ?? first.Pids.Select(p => new ProcessKey(p, 0)).ToList();
+        if ((stillRunning ?? (k => ProcessTree.Alive(k)))(keys).Count > 0)
+            return new ProgramCheckResult([], [], new ProgramRecording([], [], 0, 0, 0), StillRunningError);
         var (argv, queue) = BuildLaunch(found, options);
         string id;
         try

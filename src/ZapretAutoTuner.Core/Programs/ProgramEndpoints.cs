@@ -40,6 +40,9 @@ public sealed record ProgramEndpoint
     /// <summary>The program's first datagrams or segment to this endpoint, for a replay probe.</summary>
     public IReadOnlyList<byte[]> InitialPayloads { get; init; } = [];
 
+    /// <summary>The program sent more before the answer than was kept: there is nothing faithful to replay.</summary>
+    public bool InitialPayloadsTruncated { get; init; }
+
     /// <summary>
     /// The target the search works on: a domain for TLS, QUIC and HTTP with a name (the usual pipeline), else the
     /// address with its port and protocol.
@@ -58,8 +61,11 @@ public static class ProgramEndpoints
     /// The program's endpoints: the captured flows whose local port belonged to one of its sockets, grouped by remote
     /// address, port and protocol. LAN, loopback, multicast and DNS are left out: there is nothing to unblock there.
     /// </summary>
-    public static List<ProgramEndpoint> FromRecording(IEnumerable<ObservedSocket> sockets, IReadOnlyList<Flow> flows, IEnumerable<CapturedPacket>? packets = null)
+    /// <param name="captureEnd">The end of the capture (by default the last packet of any flow): flows opened just
+    /// before it are too young to judge.</param>
+    public static List<ProgramEndpoint> FromRecording(IEnumerable<ObservedSocket> sockets, IReadOnlyList<Flow> flows, IEnumerable<CapturedPacket>? packets = null, DateTime? captureEnd = null)
     {
+        var end = captureEnd ?? (flows.Count > 0 ? flows.Max(f => f.LastSeen) : DateTime.MinValue);
         var mine = sockets.Select(s => (s.Protocol, s.Local.Port)).ToHashSet();
         var names = packets is null ? new Dictionary<IPAddress, string>() : DnsNames(packets);
         return flows
@@ -70,7 +76,7 @@ public static class ProgramEndpoints
                 var list = g.ToList();
                 var sni = list.Select(f => f.ClientHello?.Sni).FirstOrDefault(s => !string.IsNullOrEmpty(s));
                 var app = list.Select(f => f.AppProtocol).FirstOrDefault(a => a != AppProtocol.Unknown);
-                var healths = list.Select(FlowVerdict.Judge).ToList();
+                var healths = list.Select(f => FlowVerdict.Judge(f, end)).ToList();
                 return new ProgramEndpoint
                 {
                     Protocol = g.Key.Item1,
@@ -84,7 +90,8 @@ public static class ProgramEndpoints
                     BytesIn = list.Sum(f => f.BytesIn),
                     PacketsOut = list.Sum(f => f.PacketsOut),
                     PacketsIn = list.Sum(f => f.PacketsIn),
-                    InitialPayloads = list.FirstOrDefault(f => f.InitialPayloadsOut.Count > 0)?.InitialPayloadsOut ?? [],
+                    InitialPayloads = list.FirstOrDefault(f => f.InitialPayloadsOut.Count > 0 && !f.InitialPayloadsTruncated)?.InitialPayloadsOut ?? [],
+                    InitialPayloadsTruncated = list.All(f => f.InitialPayloadsOut.Count == 0 || f.InitialPayloadsTruncated) && list.Any(f => f.InitialPayloadsTruncated),
                 };
             })
             .OrderByDescending(e => e.BytesOut + e.BytesIn)

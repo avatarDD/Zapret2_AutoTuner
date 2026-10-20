@@ -68,6 +68,19 @@ internal static class TestPackets
         return ms.ToArray();
     }
 
+    public static byte[] DnsQuery(string name)
+    {
+        var ms = new MemoryStream();
+        ms.Write([0x12, 0x34, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0]);
+        foreach (var label in name.Split('.'))
+        {
+            ms.WriteByte((byte)label.Length);
+            ms.Write(System.Text.Encoding.ASCII.GetBytes(label));
+        }
+        ms.Write([0, 0, 1, 0, 1]);
+        return ms.ToArray();
+    }
+
     public static byte[] Stun(int extra = 0)
     {
         var b = new byte[20 + extra];

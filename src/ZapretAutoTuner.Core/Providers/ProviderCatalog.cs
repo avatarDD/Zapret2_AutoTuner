@@ -10,6 +10,19 @@ public sealed class ProviderRangeSource
 
     /// <summary>text, aws, google, fastly, oracle, ripestat, geofeed, azure (see <see cref="RangeParsers"/>).</summary>
     public string Format { get; set; } = "text";
+
+    /// <summary>
+    /// When set, <see cref="Url"/> is a page and the list is the first link on it matching this regex: Azure's Service
+    /// Tags file has a new dated name every week (<c>ServiceTags_Public_YYYYMMDD.json</c>), only its download page
+    /// is stable.
+    /// </summary>
+    public string? Link { get; set; }
+
+    /// <summary>Used only when no other source of the provider loaded (it is broader or less precise).</summary>
+    public bool Fallback { get; set; }
+
+    /// <summary>Shown when this source is used: what is wrong with it (for example an ASN shared with other services).</summary>
+    public string? Warning { get; set; }
 }
 
 public sealed class ProviderEndpoint

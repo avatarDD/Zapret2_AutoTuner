@@ -1,5 +1,5 @@
 {
-  "comment": "Hosting providers for the provider mode (PLAN 6.4, dpi-diagnostics §4a). ranges: official lists where the provider publishes one, else the ASN's announced prefixes from RIPEstat. test_endpoints: large files on the provider's own network (speed tests); san is the name the certificate must carry. major: part of 'All major'.",
+  "comment": "Hosting providers for the provider mode (PLAN 6.4, dpi-diagnostics §4a). ranges: official lists where the provider publishes one, else the ASN's announced prefixes from RIPEstat (one source per ASN). link: the url is a page and the list is the first link matching this regex (Azure's Service Tags file is renamed every week). fallback: used only when no other source loaded; warning: shown when it is used. test_endpoints: large files on the provider's own network (speed tests); san is the name the certificate must carry. major: part of 'All major'.",
   "providers": [
     {
       "id": "cloudflare", "name": "Cloudflare", "major": true, "asn": [13335],
@@ -13,7 +13,10 @@
     },
     {
       "id": "hetzner", "name": "Hetzner", "major": true, "asn": [24940, 213230],
-      "ranges": [{"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS24940", "format": "ripestat"}],
+      "ranges": [
+        {"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS24940", "format": "ripestat"},
+        {"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS213230", "format": "ripestat"}
+      ],
       "test_endpoints": [
         {"url": "https://fsn1-speed.hetzner.com/100MB.bin", "san": "fsn1-speed.hetzner.com", "min_bytes": 1048576},
         {"url": "https://hel1-speed.hetzner.com/100MB.bin", "san": "hel1-speed.hetzner.com", "min_bytes": 1048576},
@@ -39,7 +42,12 @@
     },
     {
       "id": "azure", "name": "Microsoft Azure", "major": true, "asn": [8075],
-      "ranges": [{"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS8075", "format": "ripestat"}],
+      "ranges": [
+        {"url": "https://www.microsoft.com/en-us/download/details.aspx?id=56519", "format": "azure",
+         "link": "https://download\\.microsoft\\.com/download/[^\"'\\s<>]+/ServiceTags_Public_[0-9]{8}\\.json"},
+        {"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS8075", "format": "ripestat", "fallback": true,
+         "warning": "AS8075 — вся сеть Microsoft (Office 365, Xbox, Bing), не только Azure / AS8075 is all of Microsoft (Office 365, Xbox, Bing), not only Azure"}
+      ],
       "test_endpoints": []
     },
     {

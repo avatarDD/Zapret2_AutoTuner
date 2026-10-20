@@ -94,10 +94,22 @@ public sealed class ProgramsTests
         s.Write(b);
     }
 
+    private static Encoding Cp1251
+    {
+        get
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return Encoding.GetEncoding(1251);
+        }
+    }
+
+    /// <summary>The ANSI code page the test shortcuts are written in (Latin-1 unless a test switches it).</summary>
+    private static Encoding _ansi = Encoding.Latin1;
+
     private static void StringData(Stream s, string v, bool unicode)
     {
         U16(s, v.Length);
-        s.Write(unicode ? Encoding.Unicode.GetBytes(v) : Encoding.Latin1.GetBytes(v));
+        s.Write(unicode ? Encoding.Unicode.GetBytes(v) : _ansi.GetBytes(v));
     }
 
     /// <summary>LinkInfo with VolumeIDAndLocalBasePath: ANSI paths, or Unicode ones when the header is 0x24 bytes.</summary>
@@ -106,7 +118,7 @@ public sealed class ProgramsTests
         int headerSize = unicodeHeader ? 0x24 : 0x1C;
         var volume = new byte[0x14];
         BinaryPrimitives.WriteUInt32LittleEndian(volume, 0x14);
-        var enc = unicodeHeader ? Encoding.Unicode : Encoding.Latin1;
+        var enc = unicodeHeader ? Encoding.Unicode : _ansi;
         int z = unicodeHeader ? 2 : 1;
         var baseA = Encoding.Latin1.GetBytes("WRONG\0");
         var sufA = Encoding.Latin1.GetBytes("\0");
@@ -188,18 +200,53 @@ public sealed class ProgramsTests
     }
 
     [Fact]
-    public void Shortcut_without_link_info_uses_the_relative_path_or_has_no_target()
+    public void Shortcut_without_link_info_resolves_the_relative_path_against_the_link_folder()
     {
-        var wd = Path.Combine(Path.GetTempPath(), "app", "bin");
-        var rel = Path.Combine("..", "lib", "tool");
-        var info = ShellLink.Parse(Lnk(HasRelativePath | HasWorkingDir | IsUnicode, null, rel, wd));
+        var linkDir = Path.Combine(Path.GetTempPath(), "menu", "App");
+        var wd = Path.Combine(Path.GetTempPath(), "elsewhere");
+        var rel = Path.Combine("..", "..", "app", "tool.exe");
+        var lnk = Lnk(HasRelativePath | HasWorkingDir | IsUnicode, null, rel, wd);
+        var info = ShellLink.Parse(lnk, Path.Combine(linkDir, "App.lnk"));
         Assert.NotNull(info);
-        Assert.Equal(Path.GetFullPath(Path.Combine(wd, rel)), info.Target);
+        Assert.Equal(Path.GetFullPath(Path.Combine(linkDir, rel)), info.Target);
+        Assert.Equal(wd, info.WorkingDirectory);
+        // without the link's own path a relative target cannot be resolved (the working directory is not its base)
+        Assert.Null(ShellLink.Parse(lnk)!.Target);
 
         var shellOnly = ShellLink.Parse(Lnk(HasIdList, null));
         Assert.NotNull(shellOnly);
         Assert.Null(shellOnly.Target);
     }
+
+    [Fact]
+    public void Ansi_shortcut_strings_use_the_system_code_page_not_latin1()
+    {
+        _ansi = Cp1251;
+        try
+        {
+            var b = Lnk(HasLinkInfo | HasArguments, LinkInfo(@"C:\Игры\", "игра.exe", unicodeHeader: false), "--профиль основной");
+            var info = ShellLink.Parse(b, ansi: Cp1251);
+            Assert.NotNull(info);
+            Assert.Equal(@"C:\Игры\игра.exe", info.Target);
+            Assert.Equal("--профиль основной", info.Arguments);
+            // Latin-1 would have produced mojibake
+            Assert.NotEqual(info.Target, ShellLink.Parse(b, ansi: Encoding.Latin1)!.Target);
+        }
+        finally
+        {
+            _ansi = Encoding.Latin1;
+        }
+    }
+
+    [Theory]
+    [InlineData(@"--user-data-dir=C:\Users\Иван\Chrome --app-id=abc", new[] { @"--user-data-dir=C:\Users\Иван\Chrome", "--app-id=abc" })]
+    [InlineData(@"""C:\Program Files\App\a b.txt"" -x", new[] { @"C:\Program Files\App\a b.txt", "-x" })]
+    [InlineData(@"a\\""b c"" d", new[] { @"a\b c", "d" })]
+    [InlineData(@"say \""hi\""", new[] { "say", @"""hi""" })]
+    [InlineData(@"""a """"q"""" b""", new[] { @"a ""q"" b" })]
+    [InlineData("", new string[0])]
+    public void Windows_arguments_keep_backslashes(string text, string[] expected) =>
+        Assert.Equal(expected, WindowsCommandLine.Split(text));
 
     [Fact]
     public void Broken_shortcuts_give_null()
@@ -215,12 +262,12 @@ public sealed class ProgramsTests
     // ---- ProgramInfo.Merge ----
 
     [Fact]
-    public void Merge_keeps_one_entry_per_executable_the_most_descriptive_first()
+    public void Merge_keeps_one_entry_per_command_the_most_descriptive_first()
     {
         var merged = ProgramInfo.Merge(
         [
-            new ProgramInfo { Id = "u1", Name = "Zoom (uninstall)", Executable = "/opt/zoom/zoom", Source = ProgramSource.Uninstall },
-            new ProgramInfo { Id = "d1", Name = "Zoom", Executable = "/opt/zoom/zoom", Arguments = ["%U"], Source = ProgramSource.Desktop },
+            new ProgramInfo { Id = "u1", Name = "Zoom (uninstall)", Executable = "/opt/zoom/zoom", Source = ProgramSource.Uninstall, InstallDirectory = "/opt/zoom" },
+            new ProgramInfo { Id = "d1", Name = "Zoom", Executable = "/opt/zoom/zoom", Source = ProgramSource.Desktop },
             new ProgramInfo { Id = "p1", Name = "zoom", Executable = "/opt/zoom/zoom", Source = ProgramSource.Path },
             new ProgramInfo { Id = "x", Name = "Avast", Source = ProgramSource.Uninstall },
             new ProgramInfo { Id = "y", Name = "Avast", Source = ProgramSource.Uninstall },
@@ -228,7 +275,24 @@ public sealed class ProgramsTests
         ]);
         Assert.Equal(["Avast", "Brave", "Zoom"], merged.Select(p => p.Name));
         Assert.Equal("d1", merged[2].Id);
+        Assert.Equal("/opt/zoom", merged[2].InstallDirectory); // taken from the uninstall entry
         Assert.False(merged[0].CanLaunch);
+    }
+
+    [Fact]
+    public void Merge_keeps_apps_that_share_an_executable_but_not_the_arguments()
+    {
+        var merged = ProgramInfo.Merge(
+        [
+            new ProgramInfo { Id = "A!App", Name = "WhatsApp", Executable = "explorer.exe", Arguments = [@"shell:AppsFolder\A!App"], Source = ProgramSource.Uwp, InstallDirectory = @"C:\Program Files\WindowsApps\A" },
+            new ProgramInfo { Id = "B!App", Name = "Telegram", Executable = "explorer.exe", Arguments = [@"shell:AppsFolder\B!App"], Source = ProgramSource.Uwp, InstallDirectory = @"C:\Program Files\WindowsApps\B" },
+            new ProgramInfo { Id = "c1", Name = "Google Chrome", Executable = "/opt/chrome/chrome", Source = ProgramSource.StartMenu },
+            new ProgramInfo { Id = "c2", Name = "Chrome (uninstall)", Executable = "/opt/chrome/chrome", Source = ProgramSource.Uninstall },
+            new ProgramInfo { Id = "c3", Name = "YouTube", Executable = "/opt/chrome/chrome", Arguments = ["--app-id=yt"], Source = ProgramSource.StartMenu },
+            new ProgramInfo { Id = "c4", Name = "Discord PWA", Executable = "/opt/chrome/chrome", Arguments = ["--app-id=dc"], Source = ProgramSource.StartMenu },
+        ]);
+        Assert.Equal(["Discord PWA", "Google Chrome", "Telegram", "WhatsApp", "YouTube"], merged.Select(p => p.Name));
+        Assert.Equal(@"C:\Program Files\WindowsApps\B", merged.Single(p => p.Name == "Telegram").InstallDirectory);
     }
 
     // ---- ProgramEndpoints ----
@@ -276,9 +340,7 @@ public sealed class ProgramsTests
     public void Recording_gives_the_program_endpoints_only()
     {
         const string me = "192.168.1.2", stunSrv = "198.51.100.7", tg = "149.154.167.51";
-        var obf = new byte[64];
-        new Random(3).NextBytes(obf);
-        obf[0] = 0x11;
+        var obf = ProtocolDetectorTests.Obfuscated2(3);
         var packets = TestPackets.Capture(
             TestPackets.Udp("192.168.1.1", 53, me, 40000, TestPackets.DnsAResponse("stun.example.com", stunSrv)),
             // the program's STUN, no answer (two sockets, one endpoint)

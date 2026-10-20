@@ -225,23 +225,27 @@ public static class Unifier
     /// <summary>
     /// Appends address-based profiles (PLAN 6.3–6.4): a provider's ranges or a program's servers, each with its own
     /// ipset (aggregated, dpi-diagnostics §4a). They go after the hostlist profiles: a site's own strategy is more
-    /// specific than its hoster's.
+    /// specific than its hoster's. A name already taken by a profile, a hostlist or an ipset gets a suffix
+    /// (<c>name-2</c>, <c>name-3</c>…), so nothing in the solution is overwritten.
     /// </summary>
     public static void AddIpProfiles(Solution s, IEnumerable<IpResult> results)
     {
         foreach (var r in results)
         {
-            s.Ipsets[r.Name] = [.. Providers.CidrSet.Aggregate(r.Cidrs).Select(c => c.ToString())];
+            var name = r.Name;
+            for (int i = 2; s.Profiles.Any(p => p.Name == name) || s.Ipsets.ContainsKey(name) || s.Hostlists.ContainsKey(name); i++)
+                name = $"{r.Name}-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            s.Ipsets[name] = [.. Providers.CidrSet.Aggregate(r.Cidrs).Select(c => c.ToString())];
             s.Profiles.Add(new Profile
             {
-                Name = r.Name,
+                Name = name,
                 TcpPorts = r.L4 == L4Kind.Tcp ? r.Ports : null,
                 UdpPorts = r.L4 == L4Kind.Udp ? r.Ports : null,
                 L7 = [.. r.L7],
-                Ipsets = [new ListRef(r.Name)],
+                Ipsets = [new ListRef(name)],
                 Strategy = r.Strategy,
             });
-            s.Meta.Targets.Add(r.Name);
+            s.Meta.Targets.Add(name);
         }
     }
 

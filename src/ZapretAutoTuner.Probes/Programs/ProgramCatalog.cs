@@ -103,7 +103,16 @@ public static class ProgramCatalog
                     continue;
                 var icon = (k.GetValue("DisplayIcon") as string)?.Split(',')[0].Trim('"');
                 var exe = icon is not null && icon.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !IsUninstaller(icon) ? icon : null;
-                yield return new ProgramInfo { Id = exe ?? "uninstall:" + name, Name = display, Executable = exe, Source = ProgramSource.Uninstall, Icon = icon };
+                var location = (k.GetValue("InstallLocation") as string)?.Trim().Trim('"');
+                yield return new ProgramInfo
+                {
+                    Id = exe ?? "uninstall:" + name,
+                    Name = display,
+                    Executable = exe,
+                    Source = ProgramSource.Uninstall,
+                    Icon = icon,
+                    InstallDirectory = string.IsNullOrEmpty(location) ? null : location,
+                };
             }
         }
     }
@@ -120,7 +129,7 @@ public static class ProgramCatalog
                 ShellLinkInfo? info;
                 try
                 {
-                    info = ShellLink.Parse(File.ReadAllBytes(lnk));
+                    info = ShellLink.Parse(File.ReadAllBytes(lnk), lnk);
                 }
                 catch (IOException)
                 {
@@ -133,7 +142,7 @@ public static class ProgramCatalog
                     Id = target,
                     Name = Path.GetFileNameWithoutExtension(lnk),
                     Executable = target,
-                    Arguments = string.IsNullOrWhiteSpace(info.Arguments) ? [] : Core.Model.ArgTokenizer.Split(info.Arguments.Replace('\\', '/')),
+                    Arguments = string.IsNullOrWhiteSpace(info.Arguments) ? [] : WindowsCommandLine.Split(info.Arguments),
                     Source = ProgramSource.StartMenu,
                     Icon = info.IconLocation,
                 };
@@ -151,40 +160,78 @@ public static class ProgramCatalog
         const string script = "$p=@{}; Get-AppxPackage -PackageTypeFilter Main | ForEach-Object { $p[$_.PackageFamilyName]=$_.InstallLocation }; "
             + "Get-StartApps | Where-Object { $_.AppID -like '*!*' } | ForEach-Object { [pscustomobject]@{ Name=$_.Name; AppId=$_.AppID; Dir=$p[$_.AppID.Split('!')[0]] } } | ConvertTo-Json -Compress";
         var list = new List<ProgramInfo>();
+        Process? proc;
         try
         {
-            using var proc = Process.Start(new ProcessStartInfo("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script])
+            proc = Process.Start(new ProcessStartInfo("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script])
             {
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
             });
-            if (proc is null)
-                return list;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return list; // no PowerShell: the other sources still list the program
+        }
+        if (proc is null)
+            return list;
+        using (proc)
+        {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(20));
-            var json = await proc.StandardOutput.ReadToEndAsync(timeout.Token).ConfigureAwait(false);
-            var node = JsonNode.Parse(json.Length == 0 ? "[]" : json);
-            foreach (var x in node is JsonArray a ? a : new JsonArray(node))
+            timeout.CancelAfter(PackagesTimeout);
+            string json;
+            try
             {
-                if ((string?)x?["AppId"] is not { } aumid || (string?)x["Name"] is not { } name)
-                    continue;
-                list.Add(new ProgramInfo
+                json = await proc.StandardOutput.ReadToEndAsync(timeout.Token).ConfigureAwait(false);
+                await proc.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // a hung PowerShell is not left behind, whether it timed out or the user cancelled
+                Kill(proc);
+                ct.ThrowIfCancellationRequested();
+                return list; // took too long: the other sources still list the program
+            }
+            try
+            {
+                var node = JsonNode.Parse(json.Length == 0 ? "[]" : json);
+                foreach (var x in node is JsonArray a ? a : new JsonArray(node))
                 {
-                    Id = aumid,
-                    Name = name,
-                    Executable = "explorer.exe",
-                    Arguments = [$"shell:AppsFolder\\{aumid}"],
-                    Source = ProgramSource.Uwp,
-                    Icon = (string?)x["Dir"],
-                });
+                    if ((string?)x?["AppId"] is not { } aumid || (string?)x["Name"] is not { } name)
+                        continue;
+                    list.Add(new ProgramInfo
+                    {
+                        Id = aumid,
+                        Name = name,
+                        Executable = "explorer.exe",
+                        Arguments = [$"shell:AppsFolder\\{aumid}"],
+                        Source = ProgramSource.Uwp,
+                        InstallDirectory = (string?)x["Dir"] is { Length: > 0 } dir ? dir : null,
+                    });
+                }
+            }
+            catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException)
+            {
+                // odd output: the other sources still list the program
             }
         }
-        catch (Exception e) when (e is System.ComponentModel.Win32Exception or System.Text.Json.JsonException or OperationCanceledException or InvalidOperationException)
-        {
-            // no PowerShell, or it took too long: the other sources still list the program
-        }
         return list;
+    }
+
+    private static readonly TimeSpan PackagesTimeout = TimeSpan.FromSeconds(20);
+
+    private static void Kill(Process p)
+    {
+        try
+        {
+            p.Kill(entireProcessTree: true);
+            p.WaitForExit(2000);
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            // already exited
+        }
     }
 
     private static bool IsUninstaller(string path) =>

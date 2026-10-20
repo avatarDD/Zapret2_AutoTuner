@@ -42,6 +42,10 @@ description: Строгий справочник Lua-библиотеки zapret
 
 **payload:** `payload=type1,type2` — дополнительный фильтр внутри функции.
 `~` в начале инвертирует список. По умолчанию `known` (не empty и не unknown).
+Поэтому для нераспознанного протокола (`--payload=unknown`) функции без
+`payload=unknown` (или `all`) на каждом инстансе ничего не делают
+(`payload_check` в zapret-lib.lua). Генератор ставит его сам (слот
+`{lpayload}` в families.yaml).
 
 **fooling** (портит фейк так, чтобы сервер его отбросил, а DPI принял):
 

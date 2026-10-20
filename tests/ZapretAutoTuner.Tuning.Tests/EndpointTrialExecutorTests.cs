@@ -38,15 +38,15 @@ public sealed class EndpointTrialExecutorTests
         }
     }
 
-    private static ReplayProbeResult Ok() => new(true, 4, 1, 100, null, TimeSpan.FromMilliseconds(20));
+    private static ReplayProbeResult Ok() => new(true, 4, 1, 100, ReplayError.None, TimeSpan.FromMilliseconds(20));
 
-    private static ReplayProbeResult Fail(string? error) => new(false, 4, 0, 0, error, TimeSpan.FromMilliseconds(20));
+    private static ReplayProbeResult Fail(ReplayError error, SocketError? socket = null) => new(false, 4, 0, 0, error, TimeSpan.FromMilliseconds(20), socket);
 
     [Fact]
     public async Task Series_replays_inside_one_engine_limited_to_the_endpoint()
     {
         var engine = new RecordingEngine();
-        var probe = new ScriptedProbe(Fail("нет ответа"), Ok(), Ok());
+        var probe = new ScriptedProbe(Fail(ReplayError.NoAnswer), Ok(), Ok());
         var ep = Endpoint("198.51.100.7", 3478, L4Kind.Udp, AppProtocol.Stun, host: "stun.example.com");
         var ex = new EndpointTrialExecutor(engine, ep, Options(), probe.Run);
 
@@ -105,23 +105,92 @@ public sealed class EndpointTrialExecutorTests
     }
 
     [Theory]
-    [InlineData(null, TrialFailure.Timeout)]
-    [InlineData("нет ответа", TrialFailure.Timeout)]
-    [InlineData("сброс (RST)", TrialFailure.Reset)]
-    [InlineData("ConnectionReset", TrialFailure.Reset)]
-    [InlineData("нет соединения", TrialFailure.NoConnect)]
-    [InlineData("ConnectionRefused", TrialFailure.NoConnect)]
-    [InlineData("TimedOut", TrialFailure.NoConnect)]
-    [InlineData("HostUnreachable", TrialFailure.NoConnect)]
-    [InlineData("NetworkUnreachable", TrialFailure.NoConnect)]
-    [InlineData("сервер закрыл соединение", TrialFailure.Other)]
-    [InlineData("нечего отправить: в записи нет первых пакетов", TrialFailure.Other)]
-    public void Probe_errors_map_to_trial_failures(string? error, TrialFailure expected)
+    [InlineData(ReplayError.NoAnswer, null, TrialFailure.Timeout)]
+    [InlineData(ReplayError.Reset, null, TrialFailure.Reset)]
+    [InlineData(ReplayError.Socket, SocketError.ConnectionReset, TrialFailure.Reset)]
+    [InlineData(ReplayError.NoConnection, null, TrialFailure.NoConnect)]
+    [InlineData(ReplayError.Socket, SocketError.ConnectionRefused, TrialFailure.NoConnect)]
+    [InlineData(ReplayError.Socket, SocketError.TimedOut, TrialFailure.NoConnect)]
+    [InlineData(ReplayError.Socket, SocketError.HostUnreachable, TrialFailure.NoConnect)]
+    [InlineData(ReplayError.Socket, SocketError.NetworkUnreachable, TrialFailure.NoConnect)]
+    [InlineData(ReplayError.Socket, SocketError.AccessDenied, TrialFailure.Other)]
+    [InlineData(ReplayError.ServerClosed, null, TrialFailure.Other)]
+    [InlineData(ReplayError.NothingToSend, null, TrialFailure.Other)]
+    public void Probe_errors_map_to_trial_failures(ReplayError error, SocketError? socket, TrialFailure expected)
     {
-        var o = EndpointTrialExecutor.ToOutcome(Fail(error));
+        var r = Fail(error, socket);
+        var o = EndpointTrialExecutor.ToOutcome(r);
         Assert.False(o.Ok);
         Assert.Equal(expected, o.Failure);
-        Assert.Equal(error, o.Detail);
+        // the detail is for people, in both languages; nothing parses it
+        Assert.Equal($"{r.ErrorRu} / {r.ErrorEn}", o.Detail);
+        Assert.False(string.IsNullOrEmpty(r.ErrorRu));
+        Assert.False(string.IsNullOrEmpty(r.ErrorEn));
+    }
+
+    private static byte[] IceCheck()
+    {
+        // binding request with USERNAME (0x0006, 9 bytes, padded to 12) and a 20-byte MESSAGE-INTEGRITY
+        var b = new byte[20 + 4 + 12 + 4 + 20];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(b, 0x0001);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(2), (ushort)(b.Length - 20));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(b.AsSpan(4), 0x2112A442);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(20), 0x0006);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(22), 9);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(36), 0x0008);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(38), 20);
+        return b;
+    }
+
+    [Theory]
+    [InlineData(AppProtocol.WireGuard, L4Kind.Udp, ReplayRefusal.WireGuard)]
+    [InlineData(AppProtocol.Discord, L4Kind.Udp, ReplayRefusal.Discord)]
+    [InlineData(AppProtocol.Stun, L4Kind.Udp, ReplayRefusal.None)]
+    [InlineData(AppProtocol.Quic, L4Kind.Udp, ReplayRefusal.None)]
+    [InlineData(AppProtocol.Dtls, L4Kind.Udp, ReplayRefusal.None)]
+    [InlineData(AppProtocol.Mtproto, L4Kind.Tcp, ReplayRefusal.None)]
+    [InlineData(AppProtocol.Unknown, L4Kind.Tcp, ReplayRefusal.None)]
+    [InlineData(AppProtocol.Unknown, L4Kind.Udp, ReplayRefusal.None)]
+    public void Replay_is_meaningful_only_for_stateless_first_messages(AppProtocol app, L4Kind l4, ReplayRefusal expected)
+    {
+        var ex = new EndpointTrialExecutor(new RecordingEngine(), Endpoint("198.51.100.7", 1000, l4, app), Options());
+        Assert.Equal(expected, ex.Replay.Refusal);
+        Assert.Equal(expected != ReplayRefusal.None, ex.VerifyByRerunOnly);
+    }
+
+    [Fact]
+    public void Ice_checks_truncated_and_empty_recordings_are_not_replayed()
+    {
+        Assert.True(ReplayProbe.IsIceCheck(IceCheck()));
+        Assert.False(ReplayProbe.IsIceCheck(ReplayProbe.StunBindingRequest()));
+        var ice = Endpoint("198.51.100.7", 3478, L4Kind.Udp, AppProtocol.Stun) with { InitialPayloads = [IceCheck()] };
+        Assert.Equal(ReplayRefusal.IceStun, EndpointTrialExecutor.Replayable(ice).Refusal);
+        // a public STUN server answers a fresh binding request even when nothing was recorded
+        Assert.True(EndpointTrialExecutor.Replayable(ice with { InitialPayloads = [] }).CanReplay);
+        var mt = Endpoint("149.154.167.51", 443, L4Kind.Tcp, AppProtocol.Mtproto);
+        Assert.Equal(ReplayRefusal.Truncated, EndpointTrialExecutor.Replayable(mt with { InitialPayloadsTruncated = true }).Refusal);
+        Assert.Equal(ReplayRefusal.NothingRecorded, EndpointTrialExecutor.Replayable(mt with { InitialPayloads = [] }).Refusal);
+        Assert.All(Enum.GetValues<ReplayRefusal>().Where(r => r != ReplayRefusal.None), r =>
+        {
+            Assert.False(string.IsNullOrEmpty(new ReplayCheck(r).Ru));
+            Assert.False(string.IsNullOrEmpty(new ReplayCheck(r).En));
+        });
+    }
+
+    [Fact]
+    public async Task Not_replayable_endpoint_is_refused_before_the_engine_starts()
+    {
+        var engine = new RecordingEngine();
+        var probe = new ScriptedProbe(Ok());
+        var wg = Endpoint("203.0.113.9", 51820, L4Kind.Udp, AppProtocol.WireGuard);
+        var ex = new EndpointTrialExecutor(engine, wg, Options(), probe.Run);
+        var e = await Assert.ThrowsAsync<NotReplayableException>(() => ex.RunAsync(Candidate(UdpFake, L4Kind.Udp), 3, _ => false, CancellationToken.None));
+        Assert.Equal(ReplayRefusal.WireGuard, e.Check.Refusal);
+        Assert.Same(wg, e.Endpoint);
+        Assert.Contains("перезапуском", e.Message, StringComparison.Ordinal);
+        Assert.Contains("rerunning", e.Message, StringComparison.Ordinal);
+        Assert.Empty(engine.Started);
+        Assert.Empty(probe.Calls);
     }
 
     [Fact]
@@ -181,7 +250,7 @@ public sealed class EndpointTrialExecutorTests
     [InlineData(AppProtocol.Stun, L4Kind.Udp, TargetProtocol.Stun)]
     [InlineData(AppProtocol.Unknown, L4Kind.Udp, TargetProtocol.Udp)]
     [InlineData(AppProtocol.Mtproto, L4Kind.Tcp, TargetProtocol.Mtproto)]
-    [InlineData(AppProtocol.Unknown, L4Kind.Tcp, TargetProtocol.Tls)]
+    [InlineData(AppProtocol.Unknown, L4Kind.Tcp, TargetProtocol.Tcp)]
     public void Generator_options_follow_the_endpoint_protocol(AppProtocol app, L4Kind l4, TargetProtocol expected)
     {
         var g = EndpointTrialExecutor.Generator(Endpoint("198.51.100.7", 1000, l4, app), new GeneratorOptions { Mode = SearchMode.Quick });

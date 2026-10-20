@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="12" MaxWidth="640" HorizontalAlignment="Left">
+      <TextBlock Classes="h1" Text="{l:T settings.title}" />
+      <CheckBox Content="English interface" IsChecked="{Binding English}" />
+      <StackPanel Spacing="4">
+        <TextBlock Text="{l:T settings.theme}" />
+        <ComboBox SelectedIndex="{Binding ThemeIndex}" MinWidth="200">
+          <ComboBoxItem Content="{l:T settings.theme_system}" />
+          <ComboBoxItem Content="{l:T settings.theme_light}" />
+          <ComboBoxItem Content="{l:T settings.theme_dark}" />
+        </ComboBox>
+      </StackPanel>
+      <CheckBox Content="{l:T settings.large_font}" IsChecked="{Binding LargeFont}" />
+      <StackPanel Spacing="4">
+        <TextBlock Text="{l:T settings.mode}" />
+        <ComboBox SelectedIndex="{Binding ModeIndex}" MinWidth="200">
+          <ComboBoxItem Content="{l:T settings.mode_quick}" />
+          <ComboBoxItem Content="{l:T settings.mode_standard}" />
+          <ComboBoxItem Content="{l:T settings.mode_full}" />
+        </ComboBox>
+      </StackPanel>
+      <CheckBox Content="{l:T monitor.auto_apply}" IsChecked="{Binding AutoApply}" />
+      <TextBlock Classes="muted" Text="{l:T settings.auto_apply_hint}" />
+      <TextBlock Classes="h2" Text="zapret-gui" />
+      <TextBox Text="{Binding GuiUrl}" Watermark="http://192.168.1.1:8080" />
+      <TextBox Text="{Binding GuiToken}" PasswordChar="•" Watermark="{l:T settings.gui_token}" />
+      <CheckBox Content="{l:T settings.remember_token}" IsChecked="{Binding RememberToken}" />
+      <TextBlock Classes="h2" Text="{l:T settings.router}" />
+      <TextBox Text="{Binding RouterHost}" Watermark="192.168.1.1" />
+      <TextBlock Classes="muted" Text="{l:T settings.privacy}" />
+      <SelectableTextBlock Text="{Binding DataDir}" Classes="muted" FontSize="12" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

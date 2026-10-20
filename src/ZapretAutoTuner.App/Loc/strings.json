@@ -1,0 +1,590 @@
+{
+ "agent.lost": [
+  "Агент остановился: {0}. Он запустится снова при следующем действии.",
+  "The agent stopped: {0}. It starts again on the next action."
+ ],
+ "common.back": [
+  "Назад",
+  "Back"
+ ],
+ "common.next": [
+  "Далее",
+  "Next"
+ ],
+ "common.no": [
+  "Нет",
+  "No"
+ ],
+ "common.stop": [
+  "Остановить",
+  "Stop"
+ ],
+ "common.stopped": [
+  "Остановлено",
+  "Stopped"
+ ],
+ "common.yes": [
+  "Да",
+  "Yes"
+ ],
+ "expert.check": [
+  "Проверить",
+  "Check"
+ ],
+ "expert.import": [
+  "Импорт",
+  "Import"
+ ],
+ "expert.import_hint": [
+  "Вставьте config zapret2, nfqws2.conf, .cmd winws2, строку аргументов или JSON zapret-gui, либо откройте файл или архив экспорта.",
+  "Paste a zapret2 config, nfqws2.conf, a winws2 .cmd, an argument line or zapret-gui JSON, or open a file or export archive."
+ ],
+ "expert.kind": [
+  "Формат: {0}, профилей: {1}",
+  "Format: {0}, profiles: {1}"
+ ],
+ "expert.open": [
+  "Открыть файл",
+  "Open a file"
+ ],
+ "expert.parse": [
+  "Разобрать",
+  "Parse"
+ ],
+ "expert.strategy": [
+  "Стратегия",
+  "Strategy"
+ ],
+ "expert.strategy_hint": [
+  "Одна стратегия (--lua-desync=…), проверка Validator'ом.",
+  "One strategy (--lua-desync=…), checked by the Validator."
+ ],
+ "expert.use": [
+  "Использовать",
+  "Use"
+ ],
+ "expert.used": [
+  "Стратегия выбрана: её можно экспортировать или включить в мониторе.",
+  "The strategy is selected: export it or turn it on in the monitor."
+ ],
+ "expert.valid": [
+  "Ошибок нет",
+  "No problems"
+ ],
+ "export.argv": [
+  "Строка аргументов",
+  "Argument line"
+ ],
+ "export.argv_hint": [
+  "Скопировать одну строку для nfqws2/winws2",
+  "Copy one line for nfqws2/winws2"
+ ],
+ "export.copied": [
+  "Скопировано",
+  "Copied"
+ ],
+ "export.delivered": [
+  "Установлено на роутер, nfqws2 перезапущен",
+  "Installed on the router, nfqws2 restarted"
+ ],
+ "export.gui": [
+  "zapret-gui",
+  "zapret-gui"
+ ],
+ "export.gui_applied": [
+  "Стратегия {0} применена в zapret-gui",
+  "Strategy {0} applied in zapret-gui"
+ ],
+ "export.gui_apply": [
+  "Применить стратегию сейчас?",
+  "Apply the strategy now?"
+ ],
+ "export.gui_apply_text": [
+  "zapret-gui перезапустит nfqws2 со стратегией {0}.",
+  "zapret-gui restarts nfqws2 with strategy {0}."
+ ],
+ "export.gui_confirm": [
+  "Сохранить стратегию в zapret-gui?",
+  "Save the strategy in zapret-gui?"
+ ],
+ "export.gui_hint": [
+  "Сохранить и, отдельно, применить в zapret-gui",
+  "Save and, separately, apply in zapret-gui"
+ ],
+ "export.gui_password": [
+  "Пароль zapret-gui",
+  "zapret-gui password"
+ ],
+ "export.gui_saved": [
+  "Сохранено в zapret-gui как {0} (не применено)",
+  "Saved in zapret-gui as {0} (not applied)"
+ ],
+ "export.gui_url": [
+  "Адрес zapret-gui",
+  "zapret-gui address"
+ ],
+ "export.keenetic": [
+  "Keenetic (nfqws2-keenetic)",
+  "Keenetic (nfqws2-keenetic)"
+ ],
+ "export.keenetic_confirm": [
+  "Установить стратегию на роутер?",
+  "Install the strategy on the router?"
+ ],
+ "export.keenetic_hint": [
+  "Архив или установка по SSH после подтверждения",
+  "An archive, or install over SSH after confirmation"
+ ],
+ "export.pc": [
+  "Этот компьютер",
+  "This PC"
+ ],
+ "export.pc_hint": [
+  "Архив для winws2 / zapret2 на ПК",
+  "An archive for winws2 / zapret2 on the PC"
+ ],
+ "export.rolled_back": [
+  "прежние файлы восстановлены",
+  "the previous files were restored"
+ ],
+ "export.router_host": [
+  "Адрес роутера (SSH)",
+  "Router address (SSH)"
+ ],
+ "export.router_password": [
+  "Пароль SSH",
+  "SSH password"
+ ],
+ "export.saved": [
+  "Сохранено",
+  "Saved"
+ ],
+ "export.targets_hint": [
+  "Без адреса роутера или zapret-gui будет сохранён файл. Ничего не устанавливается без вашего подтверждения.",
+  "Without a router or zapret-gui address a file is saved. Nothing is installed without your confirmation."
+ ],
+ "export.zapret2": [
+  "zapret2 (Linux, OpenWrt)",
+  "zapret2 (Linux, OpenWrt)"
+ ],
+ "export.zapret2_hint": [
+  "config с NFQWS2_OPT, списки и блобы",
+  "config with NFQWS2_OPT, lists and blobs"
+ ],
+ "home.check": [
+  "Проверить блокировки",
+  "Check for blocks"
+ ],
+ "home.checking": [
+  "Проверяю…",
+  "Checking…"
+ ],
+ "home.done": [
+  "Готово: заблокировано {0}, проверка заняла {1} с",
+  "Done: {0} blocked, the check took {1} s"
+ ],
+ "home.network_problem": [
+  "Похоже, нет интернета или не работает DNS: проверка не показательна.",
+  "No internet or DNS seems broken: the check is not meaningful."
+ ],
+ "home.subtitle": [
+  "Проверим популярные сайты и сервисы и покажем, что заблокировано и как именно.",
+  "We check popular sites and services and show what is blocked and how."
+ ],
+ "home.title": [
+  "Проверка блокировок",
+  "Block check"
+ ],
+ "home.tune": [
+  "Подобрать стратегию",
+  "Find a strategy"
+ ],
+ "home.tune_blocked": [
+  "Подобрать для заблокированных",
+  "Tune the blocked ones"
+ ],
+ "home.tune_one": [
+  "Подобрать",
+  "Tune"
+ ],
+ "journal.applied": [
+  "применено",
+  "applied"
+ ],
+ "journal.block_lifted": [
+  "блокировка снята",
+  "block lifted"
+ ],
+ "journal.degraded": [
+  "ухудшение",
+  "degraded"
+ ],
+ "journal.dismissed": [
+  "отклонено",
+  "dismissed"
+ ],
+ "journal.not_found": [
+  "исправление не найдено",
+  "no fix found"
+ ],
+ "journal.recovered": [
+  "восстановилось",
+  "recovered"
+ ],
+ "journal.removed": [
+  "убрано из стратегии",
+  "removed from the strategy"
+ ],
+ "journal.repaired": [
+  "найдено исправление",
+  "fix found"
+ ],
+ "journal.site_down": [
+  "сайт недоступен",
+  "site down"
+ ],
+ "monitor.active": [
+  "Защита активна, сайтов под наблюдением: {0}",
+  "Protection is on, {0} sites watched"
+ ],
+ "monitor.apply": [
+  "Применить",
+  "Apply"
+ ],
+ "monitor.auto_apply": [
+  "Применять исправления без вопроса",
+  "Apply fixes without asking"
+ ],
+ "monitor.broken": [
+  "Не работает сейчас",
+  "Broken now"
+ ],
+ "monitor.dismiss": [
+  "Отклонить",
+  "Dismiss"
+ ],
+ "monitor.journal": [
+  "Журнал изменений",
+  "Change journal"
+ ],
+ "monitor.no_solution": [
+  "Сначала подберите или импортируйте стратегию.",
+  "First tune or import a strategy."
+ ],
+ "monitor.start": [
+  "Включить защиту",
+  "Turn protection on"
+ ],
+ "monitor.state_broken": [
+  "не удалось починить",
+  "could not repair"
+ ],
+ "monitor.state_ok": [
+  "работает",
+  "working"
+ ],
+ "monitor.state_repairing": [
+  "чиню…",
+  "repairing…"
+ ],
+ "monitor.stop": [
+  "Выключить защиту",
+  "Turn protection off"
+ ],
+ "monitor.stopped": [
+  "Защита выключена",
+  "Protection is off"
+ ],
+ "monitor.subtitle": [
+  "Защита держит итоговую стратегию запущенной и следит за её сайтами. Если сайт перестал открываться, стратегия чинится сама.",
+  "Protection keeps the final strategy running and watches its sites. If a site stops opening, the strategy is repaired."
+ ],
+ "monitor.title": [
+  "Монитор",
+  "Monitor"
+ ],
+ "monitor.window": [
+  "успешно {0} из {1}, чаще всего: {2}",
+  "{0} of {1} ok, mostly: {2}"
+ ],
+ "nav.expert": [
+  "Эксперт",
+  "Expert"
+ ],
+ "nav.home": [
+  "Главная",
+  "Home"
+ ],
+ "nav.monitor": [
+  "Монитор",
+  "Monitor"
+ ],
+ "nav.reports": [
+  "Отчёты",
+  "Reports"
+ ],
+ "nav.settings": [
+  "Настройки",
+  "Settings"
+ ],
+ "nav.wizard": [
+  "Подбор",
+  "Tuning"
+ ],
+ "outcome.noreply": [
+  "нет ответа",
+  "no reply"
+ ],
+ "outcome.ok": [
+  "норма",
+  "ok"
+ ],
+ "outcome.reset": [
+  "сброс",
+  "reset"
+ ],
+ "outcome.stalled": [
+  "зависание",
+  "stall"
+ ],
+ "outcome.stalled16k": [
+  "обрыв на 16 КБ",
+  "16 KB cut-off"
+ ],
+ "outcome.unknown": [
+  "неясно",
+  "unclear"
+ ],
+ "reports.copy": [
+  "Копировать текст",
+  "Copy the text"
+ ],
+ "reports.copy_prompt": [
+  "Копировать с промтом",
+  "Copy with the prompt"
+ ],
+ "reports.empty": [
+  "Подбора ещё не было.",
+  "No run yet."
+ ],
+ "reports.environment": [
+  "Окружение: виртуалка, антивирус, DoH… (необязательно)",
+  "Environment: VM, antivirus, DoH… (optional)"
+ ],
+ "reports.mask_domains": [
+  "Скрыть домены",
+  "Mask the domains"
+ ],
+ "reports.refresh": [
+  "Обновить",
+  "Refresh"
+ ],
+ "reports.save": [
+  "Собрать отчёт",
+  "Build the report"
+ ],
+ "reports.subtitle": [
+  "Всё о последнем подборе в одном архиве и в тексте для чата, с готовым промтом для Claude. Ваши адреса скрыты. Ничего не отправляется само.",
+  "Everything about the last run in one archive and as text for a chat, with a ready prompt for Claude. Your addresses are masked. Nothing is sent anywhere."
+ ],
+ "reports.title": [
+  "Отчёт для разбора",
+  "Report for analysis"
+ ],
+ "settings.auto_apply_hint": [
+  "По умолчанию найденное исправление ждёт вашего «Применить».",
+  "By default a found fix waits for your Apply."
+ ],
+ "settings.gui_token": [
+  "MCP-токен zapret-gui",
+  "zapret-gui MCP token"
+ ],
+ "settings.large_font": [
+  "Крупный шрифт",
+  "Large font"
+ ],
+ "settings.mode": [
+  "Глубина подбора",
+  "Search depth"
+ ],
+ "settings.mode_full": [
+  "Полностью",
+  "Full"
+ ],
+ "settings.mode_quick": [
+  "Быстро",
+  "Quick"
+ ],
+ "settings.mode_standard": [
+  "Стандартно",
+  "Standard"
+ ],
+ "settings.privacy": [
+  "Телеметрии нет. Данные хранятся только локально:",
+  "No telemetry. Data stays on this computer only:"
+ ],
+ "settings.remember_token": [
+  "Запомнить токен на этом компьютере",
+  "Remember the token on this PC"
+ ],
+ "settings.router": [
+  "Роутер",
+  "Router"
+ ],
+ "settings.theme": [
+  "Тема",
+  "Theme"
+ ],
+ "settings.theme_dark": [
+  "Тёмная",
+  "Dark"
+ ],
+ "settings.theme_light": [
+  "Светлая",
+  "Light"
+ ],
+ "settings.theme_system": [
+  "Как в системе",
+  "System"
+ ],
+ "settings.title": [
+  "Настройки",
+  "Settings"
+ ],
+ "stage.classify": [
+  "диагностика",
+  "diagnostics"
+ ],
+ "stage.done": [
+  "готово",
+  "done"
+ ],
+ "stage.failed": [
+  "не удалось",
+  "failed"
+ ],
+ "stage.finalcheck": [
+  "проверка",
+  "check"
+ ],
+ "stage.refine": [
+  "уточнение",
+  "refining"
+ ],
+ "stage.search": [
+  "подбор",
+  "search"
+ ],
+ "stage.skipped": [
+  "не нужно",
+  "not needed"
+ ],
+ "stage.unify": [
+  "объединение",
+  "merging"
+ ],
+ "stage.waiting": [
+  "ожидает",
+  "waiting"
+ ],
+ "wizard.agent_start": [
+  "Запускаю агент (может появиться запрос прав)…",
+  "Starting the agent (a permission prompt may appear)…"
+ ],
+ "wizard.all_major": [
+  "Отметить крупные",
+  "Check the major ones"
+ ],
+ "wizard.found_all": [
+  "Все найденные варианты",
+  "Everything found"
+ ],
+ "wizard.input_hint": [
+  "Сайты, адреса или ссылки, по одному в строке. Можно добавить готовый набор.",
+  "Sites, addresses or links, one per line. You can add a ready set."
+ ],
+ "wizard.log": [
+  "Журнал событий",
+  "Event log"
+ ],
+ "wizard.no_solution": [
+  "Готовой стратегии нет. Соберите отчёт на странице «Отчёты».",
+  "No strategy yet. Build a report on the Reports page."
+ ],
+ "wizard.not_found": [
+  "Рабочая стратегия не найдена",
+  "No working strategy found"
+ ],
+ "wizard.nothing": [
+  "Введите хотя бы один сайт или выберите провайдера.",
+  "Enter at least one site or pick a provider."
+ ],
+ "wizard.open_pages": [
+  "Проверять найденное в браузере (дольше, но надёжнее)",
+  "Check what is found in a browser (slower but surer)"
+ ],
+ "wizard.provider_no_targets": [
+  "Не нашёл в диапазонах провайдера адресов, которые отвечают.",
+  "Found no answering addresses in the provider's ranges."
+ ],
+ "wizard.provider_ranges": [
+  "Загружаю диапазоны провайдера…",
+  "Loading the provider's ranges…"
+ ],
+ "wizard.providers": [
+  "Провайдеры облаков и CDN",
+  "Cloud and CDN providers"
+ ],
+ "wizard.providers_hint": [
+  "Для блокировок целых диапазонов: стратегия подбирается на адресах провайдера и ограничивается его ipset.",
+  "For blocks of whole ranges: the strategy is tuned on the provider's addresses and limited by its ipset."
+ ],
+ "wizard.result_ok": [
+  "{0}: работает {1}/{2} · {3}",
+  "{0}: works {1}/{2} · {3}"
+ ],
+ "wizard.solution": [
+  "Готово: профилей в итоговой стратегии {0}. Дальше — экспорт.",
+  "Done: {0} profiles in the final strategy. Next is export."
+ ],
+ "wizard.start": [
+  "Начать",
+  "Start"
+ ],
+ "wizard.step1": [
+  "Что не работает?",
+  "What does not work?"
+ ],
+ "wizard.step2": [
+  "Диагностика и подбор",
+  "Diagnostics and search"
+ ],
+ "wizard.step4": [
+  "Результат проверки",
+  "Check result"
+ ],
+ "wizard.step5": [
+  "Куда установить",
+  "Where to install"
+ ],
+ "wizard.steps": [
+  "1 Что не работает · 2 Диагностика · 3 Подбор · 4 Проверка · 5 Экспорт",
+  "1 What fails · 2 Diagnostics · 3 Search · 4 Check · 5 Export"
+ ],
+ "wizard.title": [
+  "Подбор стратегии",
+  "Strategy tuning"
+ ],
+ "wizard.trial_fail": [
+  "{0}: неудача ({1}) {2}",
+  "{0}: failed ({1}) {2}"
+ ],
+ "wizard.trial_ok": [
+  "{0}: загружено {1} КБ",
+  "{0}: loaded {1} KB"
+ ],
+ "wizard.trying": [
+  "{0}: пробую [{1}] {2}",
+  "{0}: trying [{1}] {2}"
+ ]
+}

@@ -6,7 +6,7 @@
 [nfqws2-keenetic](https://github.com/nfqws/nfqws2-keenetic) и
 [zapret-gui](https://github.com/avatarDD/zapret-gui).
 
-План — [docs/PLAN.md](docs/PLAN.md). Правила для разработки — [AGENTS.md](AGENTS.md).
+Как пользоваться — [docs/USER.md](docs/USER.md). План — [docs/PLAN.md](docs/PLAN.md). Правила для разработки — [AGENTS.md](AGENTS.md).
 
 ## Сборка
 
@@ -46,3 +46,14 @@ sudo -E env "PATH=$PATH" ZT_ZAPRET2_DIR=$PWD/runtimes/linux-x64/zapret2 \
 | `third_party/zapret2` | lua, `protocol.c` и `nfqws.c` бандлимой версии zapret2 (MIT), с ними сверяется каталог |
 | `tools/bundle` | скачивание и проверка закреплённого релиза zapret2 |
 | `tests/pcaps`, `tools/pcaps` | корпус пакетов и эталон tshark для разбора TLS, JA4, QUIC, RST |
+
+## Релиз
+
+Тег `v1.2.3` запускает `.github/workflows/release.yml`: тесты на Windows и
+Linux, бандл zapret2 по закреплённому SHA-256, self-contained publish, пакеты
+(Windows: установщик Inno Setup и portable zip; Linux x64/arm64: .deb, .rpm,
+AppImage, tar.gz), `SHA256SUMS.txt` и GitHub-релиз. Ручной запуск
+(workflow_dispatch) собирает пакеты без релиза.
+
+Телеметрии нет и при сборке: статистика Avalonia.BuildServices отключена в
+`Directory.Build.targets`.

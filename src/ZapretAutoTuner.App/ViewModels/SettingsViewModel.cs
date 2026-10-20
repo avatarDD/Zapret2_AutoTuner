@@ -17,6 +17,8 @@ public sealed partial class SettingsViewModel : PageViewModel
         _themeIndex = host.Settings.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
         _modeIndex = Array.IndexOf(Modes, host.Settings.SearchMode) is var i and >= 0 ? i : 1;
         _autoApply = host.Settings.ApplyPolicy == "auto";
+        _learning = host.Settings.Learning;
+        _providerAsn = host.Settings.ProviderAsn;
         _guiUrl = host.Settings.GuiUrl;
         _rememberToken = host.Settings.GuiToken.Length > 0;
         _guiToken = host.Settings.GuiToken;
@@ -41,6 +43,12 @@ public sealed partial class SettingsViewModel : PageViewModel
 
     [ObservableProperty]
     private bool _autoApply;
+
+    [ObservableProperty]
+    private bool _learning;
+
+    [ObservableProperty]
+    private string _providerAsn;
 
     [ObservableProperty]
     private string _guiUrl;
@@ -72,6 +80,10 @@ public sealed partial class SettingsViewModel : PageViewModel
     partial void OnModeIndexChanged(int value) => _host.Settings.SearchMode = Modes[Math.Clamp(value, 0, Modes.Length - 1)];
 
     partial void OnAutoApplyChanged(bool value) => _host.Settings.ApplyPolicy = value ? "auto" : "ask";
+
+    partial void OnLearningChanged(bool value) => _host.Settings.Learning = value;
+
+    partial void OnProviderAsnChanged(string value) => _host.Settings.ProviderAsn = value;
 
     partial void OnGuiUrlChanged(string value) => _host.Settings.GuiUrl = value.Trim();
 

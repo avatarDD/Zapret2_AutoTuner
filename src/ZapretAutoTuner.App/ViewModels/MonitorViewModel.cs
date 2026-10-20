@@ -237,7 +237,7 @@ public sealed partial class MonitorViewModel : PageViewModel
                 var series = await (await For(d, ct)).ProbeSeriesAsync(3, o => o.Any(x => !x.Ok), ct);
                 return series.Count > 0 && series.All(o => o.Ok);
             },
-            new SearchOptions { Generator = new GeneratorOptions { Mode = mode } });
+            new SearchOptions { Generator = new GeneratorOptions { Mode = mode }, Learning = SearchContext.For(_host).Learning });
     }
 
     private void OnWindow(WindowStats w)

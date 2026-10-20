@@ -41,6 +41,9 @@ public sealed record StrategyCandidate(Strategy Strategy, string Family, int Ord
 {
     public string Key => Strategy.ToString();
 
+    /// <summary>Where the candidate came from (<see cref="CandidateSource"/>), recorded with its trials.</summary>
+    public string Source { get; init; } = CandidateSource.Generator;
+
     public override string ToString() => $"[{Family}] {Strategy}";
 }
 

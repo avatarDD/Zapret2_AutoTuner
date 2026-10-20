@@ -29,12 +29,14 @@ public sealed class SearchRepairSteps(
     public async Task<StrategyCandidate?> LocalSearchAsync(string domain, StrategyCandidate current, CancellationToken ct)
     {
         var neighbours = StrategyMutator.Mutate(current.Strategy, options.Generator, l4: current.L4)
-            .Select((m, i) => current with { Strategy = m.Strategy, Family = current.Family, Order = i, Tags = [.. current.Tags, "repair:" + m.What] })
+            .Select((m, i) => current with { Strategy = m.Strategy, Family = current.Family, Order = i, Tags = [.. current.Tags, "repair:" + m.What], Source = CandidateSource.Mutation })
             .ToList();
         return await SearchAsync(domain, options with
         {
             Generator = options.Generator with { Mode = SearchMode.Quick },
             Priors = neighbours,
+            // the neighbours go first by definition; the learned order is for the full search
+            Learning = null,
             StopAfterFound = 1,
             AlreadyTried = new Dictionary<string, Efficiency> { [current.Key] = new(0, checkAttempts) },
         }, ct).ConfigureAwait(false);

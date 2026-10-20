@@ -5,6 +5,10 @@ using ZapretAutoTuner.Core.Search;
 namespace ZapretAutoTuner.Core.Unify;
 
 /// <summary>What is known about one strategy on one domain: from the search, the knowledge base or a cross-check.</summary>
+/// <summary>A strategy for addresses rather than names: a provider (its ranges) or a program's servers.</summary>
+/// <param name="Name">The profile and ipset name: a provider id or a program endpoint name.</param>
+public sealed record IpResult(string Name, IReadOnlyList<string> Cidrs, L4Kind L4, string Ports, IReadOnlyList<string> L7, Strategy Strategy);
+
 public sealed record DomainResult(string Domain, L4Kind L4, Strategy Strategy, Efficiency Efficiency, double Score);
 
 /// <summary>One profile of the unified config: a strategy and the domains it serves.</summary>
@@ -216,6 +220,29 @@ public static class Unifier
         }
         s.Meta.Targets = [.. plan.Profiles.SelectMany(p => p.Domains).Distinct(StringComparer.Ordinal)];
         return s;
+    }
+
+    /// <summary>
+    /// Appends address-based profiles (PLAN 6.3–6.4): a provider's ranges or a program's servers, each with its own
+    /// ipset (aggregated, dpi-diagnostics §4a). They go after the hostlist profiles: a site's own strategy is more
+    /// specific than its hoster's.
+    /// </summary>
+    public static void AddIpProfiles(Solution s, IEnumerable<IpResult> results)
+    {
+        foreach (var r in results)
+        {
+            s.Ipsets[r.Name] = [.. Providers.CidrSet.Aggregate(r.Cidrs).Select(c => c.ToString())];
+            s.Profiles.Add(new Profile
+            {
+                Name = r.Name,
+                TcpPorts = r.L4 == L4Kind.Tcp ? r.Ports : null,
+                UdpPorts = r.L4 == L4Kind.Udp ? r.Ports : null,
+                L7 = [.. r.L7],
+                Ipsets = [new ListRef(r.Name)],
+                Strategy = r.Strategy,
+            });
+            s.Meta.Targets.Add(r.Name);
+        }
     }
 
     private static string Norm(string domain) => domain.Trim().TrimEnd('.').ToLowerInvariant();

@@ -65,6 +65,12 @@ public sealed class Flow
     /// <summary>Time of the last incoming payload byte.</summary>
     public DateTime? LastDataIn { get; set; }
 
+    /// <summary>The client's payloads before the server sends any data (at most 4 of up to 1500 bytes): what a replay sends.</summary>
+    public List<byte[]> InitialPayloadsOut { get; } = [];
+
+    /// <summary>What the first client payload speaks.</summary>
+    public AppProtocol AppProtocol { get; set; }
+
     public TimeSpan? HandshakeRtt => SynTime is { } s && SynAckTime is { } a ? a - s : null;
 
     public override string ToString() => $"{Protocol} {Client} > {Server} out={BytesOut} in={BytesIn} sni={ClientHello?.Sni}";
@@ -145,6 +151,12 @@ public static class FlowAnalyzer
             var f = Flow;
             f.LastSeen = cp.TimestampUtc;
             int len = ip.Payload.Length;
+            if (outgoing && len > 0 && f.BytesIn == 0 && f.InitialPayloadsOut.Count < 4)
+            {
+                if (f.InitialPayloadsOut.Count == 0)
+                    f.AppProtocol = ip.IsUdp ? ProtocolDetector.DetectUdp(ip.Payload.Span, f.Server.Port) : ProtocolDetector.DetectTcp(ip.Payload.Span, f.Server.Address);
+                f.InitialPayloadsOut.Add(ip.Payload[..Math.Min(len, 1500)].ToArray());
+            }
             if (outgoing)
             {
                 f.PacketsOut++;

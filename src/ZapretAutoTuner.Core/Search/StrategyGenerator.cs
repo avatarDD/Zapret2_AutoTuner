@@ -21,6 +21,16 @@ public enum TargetProtocol
     Tls,
     Http,
     Quic,
+
+    // programs (PLAN 6.3): what a non-HTTP flow speaks, from ProtocolDetector
+    Stun,
+    WireGuard,
+    Discord,
+    Dtls,
+    Mtproto,
+
+    /// <summary>UDP the engine does not recognise.</summary>
+    Udp,
 }
 
 /// <summary>One strategy the search will try, with where it came from.</summary>
@@ -274,7 +284,7 @@ public static class StrategyGenerator
         string payload = f.Payload switch
         {
             "none" => "",
-            "auto" => o.Protocol switch { TargetProtocol.Http => "--payload=http_req ", TargetProtocol.Quic => "--payload=quic_initial ", _ => "--payload=tls_client_hello " },
+            "auto" => $"--payload={AutoPayload(o.Protocol)} ",
             var p => $"--payload={p} ",
         };
         foreach (var template in f.Templates)
@@ -295,6 +305,34 @@ public static class StrategyGenerator
             }
         }
     }
+
+    /// <summary>The engine's payload type for what the target speaks (protocols.json).</summary>
+    public static string AutoPayload(TargetProtocol p) => p switch
+    {
+        TargetProtocol.Http => "http_req",
+        TargetProtocol.Quic => "quic_initial",
+        TargetProtocol.Stun => "stun",
+        TargetProtocol.WireGuard => "wireguard_initiation",
+        TargetProtocol.Discord => "discord_ip_discovery",
+        TargetProtocol.Dtls => "dtls_client_hello",
+        TargetProtocol.Mtproto => "mtproto_initial",
+        TargetProtocol.Udp => "unknown",
+        _ => "tls_client_hello",
+    };
+
+    /// <summary>The search protocol of a detected flow protocol.</summary>
+    public static TargetProtocol FromApp(Packets.AppProtocol p, bool udp) => p switch
+    {
+        Packets.AppProtocol.Http => TargetProtocol.Http,
+        Packets.AppProtocol.Quic => TargetProtocol.Quic,
+        Packets.AppProtocol.Stun => TargetProtocol.Stun,
+        Packets.AppProtocol.WireGuard => TargetProtocol.WireGuard,
+        Packets.AppProtocol.Discord => TargetProtocol.Discord,
+        Packets.AppProtocol.Dtls => TargetProtocol.Dtls,
+        Packets.AppProtocol.Mtproto => TargetProtocol.Mtproto,
+        Packets.AppProtocol.Tls => TargetProtocol.Tls,
+        _ => udp ? TargetProtocol.Udp : TargetProtocol.Tls,
+    };
 
     private static IReadOnlyList<string> Resolve(AxisValues a, SearchMode mode, string protocol, FamilyCatalog catalog, int depth = 0)
     {

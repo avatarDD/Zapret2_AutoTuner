@@ -12,6 +12,7 @@ public sealed class AppHost : IAsyncDisposable
 {
     private readonly SemaphoreSlim _agentGate = new(1, 1);
     private AgentConnection? _agent;
+    private readonly ResourceSync _resourceSync;
 
     public AppHost(string? dataDir = null)
     {
@@ -20,6 +21,8 @@ public sealed class AppHost : IAsyncDisposable
         Kb = KnowledgeBase.Open(Path.Combine(DataDir, "knowledge.db"));
         Bundle = new Zapret2Bundle(Path.Combine(AppContext.BaseDirectory, "zapret2"));
         Settings = new AppSettings(Kb);
+        Resources = new ResourceStore(Kb);
+        _resourceSync = new ResourceSync(Resources, ViewModels.SessionState.I);
     }
 
     public static AppHost? Current { get; set; }
@@ -33,6 +36,9 @@ public sealed class AppHost : IAsyncDisposable
     public Zapret2Bundle Bundle { get; }
 
     public AppSettings Settings { get; }
+
+    /// <summary>Hostlists, ipsets, blobs and Lua scripts (PLAN 4a.5), next to the knowledge base.</summary>
+    public ResourceStore Resources { get; }
 
     public bool AgentRunning => _agent is not null;
 
@@ -71,6 +77,7 @@ public sealed class AppHost : IAsyncDisposable
         // the Agent removes its firewall rules and stops engines on shutdown (AGENTS.md rule 6)
         if (_agent is not null)
             await _agent.DisposeAsync().ConfigureAwait(false);
+        _resourceSync.Dispose();
         Kb.Dispose();
         _agentGate.Dispose();
     }
@@ -212,13 +219,14 @@ public sealed class AppSettings
     /// <summary>The permission groups beyond "read" (all off by default, as in zapret-gui).</summary>
     public Mcp.McpPermissions McpPermissions
     {
-        get => new(Flag("mcp.perm.probes"), Flag("mcp.perm.control"), Flag("mcp.perm.experiments"), Flag("mcp.perm.export"));
+        get => new(Flag("mcp.perm.probes"), Flag("mcp.perm.control"), Flag("mcp.perm.experiments"), Flag("mcp.perm.export"), Flag("mcp.perm.resources"));
         set
         {
             SetFlag("mcp.perm.probes", value.Probes);
             SetFlag("mcp.perm.control", value.Control);
             SetFlag("mcp.perm.experiments", value.Experiments);
             SetFlag("mcp.perm.export", value.Export);
+            SetFlag("mcp.perm.resources", value.Resources);
         }
     }
 

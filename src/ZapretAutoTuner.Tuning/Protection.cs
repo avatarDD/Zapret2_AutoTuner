@@ -27,12 +27,14 @@ public static class Protection
     public static int NextQueue(int current) => current == QueueNum ? AltQueueNum : QueueNum;
 
     /// <summary>argv and queue for the whole solution; hostlists inline, all addresses (the filter is the hostlist).</summary>
-    public static (List<string> Argv, QueueRule? Queue) Launch(Solution s, string luaDir, int queueNum = QueueNum) =>
+    /// <param name="userLua">Approved user Lua (function → script file, ResourceStore.ApprovedLuaPaths): the scripts the solution calls are loaded.</param>
+    public static (List<string> Argv, QueueRule? Queue) Launch(Solution s, string luaDir, int queueNum = QueueNum, IReadOnlyDictionary<string, string>? userLua = null) =>
         ConfigCheck.BuildLaunch(s, [], new AgentTrialOptions
         {
             LuaDir = luaDir,
             QueueNum = queueNum,
             Blobs = s.Blobs.ToDictionary(b => b.Key, b => "0x" + Convert.ToHexString(b.Value), StringComparer.Ordinal),
+            UserLua = userLua ?? new Dictionary<string, string>(),
         });
 
     /// <summary>Every domain the solution filters by name.</summary>

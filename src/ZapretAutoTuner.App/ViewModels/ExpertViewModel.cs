@@ -21,6 +21,9 @@ public sealed partial class ExpertViewModel : PageViewModel
 
     public Func<Task<(string Name, byte[] Bytes)?>>? OpenFile { get; set; }
 
+    /// <summary>The user's resources: approved Lua functions pass the Validator, drafts are refused (PLAN 4a.5).</summary>
+    public Storage.ResourceStore? Resources { get; init; }
+
     [ObservableProperty]
     private string _importText = "";
 
@@ -122,8 +125,12 @@ public sealed partial class ExpertViewModel : PageViewModel
         }
     }
 
-    private StrategyValidator Validator(Solution? s) => new(new ValidationContext
+    private StrategyValidator Validator(Solution? s)
     {
-        DeclaredBlobs = s?.Blobs.ToDictionary(b => b.Key, b => (long?)b.Value.Length, StringComparer.Ordinal) ?? new Dictionary<string, long?>(),
-    });
+        var ctx = new ValidationContext
+        {
+            DeclaredBlobs = s?.Blobs.ToDictionary(b => b.Key, b => (long?)b.Value.Length, StringComparer.Ordinal) ?? new Dictionary<string, long?>(),
+        };
+        return new(Resources?.ApplyTo(ctx) ?? ctx);
+    }
 }

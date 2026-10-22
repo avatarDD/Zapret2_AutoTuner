@@ -49,16 +49,36 @@ public sealed partial class ReportsViewModel : PageViewModel
     }
 
     [RelayCommand]
-    private async Task SaveAsync()
+    private async Task SaveAsync() => await SaveArchiveAsync();
+
+    /// <summary>"Собрать отчёт": the archive of the last run; returns its file name, or null when there is no run.</summary>
+    public async Task<string?> SaveArchiveAsync()
     {
         if (SessionState.I.Last is not { } last)
         {
             Status = L["reports.empty"];
-            return;
+            return null;
         }
+        var name = $"autotuner-report-{DateTime.Now:yyyyMMdd-HHmm}.zip";
         if (SaveFile is not null)
-            await SaveFile($"autotuner-report-{DateTime.Now:yyyyMMdd-HHmm}.zip", FailureReport.Archive(last.Targets, SessionState.I.Attempts, Options()));
+            await SaveFile(name, FailureReport.Archive(last.Targets, SessionState.I.Attempts, Options()));
         Status = L["export.saved"];
+        return name;
+    }
+
+    /// <summary>Opens the "Сообщить о проблеме" dialog; set by the window.</summary>
+    public Func<BugReportInput, Task>? ReportProblem { get; set; }
+
+    [RelayCommand]
+    private async Task ReportProblemAsync()
+    {
+        var input = BugReports.From() with
+        {
+            MaskDomains = MaskDomains,
+            Environment = [.. Environment.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)],
+        };
+        if (ReportProblem is not null)
+            await ReportProblem(input);
     }
 
     [RelayCommand]

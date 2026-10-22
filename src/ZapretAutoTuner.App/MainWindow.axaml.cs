@@ -23,6 +23,21 @@ public sealed partial class MainWindow : Window
         m.Wizard.Confirm = (title, text) => ConfirmDialog.AskAsync(this, title, text);
         m.Expert.OpenFile = OpenFileAsync;
         m.Mcp.Ask = (title, text) => ConfirmDialog.AskAsync(this, title, text);
+        m.Resources.Confirm = (title, text) => ConfirmDialog.AskAsync(this, title, text);
+        m.Resources.ApproveDialog = r => LuaApprovalDialog.AskAsync(this, r);
+        m.Reports.ReportProblem = m.Wizard.ReportProblem = m.Monitor.ReportProblem = m.Resources.ReportProblem = input => ReportProblemAsync(m, input);
+    }
+
+    /// <summary>"Сообщить о проблеме": the draft dialog; the browser opens only on its GitHub button.</summary>
+    private Task ReportProblemAsync(MainViewModel m, Tuning.BugReportInput input)
+    {
+        var vm = new BugReportViewModel(input)
+        {
+            CopyText = CopyAsync,
+            OpenUrl = async url => await Launcher.LaunchUriAsync(url),
+            SaveArchive = m.Reports.SaveArchiveAsync,
+        };
+        return BugReportView.ShowAsync(this, vm);
     }
 
     private async Task SaveFileAsync(string name, byte[] bytes)

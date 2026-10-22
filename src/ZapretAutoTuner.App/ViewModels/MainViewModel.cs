@@ -12,11 +12,12 @@ public sealed partial class MainViewModel : ObservableObject
         Wizard = new WizardViewModel(host);
         Monitor = new MonitorViewModel(host);
         Reports = new ReportsViewModel();
-        Expert = new ExpertViewModel();
+        Expert = new ExpertViewModel { Resources = host.Resources };
+        Resources = new ResourcesViewModel(host.Resources, new RouterResourceService(host));
         Mcp = new McpService(host, Monitor);
         Reports.McpAudit = Mcp.AuditLines;
         Settings = new SettingsViewModel(host, Mcp);
-        Pages = [Home, Wizard, Monitor, Reports, Expert, Settings];
+        Pages = [Home, Wizard, Monitor, Reports, Expert, Resources, Settings];
         _current = Home;
         host.AgentLost += m => AgentStatus = Loc.Loc.I.F("agent.lost", m);
     }
@@ -30,6 +31,8 @@ public sealed partial class MainViewModel : ObservableObject
     public ReportsViewModel Reports { get; }
 
     public ExpertViewModel Expert { get; }
+
+    public ResourcesViewModel Resources { get; }
 
     public SettingsViewModel Settings { get; }
 

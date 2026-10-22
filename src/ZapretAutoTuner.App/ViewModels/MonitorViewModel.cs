@@ -75,6 +75,23 @@ public sealed partial class MonitorViewModel : PageViewModel
     [ObservableProperty]
     private bool _autoApply;
 
+    /// <summary>Set by the window: the "Сообщить о проблеме" dialog (PLAN 4a.6).</summary>
+    public Func<BugReportInput, Task>? ReportProblem { get; set; }
+
+    /// <summary>The protection could not start or a repair failed: shows the report button.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasProblem))]
+    private BugReportInput? _problem;
+
+    public bool HasProblem => Problem is not null;
+
+    [RelayCommand]
+    private async Task ReportProblemAsync()
+    {
+        if (ReportProblem is not null)
+            await ReportProblem(Problem ?? BugReports.From(null, BugKind.AppError, Status));
+    }
+
     partial void OnAutoApplyChanged(bool value) => _host.Settings.ApplyPolicy = value ? "auto" : "ask";
 
     private ApplyPolicy Policy() => _host.Settings.ApplyPolicy == "auto" ? ApplyPolicy.Auto : ApplyPolicy.Ask;
@@ -113,7 +130,10 @@ public sealed partial class MonitorViewModel : PageViewModel
             _host.Kb.PruneMonitorWindows(DateTimeOffset.UtcNow.AddDays(-7));
             var agent = await _host.AgentAsync(_cts.Token);
             _engine = new AgentEngineControl(agent.Client);
-            var protection = new ProtectionController(_engine, RepairSteps(), (s, q) => Protection.Launch(s, _host.Bundle.LuaDir, q), Policy);
+            Problem = null;
+            // the approved user Lua the solution calls is loaded with it (PLAN 4a.5)
+            var userLua = _host.Resources.ApprovedLuaPaths();
+            var protection = new ProtectionController(_engine, RepairSteps(), (s, q) => Protection.Launch(s, _host.Bundle.LuaDir, q, userLua), Policy);
             Wire(protection);
             await protection.StartAsync(solution);
             _protection = protection;
@@ -142,6 +162,7 @@ public sealed partial class MonitorViewModel : PageViewModel
             await ShutdownAsync();
             Active = false;
             Status = e.Message;
+            Problem = BugReports.From(e);
         }
     }
 
@@ -163,6 +184,7 @@ public sealed partial class MonitorViewModel : PageViewModel
         p.Problem += (d, message) => Dispatcher.UIThread.Post(() =>
         {
             Status = d is null ? message : L.F("monitor.repair_failed", d, message);
+            Problem = BugReports.From(null, BugKind.AppError, Status);
             if (d is not null)
                 SetState(d, "monitor.state_broken", "#D0443E");
         });

@@ -15,6 +15,7 @@
         <Button Classes="accent" Content="{l:T reports.save}" Command="{Binding SaveCommand}" Margin="0,0,8,8" />
         <Button Content="{l:T reports.copy}" Command="{Binding CopyCommand}" Margin="0,0,8,8" />
         <Button Content="{l:T reports.copy_prompt}" Command="{Binding CopyPromptCommand}" Margin="0,0,8,8" />
+        <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" Margin="0,0,8,8" />
       </WrapPanel>
       <TextBlock Text="{Binding Status}" Classes="muted" />
     </StackPanel>

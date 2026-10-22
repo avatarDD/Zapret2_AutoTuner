@@ -31,7 +31,17 @@ public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor) : IAutoTu
     public async Task<IEngineControl> EngineAsync(CancellationToken ct) =>
         new AgentEngineControl((await host.AgentAsync(ct).ConfigureAwait(false)).Client);
 
-    public AgentTrialOptions TrialOptions => new() { LuaDir = host.Bundle.LuaDir };
+    public AgentTrialOptions TrialOptions => new() { LuaDir = host.Bundle.LuaDir, UserLua = host.Resources.ApprovedLuaPaths() };
+
+    public ResourceStore? Resources => host.Resources;
+
+    /// <summary>The router of the settings, as the Resources page uses it; the MCP tool asks the user before running it.</summary>
+    public Task<Delivery.RouterResourceOperation> PrepareRouterResourceAsync(Delivery.RouterResourceAction action, Core.Resources.ResourceKind kind, string name, CancellationToken ct) =>
+        new RouterResourceService(host).PrepareAsync(action, kind, name, ct);
+
+    /// <summary>The run's log belongs to the UI thread: read there.</summary>
+    public BugReportInput BugReportContext() =>
+        Dispatcher.UIThread.CheckAccess() ? BugReports.From() : Dispatcher.UIThread.Invoke(() => BugReports.From());
 
     public Task<ProbeResult> ProbeAsync(HttpProbeOptions options, CancellationToken ct) => HttpProbe.RunAsync(options, ct);
 

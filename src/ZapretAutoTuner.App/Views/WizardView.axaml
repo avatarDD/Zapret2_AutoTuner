@@ -13,6 +13,7 @@
 
     <!-- navigation -->
     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0" HorizontalAlignment="Right">
+      <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" IsVisible="{Binding HasProblem}" />
       <Button Content="{l:T common.back}" Command="{Binding BackCommand}" IsVisible="{Binding !IsStep1}" IsEnabled="{Binding !Running}" />
       <Button Content="{l:T common.next}" Command="{Binding NextCommand}" IsVisible="{Binding IsStep4}" />
     </StackPanel>

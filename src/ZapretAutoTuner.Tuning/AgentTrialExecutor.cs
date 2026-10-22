@@ -69,6 +69,9 @@ public sealed record AgentTrialOptions
 /// </summary>
 public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target, AgentTrialOptions options) : ITrialExecutor
 {
+    /// <summary>The L2 probe; null is the native <see cref="HttpProbe"/> (the MCP host passes its own, the benchmark a simulated DPI).</summary>
+    public Func<HttpProbeOptions, CancellationToken, Task<ProbeResult>>? Probe { get; init; }
+
     public async Task<IReadOnlyList<TrialOutcome>> RunAsync(StrategyCandidate candidate, int attempts, Func<IReadOnlyList<TrialOutcome>, bool> stopEarly, CancellationToken ct)
     {
         try
@@ -113,7 +116,8 @@ public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target
             if (i > 0)
                 await Task.Delay(options.Pause, ct).ConfigureAwait(false);
             var address = target.Addresses[i % target.Addresses.Count];
-            var r = await HttpProbe.RunAsync(ProbeOptions(address), ct).ConfigureAwait(false);
+            var o = ProbeOptions(address);
+            var r = await (Probe is { } probe ? probe(o, ct) : HttpProbe.RunAsync(o, ct)).ConfigureAwait(false);
             outcomes.Add(ToOutcome(r, target.MinBytes));
             if (stopEarly(outcomes))
                 break;

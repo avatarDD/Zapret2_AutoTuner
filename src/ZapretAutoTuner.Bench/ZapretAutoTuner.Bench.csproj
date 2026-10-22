@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ZapretAutoTuner.Bench</RootNamespace>
+    <AssemblyName>ztuner-bench</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ZapretAutoTuner.Core\ZapretAutoTuner.Core.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Mcp\ZapretAutoTuner.Mcp.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ZapretAutoTuner.Bench.Tests" />
+  </ItemGroup>
+</Project>

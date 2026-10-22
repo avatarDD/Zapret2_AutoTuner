@@ -87,9 +87,10 @@ public sealed class SearchController(McpSession session)
         {
             Generator = new GeneratorOptions { Mode = searchMode, Labels = verdict.Labels },
             Priors = queued,
+            Learning = session.Host.SearchLearning(verdict.Primary.ToString()),
         }, sessionId, null);
         var cts = CancellationTokenSource.CreateLinkedTokenSource(session.StopToken);
-        var executor = new ControlledExecutor(this, new AgentTrialExecutor(engine, trialTarget, session.Host.TrialOptions), target, log, options, cts);
+        var executor = new ControlledExecutor(this, new AgentTrialExecutor(engine, trialTarget, session.Host.TrialOptions) { Probe = session.Host.ProbeAsync }, target, log, options, cts);
         var search = new StrategySearch(executor, options, log, new DirectProgress<SearchProgress>(p =>
         {
             lock (_lock)

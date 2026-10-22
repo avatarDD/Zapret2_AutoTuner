@@ -64,6 +64,12 @@ public interface IAutoTunerHost
     {
     }
 
+    /// <summary>
+    /// The learned search order (PLAN 4a.1) for a search_start on a target with this block label, as the wizard's search
+    /// gets it; null keeps the static order (learning switched off in Settings).
+    /// </summary>
+    Core.Search.SearchLearning? SearchLearning(string blockLabel) => null;
+
     /// <summary>The strategy resources (PLAN 4a.5); null when the program has none to offer.</summary>
     ResourceStore? Resources => null;
 

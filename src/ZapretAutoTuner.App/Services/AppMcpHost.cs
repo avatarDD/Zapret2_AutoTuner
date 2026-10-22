@@ -35,6 +35,9 @@ public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor) : IAutoTu
 
     public ResourceStore? Resources => host.Resources;
 
+    /// <summary>The MCP search learns like the wizard's: the provider from Settings, the label of the verdict.</summary>
+    public Core.Search.SearchLearning? SearchLearning(string blockLabel) => SearchContext.For(host, blockLabel).Learning;
+
     /// <summary>The router of the settings, as the Resources page uses it; the MCP tool asks the user before running it.</summary>
     public Task<Delivery.RouterResourceOperation> PrepareRouterResourceAsync(Delivery.RouterResourceAction action, Core.Resources.ResourceKind kind, string name, CancellationToken ct) =>
         new RouterResourceService(host).PrepareAsync(action, kind, name, ct);

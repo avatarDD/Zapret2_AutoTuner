@@ -43,6 +43,7 @@ sudo -E env "PATH=$PATH" ZT_ZAPRET2_DIR=$PWD/runtimes/linux-x64/zapret2 \
 | `src/ZapretAutoTuner.Probes` | пробы: DNS, curl, браузер |
 | `src/ZapretAutoTuner.Tools` | бандл zapret2 и внешние инструменты |
 | `src/ZapretAutoTuner.App` | интерфейс (Avalonia) |
+| `src/ZapretAutoTuner.Bench` | `ztuner-bench`: замер «испытаний до успеха» на симулированных DPI (статический порядок, бандит, модель; PLAN 4a.3) |
 | `third_party/zapret2` | lua, `protocol.c` и `nfqws.c` бандлимой версии zapret2 (MIT), с ними сверяется каталог |
 | `tools/bundle` | скачивание и проверка закреплённого релиза zapret2 |
 | `tests/pcaps`, `tools/pcaps` | корпус пакетов и эталон tshark для разбора TLS, JA4, QUIC, RST |

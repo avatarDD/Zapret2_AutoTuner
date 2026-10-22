@@ -69,6 +69,8 @@ public sealed partial class WizardViewModel : PageViewModel
     {
         _host = host;
         Providers = [.. ProviderCatalog.Default.Providers.Select(p => new ProviderItem(p))];
+        _guiUrl = host.Settings.GuiUrl;
+        _routerHost = host.Settings.RouterHost;
     }
 
     public override string TitleKey => "nav.wizard";
@@ -385,9 +387,15 @@ public sealed partial class WizardViewModel : PageViewModel
                     break;
             }
         }
-        catch (Exception e) when (e is ExportException or ZapretGuiException or IOException or HttpRequestException or InvalidOperationException or Renci.SshNet.Common.SshException)
+        catch (TaskCanceledException e)
         {
-            ExportStatus = e.Message;
+            // HttpClient's timeout comes as a cancellation
+            ExportStatus = L.F("export.timeout", e.Message);
+        }
+        catch (Exception e)
+        {
+            // a wrong address, a refused or dropped connection, a router that said no: shown, never a crash
+            ExportStatus = L.F("export.failed", e.Message);
         }
     }
 
@@ -407,13 +415,27 @@ public sealed partial class WizardViewModel : PageViewModel
             await Save(pkg, "autotuner-keenetic.zip");
             return;
         }
-        var plan = string.Join("\n", KeeneticDeployer.Plan(pkg).Select(st => "• " + L.Pick(st.Ru, st.En)));
-        if (Confirm is null || !await Confirm(L["export.keenetic_confirm"], plan))
+        var host = RouterHost.Trim();
+        var target = new SshTarget { Host = host, Password = RouterPassword };
+        // trust on first use: the key is learned before any password goes out, shown, and remembered per host
+        var seen = await SshRemoteShell.HostKeyAsync(target, CancellationToken.None);
+        var remembered = _host.Settings.RouterHostKey(host, target.Port);
+        var check = HostKeys.Check(remembered, seen);
+        if (check == HostKeyCheck.Mismatch)
+        {
+            ExportStatus = L.F("export.hostkey_mismatch", host, remembered, seen);
             return;
-        using var sh = await SshRemoteShell.ConnectAsync(new SshTarget { Host = RouterHost, Password = RouterPassword, TrustHostKey = _ => true }, CancellationToken.None);
+        }
+        var plan = string.Join("\n", KeeneticDeployer.Plan(pkg).Select(st => "• " + L.Pick(st.Ru, st.En)));
+        var key = check == HostKeyCheck.FirstUse ? L.F("export.hostkey_first", host, seen) : L.F("export.hostkey_known", seen);
+        if (Confirm is null || !await Confirm(L["export.keenetic_confirm"], key + "\n\n" + plan))
+            return;
+        using var sh = await SshRemoteShell.ConnectAsync(target with { TrustHostKey = fp => fp == seen }, CancellationToken.None);
+        if (check == HostKeyCheck.FirstUse)
+            _host.Settings.RememberRouterHostKey(host, target.Port, seen);
         var r = await KeeneticDeployer.DeployAsync(sh, pkg, confirmedByUser: true);
         ExportStatus = r.Ok ? L["export.delivered"] : $"{r.Error}{(r.RolledBack ? " — " + L["export.rolled_back"] : "")}";
-        _host.Settings.RouterHost = RouterHost;
+        _host.Settings.RouterHost = host;
     }
 
     /// <summary>zapret-gui: save (first yes), then apply (second yes), as strategy-export §3.2 asks.</summary>
@@ -425,7 +447,12 @@ public sealed partial class WizardViewModel : PageViewModel
             await Save(pkg, "autotuner-zapret-gui.zip");
             return;
         }
-        using var http = new HttpClient { BaseAddress = new Uri(GuiUrl.TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(30) };
+        if (ZapretGuiClient.BaseAddress(GuiUrl) is not { } baseAddress)
+        {
+            ExportStatus = L.F("export.bad_url", GuiUrl);
+            return;
+        }
+        using var http = new HttpClient { BaseAddress = baseAddress, Timeout = TimeSpan.FromSeconds(30) };
         var client = new ZapretGuiClient(http, null, string.IsNullOrEmpty(GuiPassword) ? null : GuiPassword);
         var plan = await client.PlanAsync(s);
         var text = string.Join("\n", plan.Steps.Select(st => "• " + L.Pick(st.Ru, st.En)));
@@ -433,7 +460,7 @@ public sealed partial class WizardViewModel : PageViewModel
             return;
         var id = await client.SaveAsync(s, plan, confirmedByUser: true);
         ExportStatus = L.F("export.gui_saved", id);
-        _host.Settings.GuiUrl = GuiUrl;
+        _host.Settings.GuiUrl = baseAddress.ToString();
         if (await Confirm(L["export.gui_apply"], L.F("export.gui_apply_text", id)))
         {
             await client.ApplyAsync(id, confirmedByUser: true);

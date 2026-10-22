@@ -13,6 +13,11 @@ public sealed record LiveMonitorOptions
     public TimeSpan Slice { get; init; } = TimeSpan.FromSeconds(60);
 
     public DetectorOptions Detector { get; init; } = new();
+
+    /// <summary>The pause after a failed slice; it doubles with each failure in a row, up to <see cref="MaxRetryDelay"/>.</summary>
+    public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(5);
+
+    public TimeSpan MaxRetryDelay { get; init; } = TimeSpan.FromMinutes(5);
 }
 
 /// <summary>
@@ -36,26 +41,68 @@ public sealed class LiveMonitor(IProgramMonitor capture, LiveMonitorOptions opti
         remove => _detector.WindowClosed -= value;
     }
 
-    /// <summary>Runs slice after slice until cancelled; the current capture is always stopped.</summary>
+    /// <summary>
+    /// A slice failed (the Agent dropped, the capture could not start, the pcap did not parse); the monitor waits and
+    /// tries again. The argument is the failure and the number of failures in a row.
+    /// </summary>
+    public event Action<Exception, int>? Failed;
+
+    /// <summary>
+    /// Runs slice after slice until cancelled; the current capture is always stopped. A failed slice does not end the
+    /// watch: it is reported, and the next one starts after a growing pause.
+    /// </summary>
     public async Task RunAsync(CancellationToken ct)
     {
+        int failures = 0;
         while (!ct.IsCancellationRequested)
         {
-            var id = await capture.StartCaptureAsync(ct).ConfigureAwait(false);
-            byte[] pcap;
             try
             {
-                await Task.Delay(options.Slice, ct).ConfigureAwait(false);
+                await SliceAsync(ct).ConfigureAwait(false);
+                failures = 0;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                break;
             }
-            finally
+            catch (Exception e)
             {
-                (pcap, _) = await capture.StopCaptureAsync(id, CancellationToken.None).ConfigureAwait(false);
+                failures++;
+                Failed?.Invoke(e, failures);
+                try
+                {
+                    await Task.Delay(Backoff(failures), ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
             }
-            Feed(PcapReader.Read(pcap), DateTime.UtcNow);
         }
+    }
+
+    internal TimeSpan Backoff(int failures)
+    {
+        var ticks = options.RetryDelay.Ticks * Math.Pow(2, Math.Min(failures - 1, 20));
+        return TimeSpan.FromTicks((long)Math.Min(ticks, options.MaxRetryDelay.Ticks));
+    }
+
+    private async Task SliceAsync(CancellationToken ct)
+    {
+        var id = await capture.StartCaptureAsync(ct).ConfigureAwait(false);
+        byte[] pcap;
+        try
+        {
+            await Task.Delay(options.Slice, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            (pcap, _) = await capture.StopCaptureAsync(id, CancellationToken.None).ConfigureAwait(false);
+        }
+        Feed(PcapReader.Read(pcap), DateTime.UtcNow);
     }
 
     /// <summary>One slice: its flows to the strategy's domains go to the detector, then due windows close.</summary>

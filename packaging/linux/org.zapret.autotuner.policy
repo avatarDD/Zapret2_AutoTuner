@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
-<!-- The UI starts the privileged Agent through pkexec (AGENTS.md rule 6): the engine, nft rules and capture. -->
+<!-- The UI starts the privileged Agent through pkexec (AGENTS.md rule 6): the engine, nft rules and capture.
+     auth_admin, not auth_admin_keep: a kept authorisation would let any process of the session start the Agent
+     again without asking. Under pkexec the Agent ignores its engine and hosts-file options (AgentOptions.Pkexec). -->
 <policyconfig>
   <action id="org.zapret.autotuner.agent">
     <description>Run the Zapret2 AutoTuner agent</description>
@@ -11,7 +13,7 @@
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>
-      <allow_active>auth_admin_keep</allow_active>
+      <allow_active>auth_admin</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/opt/zapret-autotuner/ztuner-agent</annotate>
   </action>

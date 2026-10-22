@@ -545,7 +545,7 @@ WinDivert sniff или AF_PACKET (только заголовки и CH, без 
   официальные сборки Playwright. curl не нужен: пробы встроены. Свои пересборки не
   выпускаем.
 - Установщики: Windows — MSIX/Inno Setup (подпись кода, если появится
-  сертификат) и portable zip. Linux — AppImage, .deb, .rpm (Agent как
+  сертификат) и portable zip. Linux — .deb, .rpm, tar.gz (Agent как
   systemd-юнит, polkit-правило).
 - Документация пользователя, FAQ («антивирус ругается на WinDivert»,
   «VirtualBox NAT»).
@@ -553,10 +553,22 @@ WinDivert sniff или AF_PACKET (только заголовки и CH, без 
 
 **Сделано (фаза 9):** `.github/workflows/release.yml` по тегу `v*` собирает
 и публикует релиз (тесты, бандл по lock-файлу с `--strict`, проверка
-`--version` движка и Agent, Inno Setup + portable zip, .deb/.rpm/AppImage/
-tar.gz для x64 и arm64, `SHA256SUMS.txt`). Agent в Linux запускается через
+`--version` движка и Agent, Inno Setup + portable zip, .deb/.rpm/tar.gz для
+x64 и arm64, `SHA256SUMS.txt`). Agent в Linux запускается через
 pkexec по требованию, поэтому вместо systemd-юнита в пакетах polkit-правило
-`org.zapret.autotuner.policy`. Браузеры Playwright в релиз не кладутся
+`org.zapret.autotuner.policy` (`auth_admin` на каждый запуск, без
+`auth_admin_keep`; под pkexec Agent игнорирует `--engine` и `--hosts-file` и
+берёт только движок рядом с собой и системный hosts). Пререлизные версии в
+.deb/.rpm пишутся через `~` (`1.2.0~rc.1`), чтобы сортироваться до релиза.
+
+**AppImage убран из релиза 1.** Agent запускается через pkexec от root, а
+FUSE-образ AppImage смонтирован от пользователя и root его не читает
+(`allow_other` выключен), так что pkexec не может запустить Agent из
+образа. Скопировать Agent перед pkexec в каталог, куда может писать
+пользователь, нельзя: между копированием и запуском пользователь (или
+любой его процесс) подменит файл и получит root — дыра повышения прав.
+Вернуть AppImage можно только с Agent, установленным отдельно в системный
+каталог (пакет или systemd-юнит), — это вопрос релиза 2. Браузеры Playwright в релиз не кладутся
 (размер): L3 берёт установленный Chrome/Chromium/Edge. MSIX и подпись кода —
 когда появится сертификат. Руководство — `docs/USER.md`.
 

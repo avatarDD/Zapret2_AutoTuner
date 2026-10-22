@@ -6,8 +6,9 @@
 
 - **Windows 10/11 x64:** `ZapretAutoTuner-<версия>-win-x64-setup.exe` или
   portable-архив `…-portable.zip` (распаковать и запустить `ZapretAutoTuner.exe`).
-- **Linux x64 и arm64:** `.deb` (Debian, Ubuntu), `.rpm` (Fedora, openSUSE),
-  `.AppImage` или `.tar.gz`. Нужны nftables (или iptables) и polkit (`pkexec`).
+- **Linux x64 и arm64:** `.deb` (Debian, Ubuntu), `.rpm` (Fedora, openSUSE)
+  или `.tar.gz`. Нужны nftables (или iptables) и polkit (`pkexec`). AppImage
+  нет: агент с правами root не может запуститься из её FUSE-образа.
 
 Файлы можно сверить с `SHA256SUMS.txt` из релиза. Движок zapret2 внутри —
 официальная сборка bol-van/zapret2 без изменений.
@@ -71,8 +72,9 @@ firewall; окно программы работает без них. При в�
 ## Install
 
 - **Windows 10/11 x64:** the `…-setup.exe` installer or the `…-portable.zip`.
-- **Linux x64 and arm64:** `.deb`, `.rpm`, `.AppImage` or `.tar.gz`. Needs
-  nftables (or iptables) and polkit (`pkexec`).
+- **Linux x64 and arm64:** `.deb`, `.rpm` or `.tar.gz`. Needs nftables (or
+  iptables) and polkit (`pkexec`). There is no AppImage: the root agent cannot
+  start from its FUSE mount.
 
 Check files against `SHA256SUMS.txt`. The bundled zapret2 is the unmodified
 official bol-van/zapret2 build.

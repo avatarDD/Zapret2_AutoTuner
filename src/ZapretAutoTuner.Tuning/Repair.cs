@@ -99,9 +99,11 @@ public enum ApplyPolicy
 }
 
 /// <summary>
-/// Hot replacement of the strategy for one domain (PLAN 7.3.4): the new instance starts first, the old one stops only
-/// when the new one runs, so the domain is never left without bypass. On Windows the two instances' filters differ
-/// (the new one is limited to the domain's addresses), which keeps WinDivert's duplicate check happy.
+/// Hot replacement of the protection (PLAN 7.3.4): the new instance starts first, the old one stops only when the new
+/// one runs, so the domain is never left without bypass. On Linux the two instances must sit on different queues (the
+/// Agent refuses a busy one), so the caller alternates <see cref="Protection.QueueNum"/> and
+/// <see cref="Protection.AltQueueNum"/>. On Windows both WinDivert handles see the same traffic for the moment of the
+/// overlap; that is the price of never dropping the bypass.
 /// </summary>
 public static class HotSwap
 {
@@ -118,6 +120,9 @@ public static class HotSwap
 /// <summary>Turns detector events into repair runs, one domain at a time, and records what happened.</summary>
 public sealed class RepairCoordinator(IRepairSteps steps, Func<string, StrategyCandidate?> currentOf, ApplyPolicy policy)
 {
+    /// <summary>The reason the user's "Не работает сейчас" goes into the journal with.</summary>
+    public static readonly (string Ru, string En) UserReport = ("пользователь сообщил, что не работает", "the user reported it broken");
+
     private readonly HashSet<string> _running = new(StringComparer.OrdinalIgnoreCase);
 
     public ApplyPolicy Policy { get; set; } = policy;
@@ -125,7 +130,8 @@ public sealed class RepairCoordinator(IRepairSteps steps, Func<string, StrategyC
     /// <summary>A repair finished: the UI asks the user (Ask) or the caller applies it (Auto).</summary>
     public event Action<RepairResult, bool>? Finished;
 
-    public event Action<string, string, string>? Journal;
+    /// <summary>(domain, kind, reason in Russian, reason in English).</summary>
+    public event Action<string, string, string, string>? Journal;
 
     public bool IsRunning(string domain)
     {
@@ -138,17 +144,21 @@ public sealed class RepairCoordinator(IRepairSteps steps, Func<string, StrategyC
     /// without waiting for two bad windows.
     /// </summary>
     public Task<RepairResult?> OnUserReportAsync(string domain, CancellationToken ct) =>
-        OnEventAsync(new HealthEvent(domain, HealthChange.Degraded, DateTime.UtcNow, []), ct, "пользователь сообщил, что не работает / the user reported it broken");
+        OnEventAsync(new HealthEvent(domain, HealthChange.Degraded, DateTime.UtcNow, []), ct, UserReport);
 
     /// <summary>Handles a degradation; a domain already being repaired is skipped.</summary>
-    public async Task<RepairResult?> OnEventAsync(HealthEvent e, CancellationToken ct, string? why = null)
+    /// <param name="current">
+    /// The strategy the domain had; given when the caller has already taken the domain out of the running solution
+    /// (where <c>currentOf</c> would no longer find it).
+    /// </param>
+    public async Task<RepairResult?> OnEventAsync(HealthEvent e, CancellationToken ct, (string Ru, string En)? why = null, StrategyCandidate? current = null)
     {
         if (e.Change == HealthChange.Recovered)
         {
-            Journal?.Invoke(e.Domain, "recovered", "доля неудач снова ниже порога / failures back under the threshold");
+            Journal?.Invoke(e.Domain, "recovered", "доля неудач снова ниже порога", "failures back under the threshold");
             return null;
         }
-        if (currentOf(e.Domain) is not { } current)
+        if ((current ?? currentOf(e.Domain)) is not { } strategy)
             return null;
         lock (_running)
         {
@@ -158,9 +168,12 @@ public sealed class RepairCoordinator(IRepairSteps steps, Func<string, StrategyC
         try
         {
             var last = e.Windows.Count > 0 ? e.Windows[^1] : null;
-            Journal?.Invoke(e.Domain, "degraded", why ?? (last is null ? "деградация" : $"неудач {last.Failures}/{last.Sessions}, чаще всего {last.MainFailure}"));
-            var r = await RepairRunner.RunAsync(e.Domain, current, steps, null, ct).ConfigureAwait(false);
-            Journal?.Invoke(e.Domain, RepairRunner.JournalKind(r.Verdict), r.ReasonRu);
+            var (ru, en) = why ?? (last is null
+                ? ("деградация", "degraded")
+                : ($"неудач {last.Failures}/{last.Sessions}, чаще всего {last.MainFailure}", $"failures {last.Failures}/{last.Sessions}, mostly {last.MainFailure}"));
+            Journal?.Invoke(e.Domain, "degraded", ru, en);
+            var r = await RepairRunner.RunAsync(e.Domain, strategy, steps, null, ct).ConfigureAwait(false);
+            Journal?.Invoke(e.Domain, RepairRunner.JournalKind(r.Verdict), r.ReasonRu, r.ReasonEn);
             Finished?.Invoke(r, Policy == ApplyPolicy.Auto && r.Verdict == RepairVerdict.Replaced);
             return r;
         }

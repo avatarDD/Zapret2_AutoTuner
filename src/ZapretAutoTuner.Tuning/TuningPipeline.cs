@@ -149,6 +149,20 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
             return (new TargetOutcome(host, verdict, null, [], null), null);
         }
 
+        try
+        {
+            return await SearchAsync(host, verdict, index, count, sw, ct).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            // the Agent dropped, the engine was refused for good, a probe threw: this target fails, the others go on
+            Stage(host, PipelineStage.Failed, "Подбор прерван: " + e.Message, "The search broke off: " + e.Message);
+            return (new TargetOutcome(host, verdict, null, [], e.Message), null);
+        }
+    }
+
+    private async Task<(TargetOutcome, ITrialExecutor?)> SearchAsync(string host, ClassifierVerdict verdict, int index, int count, Stopwatch sw, CancellationToken ct)
+    {
         var addresses = verdict.LiveAddresses.Select(IPAddress.Parse).ToList();
         var executor = services.ExecutorFor(host, addresses);
         var searchOptions = options.Search with { Generator = options.Search.Generator with { Labels = verdict.Labels } };

@@ -57,11 +57,20 @@ public sealed class ViewsTests : IAsyncLifetime
         Assert.Equal("auto", _host.Settings.ApplyPolicy);
         Assert.Equal("192.168.1.1", _host.Settings.RouterHost);
         s.GuiToken = "secret";
-        Assert.Equal("", _host.Settings.GuiToken); // not remembered unless asked
-        s.RememberToken = true;
-        Assert.Equal("secret", _host.Settings.GuiToken);
-        s.RememberToken = false;
-        Assert.Equal("", _host.Settings.GuiToken);
+        Assert.Equal("secret", _host.Settings.GuiToken);   // for this run
+        Assert.Null(_host.Kb.GetSetting("gui.token"));    // never in the file
+        // the monitor and the settings page share one auto-apply switch
+        var m = new MonitorViewModel(_host);
+        Assert.True(m.AutoApply);
+        m.AutoApply = false;
+        Assert.Equal("ask", _host.Settings.ApplyPolicy);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.False(s.AutoApply);
+        s.AutoApply = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(m.AutoApply);
+        // the wizard starts from the remembered addresses
+        Assert.Equal("192.168.1.1", new WizardViewModel(_host).RouterHost);
     }
 
     [AvaloniaFact]

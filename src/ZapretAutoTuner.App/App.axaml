@@ -10,6 +10,7 @@
     <DataTemplate DataType="vm:MonitorViewModel"><v:MonitorView /></DataTemplate>
     <DataTemplate DataType="vm:ReportsViewModel"><v:ReportsView /></DataTemplate>
     <DataTemplate DataType="vm:ExpertViewModel"><v:ExpertView /></DataTemplate>
+    <DataTemplate DataType="vm:ResourcesViewModel"><v:ResourcesView /></DataTemplate>
     <DataTemplate DataType="vm:SettingsViewModel"><v:SettingsView /></DataTemplate>
     <DataTemplate DataType="vm:AdvisorViewModel"><v:AdvisorView /></DataTemplate>
   </Application.DataTemplates>

@@ -13,6 +13,8 @@ public enum McpScope
 
     /// <summary>Experiments on the router through zapret-gui (router_experiment_*).</summary>
     Router,
+    /// <summary>Strategy resources (PLAN 4a.5): hostlists, ipsets, blobs, Lua drafts; never approval of a script.</summary>
+    Resources,
 }
 
 /// <summary>
@@ -21,7 +23,7 @@ public enum McpScope
 /// not silently ignored. There is no switch for anything else: the
 /// program has no code for a shell, files or the OS, so there is nothing to switch on.
 /// </summary>
-public sealed record McpPermissions(bool Probes = false, bool Control = false, bool Experiments = false, bool Export = false, bool Router = false)
+public sealed record McpPermissions(bool Probes = false, bool Control = false, bool Experiments = false, bool Export = false, bool Router = false, bool Resources = false)
 {
     public static IReadOnlyDictionary<McpScope, McpScope[]> Requires { get; } = new Dictionary<McpScope, McpScope[]>
     {
@@ -40,6 +42,7 @@ public sealed record McpPermissions(bool Probes = false, bool Control = false, b
         McpScope.Experiments => Experiments,
         McpScope.Export => Export,
         McpScope.Router => Router,
+        McpScope.Resources => Resources,
         _ => false,
     };
 

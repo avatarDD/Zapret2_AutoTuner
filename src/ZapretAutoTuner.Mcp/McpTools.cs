@@ -8,7 +8,7 @@ public sealed record McpToolDefinition(string Name, McpScope Scope, string Descr
 
 /// <summary>
 /// Every tool of the server (MCP design, "Инструменты"). Only functions of the program: no shell, no paths, no URLs,
-/// no engine options, no Lua, no OS. Objects are named by program ids (target host, s-… strategy, tr-… trial). The list
+/// no engine options, no Lua code beyond the typed drafts of resource_create (which only the user can approve), no OS. Objects are named by program ids (target host, s-… strategy, tr-… trial). The list
 /// and the schemas are pinned by a golden test: a new tool or argument does not appear without editing it.
 /// </summary>
 public static class McpTools
@@ -141,6 +141,9 @@ public static class McpTools
         new("router_experiment_rollback", McpScope.Router,
             "Reverts the router at once to its state before the experiment (a kept variant too). A committed variant stays.",
             S.Empty()),
+        // bug report draft (read) and strategy resources (PLAN 4a.5, 4a.6)
+        BugReportTool.Definition,
+        .. ResourceTools.Definitions,
     ];
 
     public static McpToolDefinition? Find(string name) => All.FirstOrDefault(t => t.Name == name);

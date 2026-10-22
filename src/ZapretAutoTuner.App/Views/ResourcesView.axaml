@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.ResourcesView"
+             x:DataType="vm:ResourcesViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Spacing="6">
+      <TextBlock Classes="h1" Text="{l:T resources.title}" />
+      <TextBlock Classes="muted" Text="{l:T resources.subtitle}" />
+      <ComboBox ItemsSource="{Binding KindTitles}" SelectedIndex="{Binding KindIndex}" MinWidth="220" Margin="0,4" />
+    </StackPanel>
+    <Border DockPanel.Dock="Bottom" Classes="card" Margin="0,8,0,0">
+      <StackPanel Spacing="6">
+        <TextBlock Text="{Binding RouterText}" TextWrapping="Wrap" />
+        <WrapPanel>
+          <TextBox Text="{Binding RouterPassword}" PasswordChar="•" Watermark="{l:T resources.router_password}" Width="220" Margin="0,0,8,8" />
+          <Button Content="{l:T resources.push}" Command="{Binding PushCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,8" />
+          <Button Content="{l:T resources.router_delete}" Command="{Binding RouterDeleteCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,8" />
+        </WrapPanel>
+      </StackPanel>
+    </Border>
+    <Grid ColumnDefinitions="260,*" Margin="0,4,0,0">
+      <DockPanel Margin="0,0,12,0">
+        <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+          <Button Content="{l:T resources.new}" Command="{Binding NewCommand}" Margin="0,0,8,0" />
+          <Button Content="{l:T resources.reload}" Command="{Binding ReloadCommand}" />
+        </WrapPanel>
+        <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ResourceRowViewModel">
+              <StackPanel>
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Details}" Classes="muted" FontSize="12" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <DockPanel Grid.Column="1">
+        <StackPanel DockPanel.Dock="Top" Spacing="6">
+          <TextBox Text="{Binding Name}" IsEnabled="{Binding IsNew}" Watermark="{l:T resources.name}" />
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsBlob}">
+            <TextBlock Text="{l:T resources.encoding}" VerticalAlignment="Center" />
+            <ComboBox ItemsSource="{Binding BlobEncodings}" SelectedIndex="{Binding BlobEncodingIndex}" />
+          </StackPanel>
+          <TextBlock Text="{Binding Approval}" FontWeight="SemiBold" IsVisible="{Binding IsLua}" />
+          <TextBlock Classes="muted" Text="{Binding ContentHint}" />
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
+          <WrapPanel>
+            <Button Classes="accent" Content="{l:T resources.save}" Command="{Binding SaveCommand}" Margin="0,0,8,8" />
+            <Button Content="{l:T resources.approve}" Command="{Binding ApproveCommand}" IsVisible="{Binding IsLua}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,8" />
+            <Button Content="{l:T resources.delete}" Command="{Binding DeleteCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,8" />
+            <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" IsVisible="{Binding HasProblem}" Margin="0,0,8,8" />
+          </WrapPanel>
+          <SelectableTextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding Problems}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+        <TextBox Text="{Binding Content}" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="monospace" FontSize="12" />
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</UserControl>

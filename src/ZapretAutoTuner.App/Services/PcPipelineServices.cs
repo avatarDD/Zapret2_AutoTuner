@@ -22,7 +22,7 @@ public sealed class PcPipelineServices(AppHost host, IEngineControl engine, bool
     {
         var target = new TrialTarget { Host = domain, Addresses = addresses };
         _sessions[domain] = (0, target);
-        return new AgentTrialExecutor(engine, target, new AgentTrialOptions { LuaDir = host.Bundle.LuaDir });
+        return new AgentTrialExecutor(engine, target, new AgentTrialOptions { LuaDir = host.Bundle.LuaDir, UserLua = host.Resources.ApprovedLuaPaths() });
     }
 
     public Task<IReadOnlyList<FinalCheckResult>>? FinalCheckAsync(string domain, ITrialExecutor executor, IReadOnlyList<FoundStrategy> found, CancellationToken ct)

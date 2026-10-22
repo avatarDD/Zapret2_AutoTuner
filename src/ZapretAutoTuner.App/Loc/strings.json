@@ -107,6 +107,74 @@
   "Агент остановился: {0}. Он запустится снова при следующем действии.",
   "The agent stopped: {0}. It starts again on the next action."
  ],
+ "bugreport.archive_saved": [
+  "Архив {0} сохранён и упомянут в тексте: приложите его к заявке.",
+  "The archive {0} is saved and named in the text: attach it to the issue."
+ ],
+ "bugreport.archive_saved_edited": [
+  "Архив {0} сохранён; текст вы правили, поэтому он не пересобран — приложите архив к заявке.",
+  "The archive {0} is saved; you edited the text, so it was not rebuilt — attach the archive to the issue."
+ ],
+ "bugreport.button": [
+  "Сообщить о проблеме",
+  "Report a problem"
+ ],
+ "bugreport.close": [
+  "Закрыть",
+  "Close"
+ ],
+ "bugreport.copy": [
+  "Копировать текст",
+  "Copy text"
+ ],
+ "bugreport.issue_title": [
+  "Заголовок заявки",
+  "Issue title"
+ ],
+ "bugreport.open": [
+  "Открыть на GitHub",
+  "Open on GitHub"
+ ],
+ "bugreport.opened": [
+  "Страница новой заявки открыта в браузере: проверьте поля и отправьте.",
+  "The new issue page is open in the browser: check the fields and submit."
+ ],
+ "bugreport.opened_paste": [
+  "Текст не поместился в ссылку: он скопирован — вставьте его в заявку на открытой странице.",
+  "The text did not fit into the link: it is copied — paste it into the issue on the opened page."
+ ],
+ "bugreport.paste_here": [
+  "(Вставьте сюда полный текст из AutoTuner: он скопирован в буфер обмена.)",
+  "(Paste the full text from AutoTuner here: it is on the clipboard.)"
+ ],
+ "bugreport.save_archive": [
+  "Сохранить архив",
+  "Save archive"
+ ],
+ "bugreport.subtitle": [
+  "Черновик заявки с версиями и отладочными данными. IP-адреса скрыты всегда, домены — по выбору. Ничего не отправляется само: проверьте и поправьте текст, затем откройте страницу GitHub и отправьте заявку сами.",
+  "A draft issue with versions and debug data. IP addresses are always masked, domains on request. Nothing is sent by itself: check and edit the text, then open the GitHub page and submit it yourself."
+ ],
+ "bugreport.target_autotuner": [
+  "AutoTuner",
+  "AutoTuner"
+ ],
+ "bugreport.target_gui": [
+  "zapret-gui",
+  "zapret-gui"
+ ],
+ "bugreport.target_zapret2": [
+  "zapret2 (движок)",
+  "zapret2 (the engine)"
+ ],
+ "bugreport.title": [
+  "Сообщить о проблеме",
+  "Report a problem"
+ ],
+ "bugreport.where": [
+  "Куда:",
+  "Where:"
+ ],
  "common.back": [
   "Назад",
   "Back"
@@ -439,6 +507,10 @@
   "Пробы: классификация и проверки целей из списка",
   "Probes: classify and check the listed targets"
  ],
+ "mcp.perm_resources": [
+  "Ресурсы: хостлисты, ipset'ы, блобы и черновики Lua (подтвердить скрипт можно только здесь; отправка на роутер — ещё и с «Экспортом»)",
+  "Resources: hostlists, ipsets, blobs and Lua drafts (only you can approve a script, here; sending to the router also needs Export)"
+ ],
  "mcp.perm_router": [
   "router — эксперименты на роутере через zapret-gui (нужны control и probes)",
   "router — experiments on the router through zapret-gui (needs control and probes)"
@@ -555,6 +627,10 @@
   "Отчёты",
   "Reports"
  ],
+ "nav.resources": [
+  "Ресурсы",
+  "Resources"
+ ],
  "nav.settings": [
   "Настройки",
   "Settings"
@@ -622,6 +698,210 @@
  "reports.title": [
   "Отчёт для разбора",
   "Report for analysis"
+ ],
+ "resources.approve": [
+  "Подтвердить…",
+  "Approve…"
+ ],
+ "resources.approve_diff": [
+  "Разница с действующей версией",
+  "Diff with the version in effect"
+ ],
+ "resources.approve_first": [
+  "Скрипт ещё ни разу не подтверждался",
+  "The script was never approved before"
+ ],
+ "resources.approve_from": [
+  "Сейчас действует версия {0}",
+  "Version {0} is in effect now"
+ ],
+ "resources.approve_full": [
+  "Весь текст",
+  "Whole text"
+ ],
+ "resources.approve_no": [
+  "Отмена",
+  "Cancel"
+ ],
+ "resources.approve_text": [
+  "Версия {0} будет запускаться движком с его правами и сможет уйти на роутер. {1}. Изменения: +{2} −{3} строк. Прочитайте весь текст.",
+  "Version {0} will run in the engine with its rights and may go to the router. {1}. Changes: +{2} −{3} lines. Read the whole text."
+ ],
+ "resources.approve_title": [
+  "Подтвердить Lua-скрипт «{0}»",
+  "Approve the Lua script '{0}'"
+ ],
+ "resources.approve_yes": [
+  "Подтвердить",
+  "Approve"
+ ],
+ "resources.approved": [
+  "подтверждён",
+  "approved"
+ ],
+ "resources.approved_done": [
+  "«{0}»: версия {1} подтверждена.",
+  "'{0}': version {1} approved."
+ ],
+ "resources.approved_new_draft": [
+  "подтверждена прежняя версия, новая ждёт подтверждения",
+  "an older version is approved, the new one waits for approval"
+ ],
+ "resources.bytes": [
+  "{0} байт",
+  "{0} bytes"
+ ],
+ "resources.check_failed": [
+  "Скрипт не прошёл проверку: исправьте ошибки и сохраните.",
+  "The script failed the check: fix the errors and save."
+ ],
+ "resources.delete": [
+  "Удалить",
+  "Delete"
+ ],
+ "resources.delete_text": [
+  "Удалить {0} «{1}» со всеми версиями ({2})? Это нельзя отменить.",
+  "Delete the {0} '{1}' with all its versions ({2})? This cannot be undone."
+ ],
+ "resources.delete_title": [
+  "Удалить ресурс?",
+  "Delete the resource?"
+ ],
+ "resources.deleted": [
+  "«{0}» удалён.",
+  "'{0}' deleted."
+ ],
+ "resources.draft": [
+  "черновик, не подтверждён",
+  "draft, not approved"
+ ],
+ "resources.encoding": [
+  "Формат:",
+  "Format:"
+ ],
+ "resources.hint_blob": [
+  "Байты в hex (пробелы и : можно) или base64, от 1 до 16384 байт. Имя — идентификатор Lua: буквы, цифры и _.",
+  "Bytes in hex (spaces and : allowed) or base64, 1 to 16384 bytes. The name is a Lua identifier: letters, digits and _."
+ ],
+ "resources.hint_hostlist": [
+  "Один домен в строке: example.com (поддомены входят сами), ^example.com — без поддоменов. Адреса сайтов и *. приводятся к доменам.",
+  "One domain per line: example.com (subdomains are included), ^example.com without subdomains. URLs and *. are turned into domains."
+ ],
+ "resources.hint_ipset": [
+  "Один адрес или подсеть в строке: 203.0.113.7, 198.51.100.0/24, 2001:db8::/32.",
+  "One address or subnet per line: 203.0.113.7, 198.51.100.0/24, 2001:db8::/32."
+ ],
+ "resources.hint_lua": [
+  "Функция десинхронизации: function имя(ctx, desync) … end. Имена функций zapret2 занимать нельзя. Сохранение создаёт черновик; в работу его включает «Подтвердить».",
+  "A desync function: function name(ctx, desync) … end. zapret2's function names are taken. Saving makes a draft; Approve puts it to work."
+ ],
+ "resources.items": [
+  "{0} строк",
+  "{0} entries"
+ ],
+ "resources.kind_blob": [
+  "Блобы",
+  "Blobs"
+ ],
+ "resources.kind_hostlist": [
+  "Хостлисты",
+  "Hostlists"
+ ],
+ "resources.kind_ipset": [
+  "IP-списки (ipset)",
+  "IP lists (ipset)"
+ ],
+ "resources.kind_lua": [
+  "Lua-скрипты",
+  "Lua scripts"
+ ],
+ "resources.name": [
+  "Имя (a-z, 0-9, _ и -)",
+  "Name (a-z, 0-9, _ and -)"
+ ],
+ "resources.new": [
+  "Новый",
+  "New"
+ ],
+ "resources.no_router": [
+  "Роутер не настроен: укажите адрес zapret-gui или роутера nfqws2-keenetic в настройках или в мастере.",
+  "No router is configured: set the zapret-gui address or the nfqws2-keenetic router in the settings or the wizard."
+ ],
+ "resources.push": [
+  "На роутер…",
+  "To the router…"
+ ],
+ "resources.push_title": [
+  "Отправить {0} «{1}» на роутер ({2})?",
+  "Send the {0} '{1}' to the router ({2})?"
+ ],
+ "resources.reload": [
+  "Обновить",
+  "Refresh"
+ ],
+ "resources.router": [
+  "Роутер: {0}",
+  "Router: {0}"
+ ],
+ "resources.router_delete": [
+  "Удалить с роутера…",
+  "Delete from the router…"
+ ],
+ "resources.router_delete_title": [
+  "Удалить {0} «{1}» с роутера ({2})?",
+  "Delete the {0} '{1}' from the router ({2})?"
+ ],
+ "resources.router_done": [
+  "Готово: {0}.",
+  "Done: {0}."
+ ],
+ "resources.router_failed": [
+  "Роутер: ошибка — {0}",
+  "Router: failed — {0}"
+ ],
+ "resources.router_password": [
+  "Пароль (только на этот сеанс)",
+  "Password (this session only)"
+ ],
+ "resources.router_preparing": [
+  "Готовлю план для роутера…",
+  "Preparing the plan for the router…"
+ ],
+ "resources.save": [
+  "Сохранить",
+  "Save"
+ ],
+ "resources.save_first": [
+  "Сначала сохраните изменения: подтверждается сохранённая версия.",
+  "Save your changes first: the saved version is what gets approved."
+ ],
+ "resources.saved": [
+  "Сохранено.",
+  "Saved."
+ ],
+ "resources.saved_draft": [
+  "Сохранено как черновик: скрипт не запустится, пока вы его не подтвердите.",
+  "Saved as a draft: the script does not run until you approve it."
+ ],
+ "resources.subtitle": [
+  "Хостлисты, ipset'ы, блобы и свои Lua-скрипты. Ресурс, который использует стратегия, удалить нельзя. Lua-скрипт работает с правами движка: он запускается и уходит на роутер только после вашего подтверждения.",
+  "Hostlists, ipsets, blobs and your own Lua scripts. A resource a strategy uses cannot be deleted. A Lua script runs with the engine's rights: it runs and goes to the router only after you approve it."
+ ],
+ "resources.title": [
+  "Ресурсы стратегий",
+  "Strategy resources"
+ ],
+ "resources.unchanged": [
+  "Содержимое не изменилось.",
+  "The content did not change."
+ ],
+ "resources.used_by": [
+  "используется: {0}",
+  "used by {0}"
+ ],
+ "resources.version": [
+  "версия {0}",
+  "version {0}"
  ],
  "settings.auto_apply_hint": [
   "По умолчанию найденное исправление ждёт вашего «Применить».",

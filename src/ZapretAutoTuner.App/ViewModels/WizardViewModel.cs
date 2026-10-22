@@ -85,6 +85,23 @@ public sealed partial class WizardViewModel : PageViewModel
     /// <summary>Set by the view: a yes/no dialog. Rule 7: nothing goes to a router or zapret-gui without it.</summary>
     public Func<string, string, Task<bool>>? Confirm { get; set; }
 
+    /// <summary>Set by the window: the "Сообщить о проблеме" dialog (PLAN 4a.6).</summary>
+    public Func<BugReportInput, Task>? ReportProblem { get; set; }
+
+    /// <summary>What went wrong last (a failed run, an engine refusal, a zapret-gui error); shows the report button.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasProblem))]
+    private BugReportInput? _problem;
+
+    public bool HasProblem => Problem is not null;
+
+    [RelayCommand]
+    private async Task ReportProblemAsync()
+    {
+        if (ReportProblem is not null)
+            await ReportProblem(Problem ?? BugReports.From());
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsStep1), nameof(IsStep2), nameof(IsStep4), nameof(IsStep5))]
     private int _step = 1;
@@ -235,6 +252,7 @@ public sealed partial class WizardViewModel : PageViewModel
             return;
         }
         Error = "";
+        Problem = null;
         if (OnRouter)
         {
             await RouterAsync(hosts);
@@ -270,6 +288,8 @@ public sealed partial class WizardViewModel : PageViewModel
                 result = await ProvidersAsync(result, providers, engine, _cts.Token);
             SessionState.I.Last = result;
             ShowResults(result);
+            if (result.Solution is null && result.Targets.Count > 0)
+                Problem = BugReports.From(null, BugKind.TuningFailed);
             Step = 4;
         }
         catch (OperationCanceledException)
@@ -280,6 +300,7 @@ public sealed partial class WizardViewModel : PageViewModel
         {
             Error = e.Message;
             AddLog(e.Message);
+            Problem = BugReports.From(e);
         }
         finally
         {
@@ -586,6 +607,8 @@ public sealed partial class WizardViewModel : PageViewModel
         }
         try
         {
+            // the user's hostlists, blobs and approved Lua scripts the solution uses go along (PLAN 4a.5)
+            _host.Resources.AttachTo(s);
             switch (key)
             {
                 case "pc":
@@ -613,10 +636,15 @@ public sealed partial class WizardViewModel : PageViewModel
             // HttpClient's timeout comes as a cancellation
             ExportStatus = L.F("export.timeout", e.Message);
         }
+        catch (Core.Resources.ResourceException e)
+        {
+            ExportStatus = L.Pick(e.Ru, e.En);
+        }
         catch (Exception e)
         {
             // a wrong address, a refused or dropped connection, a router that said no: shown, never a crash
             ExportStatus = L.F("export.failed", e.Message);
+            Problem = BugReports.From(e);
         }
     }
 

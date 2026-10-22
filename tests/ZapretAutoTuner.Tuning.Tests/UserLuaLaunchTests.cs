@@ -33,4 +33,17 @@ public sealed class UserLuaLaunchTests
         var (config, _) = ConfigCheck.BuildLaunch(s, [target], options);
         Assert.Contains("--lua-init=@/data/resources/lua/zt-other.lua", config);
     }
+
+    [Fact]
+    public void The_protection_loads_the_approved_scripts_its_solution_calls()
+    {
+        var s = new Solution();
+        s.Profiles.Add(new Profile { Name = "p", TcpPorts = "443", HostlistDomains = ["example.com"], Strategy = Strategy.Parse("--payload=tls_client_hello --lua-desync=zt_twice") });
+        var userLua = new Dictionary<string, string> { ["zt_twice"] = "/data/resources/lua/zt-twice.lua" };
+        var (argv, _) = Protection.Launch(s, "/opt/zt/lua", Protection.QueueNum, userLua);
+        // the separator follows the platform the test runs on (Protection.Launch targets this machine)
+        Assert.Contains(argv, a => a.StartsWith("--lua-init=@", StringComparison.Ordinal) && a.EndsWith("zt-twice.lua", StringComparison.Ordinal));
+        var (without, _) = Protection.Launch(s, "/opt/zt/lua");
+        Assert.DoesNotContain(without, a => a.Contains("zt-twice", StringComparison.Ordinal));
+    }
 }

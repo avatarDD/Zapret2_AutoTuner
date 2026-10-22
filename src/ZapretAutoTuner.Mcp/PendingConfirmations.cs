@@ -45,19 +45,23 @@ public sealed class PendingConfirmations(IUserConfirm confirm)
         lock (_lock)
         {
             if (_entries.TryGetValue(key, out var known))
-            {
-                if (known.State is "pending" or "running")
-                    return Pending(known);
-                _entries.Remove(key);
-                return known.State == "declined"
-                    ? new JsonObject { ["ok"] = false, ["status"] = "declined", ["confirmation_id"] = known.Id, ["error"] = "the user declined in the AutoTuner window / пользователь отказался" }
-                    : known.Result ?? new JsonObject { ["ok"] = false, ["status"] = known.State };
-            }
+                return Known(key, known);
             e = new Entry { Id = "c-" + (++_next).ToString(System.Globalization.CultureInfo.InvariantCulture), Key = key };
             _entries[key] = e;
         }
         _ = RunAsync(e, request, onYes);
         return Pending(e);
+    }
+
+    /// <summary>
+    /// The state or result of the action keyed by <paramref name="key"/> without asking anything, or null when there
+    /// is none: a tool that checks preconditions first asks this, so the call after the decision gets its result, not
+    /// a fresh refusal.
+    /// </summary>
+    public JsonObject? Report(string key)
+    {
+        lock (_lock)
+            return _entries.TryGetValue(key, out var known) ? Known(key, known) : null;
     }
 
     /// <summary>Cancels every waiting dialog (the Stop button, the session ended).</summary>
@@ -69,6 +73,17 @@ public sealed class PendingConfirmations(IUserConfirm confirm)
                 e.Cts.Cancel();
             _entries.Clear();
         }
+    }
+
+    /// <summary>Under the lock: a waiting entry's state, or a decided one's answer (reported once, then forgotten).</summary>
+    private JsonObject Known(string key, Entry known)
+    {
+        if (known.State is "pending" or "running")
+            return Pending(known);
+        _entries.Remove(key);
+        return known.State == "declined"
+            ? new JsonObject { ["ok"] = false, ["status"] = "declined", ["confirmation_id"] = known.Id, ["error"] = "the user declined in the AutoTuner window / пользователь отказался" }
+            : known.Result ?? new JsonObject { ["ok"] = false, ["status"] = known.State };
     }
 
     private static JsonObject Pending(Entry e) => new()

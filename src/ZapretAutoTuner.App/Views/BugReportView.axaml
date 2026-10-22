@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.BugReportView"
+             x:DataType="vm:BugReportViewModel">
+  <DockPanel Margin="20">
+    <StackPanel DockPanel.Dock="Top" Spacing="8">
+      <TextBlock Classes="h2" Text="{l:T bugreport.title}" />
+      <TextBlock Classes="muted" Text="{l:T bugreport.subtitle}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="{l:T bugreport.where}" VerticalAlignment="Center" />
+        <ComboBox ItemsSource="{Binding Targets}" SelectedIndex="{Binding TargetIndex}" MinWidth="220" />
+        <CheckBox Content="{l:T reports.mask_domains}" IsChecked="{Binding MaskDomains}" />
+      </StackPanel>
+      <TextBlock Classes="muted" Text="{Binding Notice}" />
+      <TextBox Text="{Binding Title}" Watermark="{l:T bugreport.issue_title}" />
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
+      <WrapPanel>
+        <Button Content="{l:T bugreport.copy}" Command="{Binding CopyCommand}" Margin="0,0,8,8" />
+        <Button Classes="accent" Content="{l:T bugreport.open}" Command="{Binding OpenGitHubCommand}" Margin="0,0,8,8" />
+        <Button Content="{l:T bugreport.save_archive}" Command="{Binding SaveArchiveCommand}" Margin="0,0,8,8" />
+        <Button x:Name="CloseButton" Content="{l:T bugreport.close}" Margin="0,0,8,8" />
+      </WrapPanel>
+      <TextBlock Classes="muted" Text="{Binding Status}" />
+    </StackPanel>
+    <TextBox Text="{Binding Text}" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" FontSize="12" Margin="0,8,0,0" />
+  </DockPanel>
+</UserControl>

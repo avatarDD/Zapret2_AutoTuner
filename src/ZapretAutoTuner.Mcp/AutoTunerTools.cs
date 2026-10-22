@@ -119,7 +119,8 @@ public sealed class AutoTunerTools(McpSession session)
         ["router_experiment_result"] = (a, ct) => Task.FromResult(session.Router.Result((string?)a["run_id"])),
         ["router_experiment_commit"] = (a, ct) => Task.FromResult(session.Router.Commit((string?)a["label"], (bool?)a["save"] ?? false)),
         ["router_experiment_rollback"] = (a, ct) => session.Router.RollbackAsync(),
-    };
+        ["bug_report_draft"] = (a, ct) => Task.FromResult(BugReportTool.Draft(session, a)),
+    }.Concat(new ResourceTools(session).Handlers()).ToDictionary(StringComparer.Ordinal);
 
     internal bool HasHandler(string name) => (_handlers ??= Handlers()).ContainsKey(name);
 

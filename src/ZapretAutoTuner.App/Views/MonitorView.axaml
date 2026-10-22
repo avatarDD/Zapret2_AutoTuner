@@ -18,6 +18,7 @@
         <CheckBox Content="{l:T monitor.auto_apply}" IsChecked="{Binding AutoApply}" />
       </StackPanel>
       <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+      <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" IsVisible="{Binding HasProblem}" />
     </StackPanel>
 
     <ItemsControl Grid.Row="1" ItemsSource="{Binding Pending}" Margin="0,8,0,0">

@@ -128,7 +128,7 @@ public sealed class AdvisorTests
         Assert.Null(first["thinking"]);
         Assert.Null(first["tool_choice"]);
         // read-only by default: the model is not even shown trial_run
-        Assert.Equal(["targets_list", "diagnose", "trials_history", "catalog_functions", "strategy_validate", "kb_query"], ClaudeToolNames(first));
+        Assert.Equal(["targets_list", "diagnose", "trials_history", "catalog_functions", "strategy_validate", "kb_query", "bug_report_draft"], ClaudeToolNames(first));
         Assert.False((bool)first["tools"]![0]!["input_schema"]!["additionalProperties"]!);
 
         var msgs = llm.Requests[1].Body["messages"]!.AsArray();

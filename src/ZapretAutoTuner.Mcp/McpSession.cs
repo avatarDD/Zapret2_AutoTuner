@@ -35,6 +35,7 @@ public sealed class McpSession
         Confirmations = new PendingConfirmations(confirm);
         Search = new SearchController(this);
         Experiments = new ExperimentRunner(this);
+        Router = new RouterExperimentRunner(this);
     }
 
     public IAutoTunerHost Host { get; }
@@ -51,6 +52,9 @@ public sealed class McpSession
 
     public ExperimentRunner Experiments { get; }
 
+    /// <summary>Experiments on the router through zapret-gui (router_experiment_*).</summary>
+    public RouterExperimentRunner Router { get; }
+
     public McpAudit Audit { get; } = new();
 
     /// <summary>Cancelled by the Stop button: every call in flight ends with it.</summary>
@@ -62,7 +66,7 @@ public sealed class McpSession
     public DateTime? LastCall { get; set; }
 
     /// <summary>A trial, the search or an experiment is running on the model's behalf.</summary>
-    public bool Busy => Search.Running || Experiments.Running || _trialsRunning > 0;
+    public bool Busy => Search.Running || Experiments.Running || Router.Running || _trialsRunning > 0;
 
     private int _trialsRunning;
 
@@ -125,7 +129,7 @@ public sealed class McpSession
             return _trials.FirstOrDefault(t => t.Id == id);
     }
 
-    /// <summary>The Stop button: the search and the experiment stop (engines with them), dialogs are cancelled.</summary>
+    /// <summary>The Stop button: the search and the experiments stop (engines with them, the router reverts), dialogs are cancelled.</summary>
     public async Task StopAllAsync()
     {
         Confirmations.CancelAll();
@@ -133,6 +137,7 @@ public sealed class McpSession
         await old.CancelAsync().ConfigureAwait(false);
         await Search.StopAsync().ConfigureAwait(false);
         await Experiments.RollbackAsync("stopped by the user / остановлено пользователем").ConfigureAwait(false);
+        await Router.RollbackAsync("stopped by the user / остановлено пользователем").ConfigureAwait(false);
         Client = null;
         LastCall = null;
     }

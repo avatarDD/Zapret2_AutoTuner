@@ -111,6 +111,49 @@ public sealed class ViewsTests : IAsyncLifetime
     }
 
     [AvaloniaFact]
+    public async Task RouterModeIsOptInAndNeedsZapretGui()
+    {
+        // the MCP router permission is off by default, and acts only with control and probes
+        Assert.False(_host!.Settings.McpPermissions.Router);
+        _host.Settings.McpPermissions = new Mcp.McpPermissions(Router: true);
+        Assert.True(_host.Settings.McpPermissions.Router);
+        Assert.False(_host.Settings.McpPermissions.Granted(Mcp.McpScope.Router));
+
+        var w = new WizardViewModel(_host);
+        Assert.True(w.OnPc);
+        Assert.False(w.OnRouter);
+        var window = new Avalonia.Controls.Window { Content = new Views.WizardView { DataContext = w } };
+        window.Show();
+        w.OnRouter = true;
+        Assert.False(w.OnPc);
+        foreach (var step in new[] { 1, 4 })
+        {
+            w.Step = step;
+            window.UpdateLayout();
+        }
+        // without an address and a token nothing is started and nothing is asked
+        bool asked = false;
+        w.Confirm = (_, _) =>
+        {
+            asked = true;
+            return Task.FromResult(false);
+        };
+        w.Step = 1;
+        w.InputText = "rutracker.org";
+        w.GuiUrl = "";
+        await w.StartCommand.ExecuteAsync(null);
+        Assert.False(asked);
+        Assert.Equal(1, w.Step);
+        Assert.NotEmpty(w.Error);
+        Assert.False(_host.Router.Configured);
+        w.GuiUrl = "http://192.168.1.1:8080";
+        w.GuiToken = "tok";
+        Assert.True(_host.Router.Configured);
+        Assert.Null(_host.Kb.GetSetting("gui.token"));   // the token stays in memory
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void ExpertImportsAndValidates()
     {
         var e = new ExpertViewModel { ImportText = "--filter-tcp=443 --hostlist-domains=example.com --lua-desync=multisplit:pos=1" };

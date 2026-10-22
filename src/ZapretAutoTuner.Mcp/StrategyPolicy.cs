@@ -38,7 +38,8 @@ public static class StrategyPolicy
     /// <summary>The program id of a strategy: the knowledge base's hash, shortened.</summary>
     public static string IdOf(Strategy s) => "s-" + KnowledgeBase.HashOf(s)[..12];
 
-    public static CheckedStrategy Check(string text, L4Kind l4 = L4Kind.Tcp, ClientProfile? client = null, LuaCatalog? catalog = null)
+    /// <param name="platform">Where it will run: the router is <see cref="EnginePlatform.Linux"/> whatever this PC is; null is this PC.</param>
+    public static CheckedStrategy Check(string text, L4Kind l4 = L4Kind.Tcp, ClientProfile? client = null, LuaCatalog? catalog = null, EnginePlatform? platform = null)
     {
         var cat = catalog ?? LuaCatalog.Default;
         var issues = new List<ValidationIssue>();
@@ -77,7 +78,9 @@ public static class StrategyPolicy
                     issues.Add(Err("policy.arg", "cond_lua исполняет код и недоступна через MCP", "cond_lua executes code and is not available over MCP", call.Function));
             }
         }
-        var validator = new StrategyValidator(new ValidationContext { Catalog = cat, Client = client });
+        var validator = new StrategyValidator(platform is { } pl
+            ? new ValidationContext { Catalog = cat, Client = client, Platform = pl }
+            : new ValidationContext { Catalog = cat, Client = client });
         issues.AddRange(validator.ValidateStrategy(s, l4).Issues);
         return new(s, l4, issues);
     }

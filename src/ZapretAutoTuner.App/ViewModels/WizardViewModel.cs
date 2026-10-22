@@ -70,6 +70,7 @@ public sealed partial class WizardViewModel : PageViewModel
         _host = host;
         Providers = [.. ProviderCatalog.Default.Providers.Select(p => new ProviderItem(p))];
         _guiUrl = host.Settings.GuiUrl;
+        _guiToken = host.Settings.GuiToken;
         _routerHost = host.Settings.RouterHost;
     }
 
@@ -168,6 +169,37 @@ public sealed partial class WizardViewModel : PageViewModel
     [ObservableProperty]
     private string _guiPassword = "";
 
+    /// <summary>"Где подбирать": this PC (default) or the router through zapret-gui (PLAN 4a.4).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OnPc))]
+    private bool _onRouter;
+
+    public bool OnPc
+    {
+        get => !OnRouter;
+        set => OnRouter = !value;
+    }
+
+    /// <summary>zapret-gui's MCP token: in memory for this run only (see AppSettings.GuiToken).</summary>
+    [ObservableProperty]
+    private string _guiToken = "";
+
+    /// <summary>A router search found a solution: it can be kept on the router (after a yes).</summary>
+    [ObservableProperty]
+    private bool _canCommitRouter;
+
+    [ObservableProperty]
+    private string _routerStatus = "";
+
+    private ZapretGuiExperiments? _routerExperiments;
+    private IReadOnlyList<(string Name, string Args)> _routerCurrent = [];
+    private List<string> _routerTargets = [];
+    private bool _routerKept;
+
+    partial void OnGuiTokenChanged(string value) => _host.Settings.GuiToken = value.Trim();
+
+    partial void OnGuiUrlChanged(string value) => _host.Settings.GuiUrl = value.Trim();
+
     [RelayCommand]
     private void AddPreset(string name)
     {
@@ -203,6 +235,11 @@ public sealed partial class WizardViewModel : PageViewModel
             return;
         }
         Error = "";
+        if (OnRouter)
+        {
+            await RouterAsync(hosts);
+            return;
+        }
         _host.Settings.AddTargets(hosts); // the MCP tools probe only the user's targets
         Step = 2;
         Running = true;
@@ -253,6 +290,187 @@ public sealed partial class WizardViewModel : PageViewModel
 
     [RelayCommand]
     private void Stop() => _cts?.Cancel();
+
+    /// <summary>
+    /// The closed loop on the router (PLAN 7.6, R1–R4): connect to zapret-gui, one yes for the trial session, then the
+    /// usual pipeline with the router as the place of trials. The router measures its own baseline first and reverts
+    /// every experiment by itself; nothing stays on it here (keeping is <see cref="CommitRouterAsync"/>). No Agent and
+    /// no rights on this PC are needed.
+    /// </summary>
+    private async Task RouterAsync(List<string> hosts)
+    {
+        if (hosts.Count == 0)
+        {
+            Error = L["wizard.router_domains_only"];
+            return;
+        }
+        _host.Settings.GuiUrl = GuiUrl.Trim();
+        _host.Settings.GuiToken = GuiToken.Trim();
+        var experiments = _host.Router.Experiments();
+        if (experiments is null)
+        {
+            Error = L["wizard.router_not_set"];
+            return;
+        }
+        CanCommitRouter = false;
+        RouterStatus = "";
+        _cts = new CancellationTokenSource();
+        try
+        {
+            // R1: the token's tools and the strategy the router runs now
+            var (missing, activeId, current) = await RouterTuning.ConnectAsync(experiments, _cts.Token);
+            if (missing.Count > 0)
+            {
+                Error = L.F("wizard.router_missing_tools", string.Join(", ", missing));
+                return;
+            }
+            // R2: one yes for the whole trial session (AGENTS.md rule 7)
+            var text = L.F("wizard.router_session_text", _host.Settings.GuiUrl, string.Join(", ", hosts), activeId.Length > 0 ? activeId : "—", current.Count);
+            if (Confirm is null || !await Confirm(L["wizard.router_session_title"], text))
+                return;
+            _routerExperiments = experiments;
+            _routerCurrent = current;
+            _routerTargets = hosts;
+            _host.Settings.AddTargets(hosts);
+            Step = 2;
+            Running = true;
+            Targets.Clear();
+            Log.Clear();
+            FoundList.Clear();
+            Results.Clear();
+            SessionState.I.Attempts.Clear();
+            SessionState.I.Log.Clear();
+            foreach (var h in hosts)
+                Targets.Add(new TargetRowViewModel(h));
+            _clock.Restart();
+            AddLog(L.F("wizard.router_connected", _host.Settings.GuiUrl, current.Count));
+            var mode = Enum.TryParse<SearchMode>(_host.Settings.SearchMode, out var m) ? m : SearchMode.Standard;
+            var context = SearchContext.For(_host);
+            var options = new PipelineOptions { Search = new SearchOptions { Generator = new GeneratorOptions { Mode = mode }, Learning = RouterTuning.ForRouter(context.Learning) } };
+            // R3, R4: the usual search with the router as the executor; its trials feed the learned order with source=router
+            var services = new RouterPipelineServices(experiments, new RouterTrialOptions { Targets = hosts, CurrentProfiles = current }, ClassifyAsync,
+                _host.Kb, context.NetworkId, context.Asn, _host.Settings.SearchMode);
+            var pipeline = new TuningPipeline(services, options);
+            pipeline.Event += e => Avalonia.Threading.Dispatcher.UIThread.Post(() => OnEvent(e));
+            var result = await Task.Run(() => pipeline.RunAsync(hosts, _cts.Token));
+            foreach (var (host, x) in services.Executors)
+            {
+                foreach (var hint in x.LastReport?.Variants.SelectMany(v => v.Hints).Distinct().Take(5) ?? [])
+                    AddLog($"{host}: zapret-gui: {hint}");
+            }
+            SessionState.I.Last = result;
+            ShowResults(result);
+            CanCommitRouter = result.Solution is not null;
+            if (CanCommitRouter)
+                RouterStatus = L["wizard.router_found"];
+            Step = 4;
+        }
+        catch (OperationCanceledException)
+        {
+            AddLog(L["common.stopped"]);
+        }
+        catch (Exception e) when (e is ZapretGuiException or HttpRequestException or IOException)
+        {
+            Error = L.F("wizard.router_failed", e.Message);
+            AddLog(Error);
+        }
+        finally
+        {
+            Running = false;
+            _clock.Stop();
+        }
+    }
+
+    /// <summary>The diagnosis runs on this PC, behind the router: a target that opens here needs nothing on the router either.</summary>
+    private static async Task<Core.Diagnostics.ClassifierVerdict> ClassifyAsync(string host, IProgress<(string Ru, string En)> progress, CancellationToken ct)
+    {
+        var run = await Probes.Diagnostics.ClassifierRunner.RunAsync(host, new Probes.Diagnostics.ClassifierOptions(),
+            new Progress<Probes.Diagnostics.ClassifierStep>(s => progress.Report((s.MessageRu, s.MessageEn))), ct).ConfigureAwait(false);
+        return run.Verdict;
+    }
+
+    /// <summary>
+    /// R5: the found solution is applied on the router as a kept variant (measured, still reverting by itself), and only
+    /// after the user's yes committed and saved as a user strategy. A no reverts it at once. Then the router's feedback
+    /// is read into the monitor's journal.
+    /// </summary>
+    [RelayCommand]
+    private async Task CommitRouterAsync()
+    {
+        var s = SessionState.I.Last?.Solution;
+        var experiments = _routerExperiments;
+        if (s is null || experiments is null)
+            return;
+        var (profiles, problems) = RouterTuning.ProfilesOf(s);
+        if (problems.Count > 0)
+        {
+            RouterStatus = L.F("wizard.router_cannot", string.Join(Environment.NewLine, problems));
+            return;
+        }
+        var all = profiles.Concat(_routerCurrent).Take(RouterTuning.MaxProfiles).ToList();
+        _cts = new CancellationTokenSource();
+        Running = true;
+        try
+        {
+            RouterStatus = L["wizard.router_keeping"];
+            var (report, kept, problem) = await RouterTuning.KeepAsync(experiments, all, _routerTargets, 300, TimeSpan.FromSeconds(2), _cts.Token);
+            if (!kept || report is null)
+            {
+                RouterStatus = L.F("wizard.router_not_kept", problem);
+                return;
+            }
+            _routerKept = true;
+            var measured = string.Join(Environment.NewLine, report.Variants.Where(v => v.Label == RouterTuning.KeepLabel)
+                .SelectMany(v => v.PerTarget).Select(p => $"• {p.Target}: {p.OkCount}/{Math.Max(p.Attempts, 1)} {p.Code}"));
+            var saveAs = RouterTuning.SaveId(DateTimeOffset.Now);
+            var strategies = string.Join(Environment.NewLine, profiles.Select(p => p.Args));
+            if (Confirm is null || !await Confirm(L["wizard.router_commit_title"], L.F("wizard.router_commit_text", measured, saveAs, strategies)))
+            {
+                await RouterTuning.RollbackQuietlyAsync(experiments);
+                _routerKept = false;
+                RouterStatus = L["wizard.router_rolled_back"];
+                return;
+            }
+            var (saved, note) = await RouterTuning.CommitAsync(experiments, confirmedByUser: true, saveAs, "AutoTuner: " + string.Join(", ", _routerTargets.Take(3)), _cts.Token);
+            _routerKept = false;
+            foreach (var t in _routerTargets)
+            {
+                _host.Kb.AddChange(t, "router_applied", Storage.JournalReason.Encode(
+                    saved ? $"закреплено на роутере и сохранено как {saveAs}" : "закреплено на роутере (без сохранения)",
+                    saved ? $"committed on the router and saved as {saveAs}" : "committed on the router (unsaved)"), null, strategies, applied: true);
+            }
+            _host.Router.StartFeedback(_routerTargets);
+            CanCommitRouter = false;
+            RouterStatus = (saved ? L.F("wizard.router_saved", saveAs) : L["wizard.router_committed"]) + (note.Length > 0 ? Environment.NewLine + note : "");
+        }
+        catch (OperationCanceledException)
+        {
+            // KeepAsync rolled back already; a kept variant left by a cancelled dialog goes too
+            if (_routerKept)
+                await RouterTuning.RollbackQuietlyAsync(experiments);
+            _routerKept = false;
+            RouterStatus = L["wizard.router_rolled_back"];
+        }
+        catch (Exception e) when (e is ZapretGuiException or HttpRequestException or IOException or InvalidOperationException)
+        {
+            if (_routerKept)
+                await RouterTuning.RollbackQuietlyAsync(experiments);
+            _routerKept = false;
+            RouterStatus = L.F("wizard.router_failed", e.Message);
+        }
+        finally
+        {
+            Running = false;
+        }
+    }
+
+    /// <summary>On exit: a running search stops and nothing uncommitted stays on the router (its dead-man switch would revert it anyway).</summary>
+    public async Task ShutdownAsync()
+    {
+        _cts?.Cancel();
+        if (_routerExperiments is { } x && (Running || _routerKept))
+            await RouterTuning.RollbackQuietlyAsync(x).ConfigureAwait(false);
+    }
 
     /// <summary>PLAN 6.4: the provider as a whole, its sampled ranges as targets, the profile filtered by its ipset.</summary>
     private async Task<PipelineResult> ProvidersAsync(PipelineResult result, List<Provider> providers, IEngineControl engine, CancellationToken ct)

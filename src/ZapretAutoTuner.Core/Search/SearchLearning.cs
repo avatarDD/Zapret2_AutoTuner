@@ -14,6 +14,12 @@ public static class CandidateSource
 
     /// <summary>Suggested by a language model (LLM advisor, MCP search_enqueue).</summary>
     public const string Llm = "llm";
+
+    /// <summary>
+    /// Measured on the router through zapret-gui's experiments (PLAN 7.6), whatever proposed it. Those trials are also
+    /// stored with the <c>router</c> client profile, so the router's own results form the narrowest learning level.
+    /// </summary>
+    public const string Router = "router";
 }
 
 /// <summary>The context a search runs in: the user's provider, the block and the client.</summary>

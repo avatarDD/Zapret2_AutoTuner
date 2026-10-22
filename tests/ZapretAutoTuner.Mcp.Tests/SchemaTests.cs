@@ -114,6 +114,10 @@ public sealed partial class SchemaTests
         Assert.Equal(["strategy_experiment_start", "strategy_experiment_status", "strategy_experiment_result", "strategy_experiment_commit", "strategy_experiment_rollback"],
             McpTools.All.Where(t => t.Scope == McpScope.Experiments).Select(t => t.Name));
         Assert.Equal(["export_preview"], McpTools.All.Where(t => t.Scope == McpScope.Export).Select(t => t.Name));
+        Assert.Equal(["router_experiment_start", "router_experiment_status", "router_experiment_result", "router_experiment_commit", "router_experiment_rollback"],
+            McpTools.All.Where(t => t.Scope == McpScope.Router).Select(t => t.Name));
+        // the router's start and commit change the router: both wait for the user's yes (AGENTS.md rule 7)
+        Assert.Equal(["router_experiment_start", "router_experiment_commit"], McpTools.All.Where(t => t.Scope == McpScope.Router && t.Confirms).Select(t => t.Name));
     }
 
     [Fact]

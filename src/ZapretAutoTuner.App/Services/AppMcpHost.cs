@@ -65,6 +65,10 @@ public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor) : IAutoTu
         return file;
     }
 
+    public Delivery.ZapretGuiExperiments? RouterExperiments() => host.Router.Experiments();
+
+    public void RouterCommitted(IReadOnlyList<string> targets, string strategy) => host.Router.StartFeedback(targets);
+
     private sealed class AgentCapture(AppHost host) : ITrialCapture
     {
         public async Task<string> StartAsync(IReadOnlyList<IPAddress> addresses, int port, CancellationToken ct)

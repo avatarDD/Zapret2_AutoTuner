@@ -158,6 +158,15 @@ internal sealed class FakeHost : IAutoTunerHost, IDisposable
         return Task.FromResult(name);
     }
 
+    /// <summary>zapret-gui on the router; null is "not set up in AutoTuner".</summary>
+    public Delivery.ZapretGuiExperiments? Router { get; set; }
+
+    public List<(IReadOnlyList<string> Targets, string Strategy)> RouterCommits { get; } = [];
+
+    public Delivery.ZapretGuiExperiments? RouterExperiments() => Router;
+
+    public void RouterCommitted(IReadOnlyList<string> targets, string strategy) => RouterCommits.Add((targets, strategy));
+
     public void Dispose() => Kb.Dispose();
 }
 
@@ -189,7 +198,7 @@ internal sealed class Rig : IDisposable
 
     public AutoTunerTools Tools { get; }
 
-    public static McpPermissions All => new(Probes: true, Control: true, Experiments: true, Export: true);
+    public static McpPermissions All => new(Probes: true, Control: true, Experiments: true, Export: true, Router: true);
 
     public Task<McpToolResult> Call(string tool, string json = "{}") =>
         Tools.CallAsync(tool, System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject(), "test");

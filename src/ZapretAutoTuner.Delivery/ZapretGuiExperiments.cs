@@ -130,6 +130,22 @@ public sealed class ZapretGuiExperiments(ZapretGuiMcp mcp)
         return first! with { Variants = variants };
     }
 
+    /// <summary>
+    /// The enabled profiles of the strategy the router runs now (<c>strategy_get</c> without an id, a read tool): they
+    /// follow the candidate's in every variant so the other sites keep their bypass. Empty when nothing is selected.
+    /// </summary>
+    public async Task<(string Id, IReadOnlyList<(string Name, string Args)> Profiles)> ActiveProfilesAsync(CancellationToken ct = default)
+    {
+        var r = await mcp.CallAsync("strategy_get", new JsonObject(), ct).ConfigureAwait(false);
+        if (r["item"] is not JsonObject item)
+            return ("", []);
+        var profiles = (item["profiles"] as JsonArray ?? []).OfType<JsonObject>()
+            .Where(p => (bool?)p["enabled"] != false && !string.IsNullOrWhiteSpace((string?)p["args"]))
+            .Select(p => ((string?)p["name"] ?? (string?)p["id"] ?? "", (string)p["args"]!))
+            .ToList();
+        return ((string?)item["id"] ?? "", profiles);
+    }
+
     /// <summary>Reverts at once (a kept winner too); harmless when nothing is applied.</summary>
     public async Task RollbackAsync(CancellationToken ct = default) =>
         await mcp.CallAsync("strategy_experiment_rollback", new JsonObject(), ct).ConfigureAwait(false);

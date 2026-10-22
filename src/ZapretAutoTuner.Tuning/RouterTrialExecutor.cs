@@ -129,19 +129,27 @@ public sealed class RouterTrialExecutor(ZapretGuiExperiments experiments, Router
     internal static string Label(int i) => "zt" + i.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>The candidate first, limited to the targets, with its blobs inlined; then the active strategy's profiles.</summary>
-    internal List<(string Name, string Args)> Profiles(StrategyCandidate c)
+    internal List<(string Name, string Args)> Profiles(StrategyCandidate c) =>
+        [(ProfileName, CandidateArgs(c.Strategy, c.L4, options.Targets, options.Blobs)), .. options.CurrentProfiles];
+
+    /// <summary>The name of the candidate's profile in a variant.</summary>
+    public const string ProfileName = "AutoTuner";
+
+    /// <summary>
+    /// The args of a candidate's profile on the router: its ports, the targets as <c>--hostlist-domains</c> (the router
+    /// has no list files of ours) and the inline blobs it uses (<c>0x…</c>; a blob from a file is left out).
+    /// </summary>
+    public static string CandidateArgs(Strategy strategy, L4Kind l4, IReadOnlyList<string> targets, IReadOnlyDictionary<string, string>? blobs = null)
     {
-        var port = c.L4 == L4Kind.Udp ? "443" : "443,80";
-        var p = new Profile { Name = "autotuner", Strategy = c.Strategy, HostlistDomains = [.. options.Targets] };
-        if (c.L4 == L4Kind.Udp)
-            p.UdpPorts = port;
+        var p = new Profile { Name = "autotuner", Strategy = strategy, HostlistDomains = [.. targets] };
+        if (l4 == L4Kind.Udp)
+            p.UdpPorts = "443";
         else
-            p.TcpPorts = port;
-        var used = c.Strategy.Calls.SelectMany(x => x.Args).Select(a => a.Value).Where(v => v is not null).ToHashSet(StringComparer.Ordinal);
-        var blobs = options.Blobs.Where(b => used.Contains(b.Key) && b.Value.StartsWith("0x", StringComparison.Ordinal))
+            p.TcpPorts = "443,80";
+        var used = strategy.Calls.SelectMany(x => x.Args).Select(a => a.Value).Where(v => v is not null).ToHashSet(StringComparer.Ordinal);
+        var inline = (blobs ?? new Dictionary<string, string>()).Where(b => used.Contains(b.Key) && b.Value.StartsWith("0x", StringComparison.Ordinal))
             .Select(b => $"--blob={b.Key}:{b.Value}");
-        var args = string.Join(' ', blobs.Append(ZapretGuiExporter.ProfileArgs(p)));
-        return [("AutoTuner", args), .. options.CurrentProfiles];
+        return string.Join(' ', inline.Append(ZapretGuiExporter.ProfileArgs(p)));
     }
 
     /// <summary>

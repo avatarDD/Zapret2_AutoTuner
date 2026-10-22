@@ -16,6 +16,9 @@ public sealed partial class ReportsViewModel : PageViewModel
 
     public Func<string, Task>? CopyText { get; set; }
 
+    /// <summary>The MCP audit log, included in the report.</summary>
+    public Func<IReadOnlyList<string>>? McpAudit { get; set; }
+
     [ObservableProperty]
     private bool _maskDomains;
 
@@ -34,6 +37,7 @@ public sealed partial class ReportsViewModel : PageViewModel
     {
         MaskDomains = MaskDomains,
         EngineLog = [.. SessionState.I.Log],
+        McpAudit = McpAudit?.Invoke() ?? [],
         Environment = [.. Environment.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)],
     };
 

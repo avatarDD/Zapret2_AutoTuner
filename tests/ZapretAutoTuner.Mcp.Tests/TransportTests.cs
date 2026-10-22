@@ -109,4 +109,21 @@ public sealed class TransportTests
         toServer.Writer.Complete();
         await bridge.WaitAsync(TimeSpan.FromSeconds(10));
     }
+
+    [Fact]
+    public void ClaudeDesktopSnippetRunsTheStdioMode()
+    {
+        var json = System.Text.Json.Nodes.JsonNode.Parse(McpClientConfig.ClaudeDesktop(@"C:\Program Files\AutoTuner\ZapretAutoTuner.exe"))!;
+        var entry = json["mcpServers"]![McpServerSetup.ServerName]!;
+        Assert.Equal(@"C:\Program Files\AutoTuner\ZapretAutoTuner.exe", (string?)entry["command"]);
+        Assert.Equal("mcp", (string?)entry["args"]![0]);
+    }
+
+    [Theory]
+    [InlineData(null, "mcp")]
+    [InlineData("  ", "mcp")]
+    [InlineData("claude-ai", "claude-ai")]
+    [InlineData("evil\nYES\u0007", "evilYES")]
+    public void ClientNamesAreCleanedForTheBanner(string? name, string expected) =>
+        Assert.Equal(expected, McpServerSetup.ClientName(name));
 }

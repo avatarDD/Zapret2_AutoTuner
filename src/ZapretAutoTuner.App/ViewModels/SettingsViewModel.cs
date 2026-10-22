@@ -1,18 +1,24 @@
 using Avalonia;
 using Avalonia.Styling;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using ZapretAutoTuner.App.Services;
 
 namespace ZapretAutoTuner.App.ViewModels;
 
-/// <summary>Settings, kept in the knowledge base. Secrets (the MCP token) are kept only when the user asks.</summary>
+/// <summary>Settings, kept in the knowledge base. The zapret-gui token is kept only when the user asks.</summary>
 public sealed partial class SettingsViewModel : PageViewModel
 {
     private readonly AppHost _host;
+    private readonly McpService _mcp;
+    private bool _loading;
 
-    public SettingsViewModel(AppHost host)
+    public SettingsViewModel(AppHost host, McpService mcp)
     {
         _host = host;
+        _mcp = mcp;
+        mcp.Stopped += LoadMcp;
+        LoadMcp();
         _english = L.English;
         _themeIndex = host.Settings.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
         _modeIndex = Array.IndexOf(Modes, host.Settings.SearchMode) is var i and >= 0 ? i : 1;
@@ -56,6 +62,90 @@ public sealed partial class SettingsViewModel : PageViewModel
 
     [ObservableProperty]
     private bool _largeFont;
+
+    [ObservableProperty]
+    private bool _mcpEnabled;
+
+    [ObservableProperty]
+    private bool _mcpHttp;
+
+    [ObservableProperty]
+    private bool _permProbes;
+
+    [ObservableProperty]
+    private bool _permControl;
+
+    [ObservableProperty]
+    private bool _permExperiments;
+
+    [ObservableProperty]
+    private bool _permExport;
+
+    [ObservableProperty]
+    private string _mcpToken = "";
+
+    [ObservableProperty]
+    private string _mcpError = "";
+
+    public McpService Mcp => _mcp;
+
+    /// <summary>For Claude Desktop's claude_desktop_config.json: the stdio command of this program.</summary>
+    public string StdioSnippet => ZapretAutoTuner.Mcp.McpClientConfig.ClaudeDesktop(Environment.ProcessPath ?? "ZapretAutoTuner");
+
+    private void LoadMcp()
+    {
+        _loading = true;
+        McpEnabled = _host.Settings.McpEnabled;
+        McpHttp = _host.Settings.McpHttp;
+        var p = _host.Settings.McpPermissions;
+        (PermProbes, PermControl, PermExperiments, PermExport) = (p.Probes, p.Control, p.Experiments, p.Export);
+        McpToken = _host.Settings.McpToken;
+        _loading = false;
+    }
+
+    partial void OnMcpEnabledChanged(bool value) => SaveMcp();
+
+    partial void OnMcpHttpChanged(bool value) => SaveMcp();
+
+    partial void OnPermProbesChanged(bool value) => SaveMcp();
+
+    partial void OnPermControlChanged(bool value) => SaveMcp();
+
+    partial void OnPermExperimentsChanged(bool value) => SaveMcp();
+
+    partial void OnPermExportChanged(bool value) => SaveMcp();
+
+    private void SaveMcp()
+    {
+        if (_loading)
+            return;
+        _host.Settings.McpEnabled = McpEnabled;
+        _host.Settings.McpHttp = McpHttp;
+        _host.Settings.McpPermissions = new ZapretAutoTuner.Mcp.McpPermissions(PermProbes, PermControl, PermExperiments, PermExport);
+        _ = ApplyMcpAsync();
+    }
+
+    private async Task ApplyMcpAsync()
+    {
+        try
+        {
+            await _mcp.ApplyAsync();
+            McpError = "";
+        }
+        catch (Exception e) when (e is IOException or InvalidOperationException or System.Net.Sockets.SocketException)
+        {
+            McpError = e.Message;
+        }
+    }
+
+    /// <summary>A new token: clients holding the old one are refused from now on.</summary>
+    [RelayCommand]
+    private async Task NewTokenAsync()
+    {
+        _host.Settings.McpToken = ZapretAutoTuner.Mcp.McpHttpServer.NewToken();
+        McpToken = _host.Settings.McpToken;
+        await _mcp.RestartHttpAsync();
+    }
 
     partial void OnEnglishChanged(bool value)
     {

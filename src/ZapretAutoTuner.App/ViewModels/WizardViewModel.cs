@@ -201,6 +201,7 @@ public sealed partial class WizardViewModel : PageViewModel
             return;
         }
         Error = "";
+        _host.Settings.AddTargets(hosts); // the MCP tools probe only the user's targets
         Step = 2;
         Running = true;
         Targets.Clear();

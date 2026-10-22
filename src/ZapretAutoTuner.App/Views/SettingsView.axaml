@@ -33,6 +33,27 @@
       <CheckBox Content="{l:T settings.remember_token}" IsChecked="{Binding RememberToken}" />
       <TextBlock Classes="h2" Text="{l:T settings.router}" />
       <TextBox Text="{Binding RouterHost}" Watermark="192.168.1.1" />
+      <TextBlock Classes="h2" Text="{l:T mcp.title}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T mcp.hint}" />
+      <CheckBox Content="{l:T mcp.enabled}" IsChecked="{Binding McpEnabled}" />
+      <StackPanel Spacing="6" Margin="24,0,0,0" IsEnabled="{Binding McpEnabled}">
+        <TextBlock Text="{l:T mcp.permissions}" />
+        <CheckBox Content="{l:T mcp.perm_probes}" IsChecked="{Binding PermProbes}" />
+        <CheckBox Content="{l:T mcp.perm_control}" IsChecked="{Binding PermControl}" />
+        <CheckBox Content="{l:T mcp.perm_experiments}" IsChecked="{Binding PermExperiments}" />
+        <CheckBox Content="{l:T mcp.perm_export}" IsChecked="{Binding PermExport}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T mcp.perm_hint}" />
+        <TextBlock Text="{l:T mcp.stdio}" />
+        <SelectableTextBlock Text="{Binding StdioSnippet}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />
+        <CheckBox Content="{l:T mcp.http}" IsChecked="{Binding McpHttp}" />
+        <TextBlock Text="{Binding Mcp.HttpStatus}" Classes="muted" TextWrapping="Wrap" />
+        <DockPanel IsVisible="{Binding McpHttp}">
+          <Button DockPanel.Dock="Right" Content="{l:T mcp.new_token}" Command="{Binding NewTokenCommand}" Margin="8,0,0,0" />
+          <TextBox Text="{Binding McpToken}" IsReadOnly="True" PasswordChar="•" RevealPassword="{Binding #ShowToken.IsChecked}" />
+        </DockPanel>
+        <CheckBox x:Name="ShowToken" Content="{l:T mcp.show_token}" IsVisible="{Binding McpHttp}" />
+        <TextBlock Text="{Binding McpError}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding McpError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      </StackPanel>
       <TextBlock Classes="muted" Text="{l:T settings.privacy}" />
       <SelectableTextBlock Text="{Binding DataDir}" Classes="muted" FontSize="12" />
     </StackPanel>

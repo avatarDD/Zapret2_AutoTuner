@@ -42,7 +42,7 @@ public static class McpServerSetup
                 foreach (var (k, v) in a)
                     args[k] = JsonNode.Parse(v.GetRawText());
             }
-            var r = await tools.CallAsync(p.Name, args, ctx.Server.ClientInfo?.Name ?? "mcp", ct).ConfigureAwait(false);
+            var r = await tools.CallAsync(p.Name, args, ClientName(ctx.Server.ClientInfo?.Name), ct).ConfigureAwait(false);
             return new CallToolResult
             {
                 Content = [new TextContentBlock { Text = r.Text }],
@@ -87,6 +87,13 @@ public static class McpServerSetup
                 Messages = [new PromptMessage { Role = Role.User, Content = new TextContentBlock { Text = McpPrompts.Tune(target) } }],
             });
         };
+    }
+
+    /// <summary>The client's self-chosen name is shown in the banner and dialogs: keep it short and printable.</summary>
+    public static string ClientName(string? name)
+    {
+        var clean = new string([.. (name ?? "").Where(c => !char.IsControl(c)).Take(48)]).Trim();
+        return clean.Length == 0 ? "mcp" : clean;
     }
 
     public static Tool ToTool(McpToolDefinition d) => new()

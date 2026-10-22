@@ -23,11 +23,23 @@ public sealed partial class App : Application
             ApplyFont(host.Settings.LargeFont);
             var main = new MainViewModel(host);
             desktop.MainWindow = new MainWindow { DataContext = main };
+            _ = main.Mcp.ApplyAsync();
+            if (Program.Stdio is { } io)
+            {
+                _ = Task.Run(async () =>
+                {
+                    // the client closed stdin: this window was opened for it, so it goes too
+                    if (await main.Mcp.RunStdioAsync(io.In, io.Out, CancellationToken.None).ConfigureAwait(false))
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() => desktop.Shutdown());
+                });
+            }
             desktop.ShutdownRequested += (_, _) =>
             {
+                var mcp = main.Mcp.DisposeAsync().AsTask();
                 // the protection engine and the Agent's firewall rules go away with the app (AGENTS.md rule 6)
                 Task.Run(async () =>
                 {
+                    await mcp.ConfigureAwait(false);
                     await main.Monitor.ShutdownAsync().ConfigureAwait(false);
                     await host.DisposeAsync().ConfigureAwait(false);
                 }).GetAwaiter().GetResult();

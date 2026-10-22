@@ -15,7 +15,7 @@ public sealed class AppHost : IAsyncDisposable
 
     public AppHost(string? dataDir = null)
     {
-        DataDir = dataDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ZapretAutoTuner");
+        DataDir = dataDir ?? DefaultDataDir;
         Directory.CreateDirectory(DataDir);
         Kb = KnowledgeBase.Open(Path.Combine(DataDir, "knowledge.db"));
         Bundle = new Zapret2Bundle(Path.Combine(AppContext.BaseDirectory, "zapret2"));
@@ -23,6 +23,8 @@ public sealed class AppHost : IAsyncDisposable
     }
 
     public static AppHost? Current { get; set; }
+
+    public static string DefaultDataDir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ZapretAutoTuner");
 
     public string DataDir { get; }
 
@@ -132,4 +134,86 @@ public sealed class AppSettings(KnowledgeBase kb)
         get => kb.GetSetting("ui.large_font") == "1";
         set => kb.SetSetting("ui.large_font", value ? "1" : "0");
     }
+
+    /// <summary>The MCP server; off by default, and the Stop button turns it off again.</summary>
+    public bool McpEnabled
+    {
+        get => Flag("mcp.enabled");
+        set => SetFlag("mcp.enabled", value);
+    }
+
+    /// <summary>Streamable HTTP on 127.0.0.1 next to stdio; off by default.</summary>
+    public bool McpHttp
+    {
+        get => Flag("mcp.http");
+        set => SetFlag("mcp.http", value);
+    }
+
+    /// <summary>The HTTP port; 0 until the first start picks a free one, then kept so clients keep working.</summary>
+    public int McpPort
+    {
+        get => int.TryParse(kb.GetSetting("mcp.port"), out var p) && p is > 0 and < 65536 ? p : 0;
+        set => kb.SetSetting("mcp.port", value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>The local bearer token of the HTTP transport, generated on first use.</summary>
+    public string McpToken
+    {
+        get
+        {
+            var t = kb.GetSetting("mcp.token");
+            if (!string.IsNullOrEmpty(t))
+                return t;
+            t = Mcp.McpHttpServer.NewToken();
+            kb.SetSetting("mcp.token", t);
+            return t;
+        }
+        set => kb.SetSetting("mcp.token", value);
+    }
+
+    /// <summary>The permission groups beyond "read" (all off by default, as in zapret-gui).</summary>
+    public Mcp.McpPermissions McpPermissions
+    {
+        get => new(Flag("mcp.perm.probes"), Flag("mcp.perm.control"), Flag("mcp.perm.experiments"), Flag("mcp.perm.export"));
+        set
+        {
+            SetFlag("mcp.perm.probes", value.Probes);
+            SetFlag("mcp.perm.control", value.Control);
+            SetFlag("mcp.perm.experiments", value.Experiments);
+            SetFlag("mcp.perm.export", value.Export);
+        }
+    }
+
+    /// <summary>The user's targets (the wizard's domains and the ones added over MCP after a yes).</summary>
+    public IReadOnlyList<string> Targets
+    {
+        get
+        {
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<string>>(kb.GetSetting("targets.list") ?? "[]") ?? [];
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return [];
+            }
+        }
+        set => kb.SetSetting("targets.list", System.Text.Json.JsonSerializer.Serialize(value.Distinct(StringComparer.OrdinalIgnoreCase).Take(500).ToList()));
+    }
+
+    public void AddTargets(IEnumerable<string> hosts)
+    {
+        var list = Targets.ToList();
+        foreach (var h in hosts)
+        {
+            var host = h.Trim().TrimEnd('.').ToLowerInvariant();
+            if (Core.Model.Target.IsValidHostName(host) && !list.Contains(host, StringComparer.OrdinalIgnoreCase))
+                list.Add(host);
+        }
+        Targets = list;
+    }
+
+    private bool Flag(string key) => kb.GetSetting(key) == "1";
+
+    private void SetFlag(string key, bool value) => kb.SetSetting(key, value ? "1" : "0");
 }

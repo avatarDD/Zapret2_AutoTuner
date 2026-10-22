@@ -50,9 +50,46 @@ public sealed class ViewsTests : IAsyncLifetime
     }
 
     [AvaloniaFact]
+    public void McpIsOffByDefaultAndStopTurnsItOff()
+    {
+        var main = new MainViewModel(_host!);
+        var s = main.Settings;
+        Assert.False(s.McpEnabled);
+        Assert.False(s.McpHttp);
+        Assert.Equal(new Mcp.McpPermissions(), _host!.Settings.McpPermissions);
+        Assert.DoesNotContain(main.Mcp.Tools.ListTools(), t => t.Scope != Mcp.McpScope.Read);
+
+        s.McpEnabled = true;
+        s.PermProbes = true;
+        Assert.True(_host.Settings.McpEnabled);
+        Assert.True(_host.Settings.McpPermissions.Probes);
+        Assert.Contains(main.Mcp.Tools.ListTools(), t => t.Scope == Mcp.McpScope.Probes);
+        Assert.NotEmpty(s.McpToken);
+        Assert.Contains("\"mcp\"", s.StdioSnippet, StringComparison.Ordinal);
+
+        main.Mcp.StopAsync().GetAwaiter().GetResult();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.False(_host.Settings.McpEnabled);
+        Assert.False(s.McpEnabled);
+        // off means no permissions at all, whatever the switches say
+        Assert.DoesNotContain(main.Mcp.Tools.ListTools(), t => t.Scope != Mcp.McpScope.Read);
+        main.Mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
+
+    [AvaloniaFact]
+    public void WizardTargetsAreKept()
+    {
+        _host!.Settings.AddTargets(["Example.COM.", "bad host", "example.com", "rutracker.org"]);
+        Assert.Equal(["example.com", "rutracker.org"], _host.Settings.Targets);
+    }
+
+    [AvaloniaFact]
     public void SettingsPersistInTheKnowledgeBase()
     {
-        var s = new SettingsViewModel(_host!) { ModeIndex = 0, AutoApply = true, RouterHost = " 192.168.1.1 " };
+        var s = new MainViewModel(_host!).Settings;
+        s.ModeIndex = 0;
+        s.AutoApply = true;
+        s.RouterHost = " 192.168.1.1 ";
         Assert.Equal("Quick", _host!.Settings.SearchMode);
         Assert.Equal("auto", _host.Settings.ApplyPolicy);
         Assert.Equal("192.168.1.1", _host.Settings.RouterHost);

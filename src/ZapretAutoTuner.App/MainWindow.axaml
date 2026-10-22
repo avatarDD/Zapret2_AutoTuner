@@ -6,6 +6,12 @@
         x:DataType="vm:MainViewModel"
         Title="Zapret2 AutoTuner" Width="1100" Height="740" MinWidth="760" MinHeight="520">
   <DockPanel>
+    <Border DockPanel.Dock="Top" Background="#D9A21B" Padding="12,6" IsVisible="{Binding Mcp.BannerVisible}">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="{l:T mcp.stop}" Command="{Binding Mcp.StopCommand}" />
+        <TextBlock Text="{Binding Mcp.BannerText}" Foreground="Black" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
+      </DockPanel>
+    </Border>
     <Border DockPanel.Dock="Left" Width="200" Padding="8" Background="{DynamicResource LayerFillColorDefaultBrush}">
       <DockPanel>
         <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="4,8">

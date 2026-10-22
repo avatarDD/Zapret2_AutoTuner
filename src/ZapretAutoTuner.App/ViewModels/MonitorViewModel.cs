@@ -87,6 +87,20 @@ public sealed partial class MonitorViewModel : PageViewModel
             Status = L["monitor.no_solution"];
             return;
         }
+        await StartAsync(solution);
+    }
+
+    /// <summary>A solution the user accepted elsewhere (an MCP experiment's commit) becomes the protection.</summary>
+    public async Task ApplySolutionAsync(Solution solution)
+    {
+        if (Active)
+            await StopAsync();
+        SessionState.I.Last = SessionState.I.Last is { } last ? last with { Solution = solution } : new PipelineResult([], null, solution);
+        await StartAsync(solution);
+    }
+
+    private async Task StartAsync(Solution solution)
+    {
         _cts = new CancellationTokenSource();
         try
         {

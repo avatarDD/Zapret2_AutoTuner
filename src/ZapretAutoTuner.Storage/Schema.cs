@@ -7,7 +7,7 @@ namespace ZapretAutoTuner.Storage;
 /// </summary>
 internal static class Schema
 {
-    public const int Version = 3;
+    public const int Version = 4;
 
     /// <summary>Migrations by target version; each runs once, in order, inside a transaction.</summary>
     public static readonly IReadOnlyList<(int Version, string Sql)> Migrations =
@@ -175,6 +175,39 @@ internal static class Schema
             UPDATE trials SET source = 'mutation'
                 WHERE strategy_id IN (SELECT ts.strategy_id FROM tuning_steps ts WHERE ts.session_id = trials.session_id);
             CREATE INDEX trials_time ON trials(created_at);
+            """),
+        (4, """
+            -- strategy resources (PLAN 4a.5): named hostlists, ipsets, blobs and Lua scripts, every version kept
+            CREATE TABLE resources (
+                id INTEGER PRIMARY KEY,
+                uid TEXT NOT NULL UNIQUE,
+                kind TEXT NOT NULL,             -- hostlist | ipset | blob | lua
+                name TEXT NOT NULL,
+                current_version INTEGER NOT NULL,
+                approved_version INTEGER,       -- lua: the version in effect (approved by the user), NULL: none yet
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE (kind, name)
+            );
+
+            CREATE TABLE resource_versions (
+                resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+                version INTEGER NOT NULL,
+                content BLOB NOT NULL,          -- list lines, blob bytes or UTF-8 source
+                origin TEXT NOT NULL DEFAULT 'ui',  -- ui | mcp | import
+                created_at TEXT NOT NULL,
+                approved_at TEXT,
+                PRIMARY KEY (resource_id, version)
+            );
+
+            -- who uses a resource: a saved or the current solution; such a resource cannot be deleted
+            CREATE TABLE resource_refs (
+                owner TEXT NOT NULL,            -- e.g. solution:current
+                kind TEXT NOT NULL,
+                name TEXT NOT NULL,
+                PRIMARY KEY (owner, kind, name)
+            );
+            CREATE INDEX resource_refs_target ON resource_refs(kind, name);
             """),
     ];
 }

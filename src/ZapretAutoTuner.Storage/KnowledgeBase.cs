@@ -81,7 +81,7 @@ public sealed record TrialRecord
 /// search sessions (resume after a restart), refinement history and checker runs. One file in the data dir; nothing
 /// leaves the machine (no telemetry, AGENTS.md rule 7).
 /// </summary>
-public sealed class KnowledgeBase : IDisposable
+public sealed partial class KnowledgeBase : IDisposable
 {
     private readonly SqliteConnection _db;
     private readonly Lock _gate = new();

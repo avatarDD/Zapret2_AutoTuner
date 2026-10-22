@@ -83,6 +83,7 @@ public static class ConfigCheck
             Platform = options.Platform,
             LuaDir = options.LuaDir,
             Blobs = options.Blobs.Where(b => used.Contains(b.Key)).ToDictionary(b => b.Key, b => b.Value, StringComparer.Ordinal),
+            ExtraLuaPaths = Core.Resources.ResourceRefs.LuaPathsFor(profiles.Select(p => p.Strategy), options.UserLua),
             Profiles = profiles,
             QueueNum = options.QueueNum,
             TargetAddresses = addresses,

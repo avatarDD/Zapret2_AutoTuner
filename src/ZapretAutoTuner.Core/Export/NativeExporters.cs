@@ -23,6 +23,9 @@ public static class Zapret2Exporter
         ExportCommon.CheckSolution(s);
         var pkg = new ExportPackage { Format = "zapret2" };
         var opt = new StringBuilder("\n");
+        // zapret2 adds lib, antidpi and auto itself (NFQWS2_OPT_BASE); our files load after them
+        foreach (var init in ExportCommon.LuaInits(s, $"{Root}/lua"))
+            opt.Append(init).Append('\n');
         foreach (var name in s.Blobs.Keys)
             opt.Append($"--blob={name}:@{Root}/{BlobFile(name)}\n");
         if (Unify.Unifier.NeedsIpcacheHostname(s))
@@ -49,17 +52,18 @@ public static class Zapret2Exporter
             pkg.AddText(IpsetFile(name), ExportCommon.ListLines(cidrs));
         foreach (var (name, bytes) in s.Blobs)
             pkg.Files[BlobFile(name)] = bytes;
+        ExportCommon.AddLuaFiles(pkg, s);
         pkg.AddText("README.txt", ExportCommon.Header(s) + $"""
 
             Экспорт для zapret2 (Linux).
-            1. Скопируйте ipset/ и files/ в {Root}/ (сохраняя пути).
+            1. Скопируйте ipset/{(s.LuaFiles.Count > 0 ? ", lua/" : "")} и files/ в {Root}/ (сохраняя пути).
             2. В {Root}/config замените только переменные из config.fragment:
                NFQWS2_ENABLE, NFQWS2_PORTS_TCP, NFQWS2_PORTS_UDP, MODE_FILTER, NFQWS2_OPT.
                --user, --qnum, --fwmark и --lua-init добавит сам zapret2.
             3. Перезапустите: {Root}/init.d/sysv/zapret2 restart (или systemctl restart zapret2).
 
             Export for zapret2 (Linux).
-            1. Copy ipset/ and files/ into {Root}/ keeping the paths.
+            1. Copy ipset/{(s.LuaFiles.Count > 0 ? ", lua/" : "")} and files/ into {Root}/ keeping the paths.
             2. In {Root}/config replace only the variables from config.fragment.
             3. Restart zapret2.
 
@@ -87,6 +91,7 @@ public static class WinwsExporter
         {
             Platform = EnginePlatform.Windows,
             LuaDir = "lua",
+            LuaFiles = [.. EngineArgsBuilder.StandardLuaFiles, .. s.LuaFiles.Keys],
             Blobs = s.Blobs.Keys.ToDictionary(n => n, BlobFile, StringComparer.Ordinal),
             Profiles = s.Profiles,
             ListPath = (r, ipset) => ipset ? IpsetFile(r.Name) : HostlistFile(r.Name),
@@ -118,6 +123,7 @@ public static class WinwsExporter
             pkg.AddText(IpsetFile(name), ExportCommon.ListLines(cidrs));
         foreach (var (name, bytes) in s.Blobs)
             pkg.Files[BlobFile(name)] = bytes;
+        ExportCommon.AddLuaFiles(pkg, s);
         pkg.AddText("README.txt", ExportCommon.Header(s) + """
 
             Экспорт для winws2 (Windows).
@@ -169,6 +175,7 @@ public static class ArgvExporter
                 return c;
             }).ToList(),
             IpcacheHostname = Unify.Unifier.NeedsIpcacheHostname(s),
+            ExtraLuaPaths = [.. s.LuaFiles.Keys.Select(f => luaDir.TrimEnd('/', '\\') + "/" + f)],
         };
         var argv = EngineArgsBuilder.Build(launch);
         // the engine's runner adds the queue; a copied line carries only what the strategy needs
@@ -177,6 +184,9 @@ public static class ArgvExporter
         var line = platform == EnginePlatform.Windows ? EngineArgsBuilder.ToWindowsCommandLine(argv) : EngineArgsBuilder.ToCommandLine(argv);
         var pkg = new ExportPackage { Format = "argv", Text = line };
         pkg.AddText("args.txt", pkg.Text + "\n");
+        ExportCommon.AddLuaFiles(pkg, s);
+        if (s.LuaFiles.Count > 0)
+            pkg.Warnings.Add($"строка ссылается на свои Lua-файлы: положите lua/ из экспорта в {luaDir} / the line refers to our Lua files: put lua/ from the export into {luaDir}");
         pkg.AddText("README.txt", ExportCommon.Header(s) + "\nСтрока аргументов nfqws2/winws2 / nfqws2/winws2 argument line.\n" + ExportCommon.PinsSection(s, "hosts"));
         return pkg;
     }

@@ -47,7 +47,7 @@ public sealed class ExportPackage
 public sealed class ExportException(string message) : Exception(message);
 
 /// <summary>Shared pieces of the exporters.</summary>
-internal static class ExportCommon
+internal static partial class ExportCommon
 {
     public const int MaxBlobBytes = 16 * 1024;
 
@@ -83,6 +83,24 @@ internal static class ExportCommon
             if (bytes.Length is 0 or > MaxBlobBytes)
                 throw new ExportException($"блоб {name}: {bytes.Length} байт, допустимо 1…16384");
         }
+        foreach (var file in s.LuaFiles.Keys)
+        {
+            if (!LuaFileRe().IsMatch(file) || Catalog.LuaCatalog.Default.Data.LuaInitOrder.Contains(file))
+                throw new ExportException($"Lua-файл «{file}»: нужно имя вида zt-имя.lua (латиница, цифры, _ - .), не совпадающее с файлами zapret2");
+        }
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,123}\\.lua$")]
+    private static partial System.Text.RegularExpressions.Regex LuaFileRe();
+
+    /// <summary>The <c>--lua-init</c> of the solution's own Lua files, after the standard ones, in name order.</summary>
+    public static IEnumerable<string> LuaInits(Solution s, string dir) => s.LuaFiles.Keys.Select(f => $"--lua-init=@{dir}/{f}");
+
+    /// <summary>The solution's Lua files into the package under <c>lua/</c>.</summary>
+    public static void AddLuaFiles(ExportPackage pkg, Solution s)
+    {
+        foreach (var (file, text) in s.LuaFiles)
+            pkg.AddText($"lua/{file}", text);
     }
 
     /// <summary>Shell double-quoted values (zapret2 config, keenetic conf) must not hold ", $ or `.</summary>

@@ -39,6 +39,12 @@ public sealed record AgentTrialOptions
     /// <summary>Blobs the candidates use (<see cref="GeneratedSet.Blobs"/>): name → 0x… or a file.</summary>
     public IReadOnlyDictionary<string, string> Blobs { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>
+    /// Functions of the user's approved Lua scripts → the script file (ResourceStore.ApprovedLuaPaths, PLAN 4a.5);
+    /// a launch adds <c>--lua-init=@file</c> for the ones its strategy calls.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> UserLua { get; init; } = new Dictionary<string, string>();
+
     public EnginePlatform Platform { get; init; } = OperatingSystem.IsWindows() ? EnginePlatform.Windows : EnginePlatform.Linux;
 
     /// <summary>Linux: the NFQUEUE number of the trial instance.</summary>
@@ -165,6 +171,7 @@ public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target
             Platform = options.Platform,
             LuaDir = options.LuaDir,
             Blobs = UsedBlobs(candidate.Strategy),
+            ExtraLuaPaths = Core.Resources.ResourceRefs.LuaPathsFor([candidate.Strategy], options.UserLua),
             Profiles = [profile],
             QueueNum = options.QueueNum,
             TargetAddresses = target.Addresses,

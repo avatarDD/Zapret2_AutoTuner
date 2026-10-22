@@ -89,6 +89,9 @@ public sealed record ProbeResult
     /// <summary>Response body bytes.</summary>
     public long BodyBytes { get; init; }
 
+    /// <summary>SHA-256 of the body bytes received (hex); the content itself is never kept.</summary>
+    public string? BodySha256 { get; init; }
+
     /// <summary>Content-Length of the response, if given.</summary>
     public long? ContentLength { get; init; }
 

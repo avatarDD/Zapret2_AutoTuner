@@ -1,0 +1,579 @@
+[
+  {
+    "name": "targets_list",
+    "scope": "read",
+    "confirms": false,
+    "description": "The targets the user put in AutoTuner, with the last diagnosis. Probes go only to these; a new one is added by the user (target_add asks).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "diagnose",
+    "scope": "read",
+    "confirms": false,
+    "description": "The block classifier's verdict for a target with its evidence (DNS, IP, SNI, 16 KB cut-off, QUIC…). refresh=true probes the target again and needs the probes permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "A target from targets_list (a host name, never a URL)",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "refresh": {
+          "type": "boolean",
+          "description": "Run the classifier again (probes the target; needs the probes permission)"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "trials_history",
+    "scope": "read",
+    "confirms": false,
+    "description": "What was tried: the knowledge base's results per strategy (successes/attempts) and this session's trials.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "Only this target",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Rows at most",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "catalog_functions",
+    "scope": "read",
+    "confirms": false,
+    "description": "The --lua-desync functions a strategy may use, with their arguments, ranges and defaults (the bundled zapret2 catalog).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "Only this category",
+          "enum": [
+            "basic",
+            "http",
+            "handshake",
+            "window",
+            "fake",
+            "split",
+            "faked",
+            "oob",
+            "udp",
+            "orchestrator"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Only this function",
+          "maxLength": 40,
+          "pattern": "^[a-z0-9_]+$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_validate",
+    "scope": "read",
+    "confirms": false,
+    "description": "Checks a strategy without running it: the Validator's errors and warnings and its id. Nothing is sent anywhere.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "description": "A strategy in nfqws2 syntax: only --payload=, --in-range=, --out-range= and --lua-desync= with catalog functions. Checked by the Validator before anything runs.",
+          "maxLength": 2048
+        },
+        "l4": {
+          "type": "string",
+          "description": "Transport",
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "client": {
+          "type": "string",
+          "description": "Client profile the strategy must survive",
+          "enum": [
+            "curl",
+            "chrome",
+            "firefox",
+            "safari_ios",
+            "android_chrome",
+            "smart_tv",
+            "old_tv"
+          ]
+        }
+      },
+      "required": [
+        "strategy"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "kb_query",
+    "scope": "read",
+    "confirms": false,
+    "description": "The local knowledge base: what worked for a target and what worked on a provider (ASN) for anyone's targets here.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "Results for this target",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "asn": {
+          "type": "integer",
+          "description": "Provider's AS number",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "l4": {
+          "type": "string",
+          "description": "Transport",
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Rows at most",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "target_add",
+    "scope": "probes",
+    "confirms": true,
+    "description": "Asks the user to add a target. The AutoTuner window shows a dialog; the answer is pending until the user decides. Call again with the same arguments to see the decision. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "The host name to add",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why, shown to the user",
+          "maxLength": 300
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "trial_run",
+    "scope": "probes",
+    "confirms": false,
+    "description": "Runs one strategy against a blocked target: the engine (through the privileged Agent) for the target's addresses, then the probe. Returns a compact observation: L0-L3, bytes, time, successes/attempts against the baseline, what went out and what came back, the classifier's reading. Never page content.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "A target from targets_list (a host name, never a URL)",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "strategy": {
+          "type": "string",
+          "description": "A strategy in nfqws2 syntax: only --payload=, --in-range=, --out-range= and --lua-desync= with catalog functions. Checked by the Validator before anything runs.",
+          "maxLength": 2048
+        },
+        "strategy_id": {
+          "type": "string",
+          "description": "A strategy id (s-…) from another answer of this server",
+          "maxLength": 14,
+          "pattern": "^s-[0-9a-f]{12}$"
+        },
+        "client": {
+          "type": "string",
+          "description": "Client profile the strategy must survive",
+          "enum": [
+            "curl",
+            "chrome",
+            "firefox",
+            "safari_ios",
+            "android_chrome",
+            "smart_tv",
+            "old_tv"
+          ]
+        },
+        "level": {
+          "type": "string",
+          "description": "L1 handshake, L2 full download (default), L3 page in a browser",
+          "enum": [
+            "L1",
+            "L2",
+            "L3"
+          ]
+        },
+        "attempts": {
+          "type": "integer",
+          "description": "Attempts in the series (default 3)",
+          "minimum": 1,
+          "maximum": 5
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_start",
+    "scope": "control",
+    "confirms": false,
+    "description": "Starts the AutoTuner search for a blocked target (the Runner: families in order, refinement, punishment pauses). Strategies put in the queue with search_enqueue go first. Long: poll search_status.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "A target from targets_list (a host name, never a URL)",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "mode": {
+          "type": "string",
+          "description": "Search depth",
+          "enum": [
+            "quick",
+            "standard",
+            "full"
+          ]
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_status",
+    "scope": "control",
+    "confirms": false,
+    "description": "Progress of the search: stage, percent, tried, found strategies with ids and efficiency, the best partial one, the queue.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_pause",
+    "scope": "control",
+    "confirms": false,
+    "description": "Pauses the search between trials (resume=true continues it).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "resume": {
+          "type": "boolean",
+          "description": "Continue a paused search"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_stop",
+    "scope": "control",
+    "confirms": false,
+    "description": "Stops the search; what was found stays in search_status.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_enqueue",
+    "scope": "control",
+    "confirms": false,
+    "description": "Puts your candidate strategies in the Runner's queue: before the next trial of a running search, or first in the next search. Each passes the Validator; results are stored with source llm.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategies": {
+          "type": "array",
+          "description": "Candidates",
+          "items": {
+            "type": "string",
+            "description": "A strategy in nfqws2 syntax: only --payload=, --in-range=, --out-range= and --lua-desync= with catalog functions. Checked by the Validator before anything runs.",
+            "maxLength": 2048
+          },
+          "maxItems": 10,
+          "minItems": 1
+        },
+        "note": {
+          "type": "string",
+          "description": "Why these, kept with them",
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "strategies"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_prune_family",
+    "scope": "control",
+    "confirms": false,
+    "description": "Skips a strategy family for the rest of the search (search_status lists the families).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "family": {
+          "type": "string",
+          "description": "Family id",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why",
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "family"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_experiment_start",
+    "scope": "experiments",
+    "confirms": true,
+    "description": "Runs strategy variants one by one on this PC's live traffic to the targets and measures each against a baseline; everything is reverted by itself after ttl_sec unless committed. Starting needs the user's yes in the AutoTuner window. Returns run_id; poll strategy_experiment_status. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "variants": {
+          "type": "array",
+          "description": "Variants",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Variant name",
+                "maxLength": 32,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "strategy": {
+                "type": "string",
+                "description": "A strategy in nfqws2 syntax: only --payload=, --in-range=, --out-range= and --lua-desync= with catalog functions. Checked by the Validator before anything runs.",
+                "maxLength": 2048
+              },
+              "strategy_id": {
+                "type": "string",
+                "description": "A strategy id (s-…) from another answer of this server",
+                "maxLength": 14,
+                "pattern": "^s-[0-9a-f]{12}$"
+              }
+            },
+            "required": [
+              "label"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 5,
+          "minItems": 1
+        },
+        "targets": {
+          "type": "array",
+          "description": "Targets from targets_list (default: all, at most 10)",
+          "items": {
+            "type": "string",
+            "description": "A target from targets_list (a host name, never a URL)",
+            "maxLength": 253,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+          },
+          "maxItems": 10
+        },
+        "repeats": {
+          "type": "integer",
+          "description": "Probes per target and variant (default 3)",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "baseline": {
+          "type": "boolean",
+          "description": "Measure the targets without a strategy first (default true)"
+        },
+        "ttl_sec": {
+          "type": "integer",
+          "description": "Automatic revert after this many seconds (default 300)",
+          "minimum": 30,
+          "maximum": 900
+        },
+        "keep_best": {
+          "type": "boolean",
+          "description": "Keep the best variant applied until the deadline (still not committed)"
+        }
+      },
+      "required": [
+        "variants"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_experiment_status",
+    "scope": "experiments",
+    "confirms": false,
+    "description": "The experiment's state (awaiting_confirmation, running, finished, failed, reverted, committed), phase, variant, seconds left before the revert, awaiting_commit.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_experiment_result",
+    "scope": "experiments",
+    "confirms": false,
+    "description": "The report: per variant and target the probes, success rate, score, delta to the baseline (fixed, broken, unchanged); the best variant.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "description": "The run (default: the last)",
+          "maxLength": 40,
+          "pattern": "^exp-[0-9a-z-]+$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_experiment_commit",
+    "scope": "experiments",
+    "confirms": true,
+    "description": "Keeps a variant: it becomes this PC's active protection. Needs the user's yes in the AutoTuner window; the answer is pending until then. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "The variant (default: best)",
+          "maxLength": 32,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_experiment_rollback",
+    "scope": "experiments",
+    "confirms": false,
+    "description": "Reverts at once: stops the experiment's engine (a kept variant too).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "export_preview",
+    "scope": "export",
+    "confirms": true,
+    "description": "Builds an export without applying anything: the files and the main config text. save=true asks the user to save it to AutoTuner's export folder; applying to a router or zapret-gui is always done by the user. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "description": "Export format",
+          "enum": [
+            "zapret2",
+            "winws2",
+            "keenetic",
+            "zapret_gui",
+            "argv"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "description": "Target and strategy pairs (default: the best known strategy of each target)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "description": "A target from targets_list (a host name, never a URL)",
+                "maxLength": 253,
+                "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+              },
+              "strategy_id": {
+                "type": "string",
+                "description": "A strategy id (s-…) from another answer of this server",
+                "maxLength": 14,
+                "pattern": "^s-[0-9a-f]{12}$"
+              }
+            },
+            "required": [
+              "target",
+              "strategy_id"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 20
+        },
+        "save": {
+          "type": "boolean",
+          "description": "Ask the user to save the package"
+        }
+      },
+      "required": [
+        "format"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

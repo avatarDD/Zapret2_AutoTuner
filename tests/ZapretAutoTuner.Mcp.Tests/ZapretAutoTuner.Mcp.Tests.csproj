@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZapretAutoTuner.Mcp\ZapretAutoTuner.Mcp.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="golden\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

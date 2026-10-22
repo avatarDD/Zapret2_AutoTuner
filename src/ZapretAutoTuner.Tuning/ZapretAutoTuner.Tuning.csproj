@@ -11,5 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ZapretAutoTuner.Tuning.Tests" />
+    <InternalsVisibleTo Include="ZapretAutoTuner.Mcp" />
   </ItemGroup>
 </Project>

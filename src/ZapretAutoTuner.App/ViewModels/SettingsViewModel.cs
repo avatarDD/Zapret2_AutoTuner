@@ -30,6 +30,11 @@ public sealed partial class SettingsViewModel : PageViewModel
         _guiToken = host.Settings.GuiToken;
         _routerHost = host.Settings.RouterHost;
         _largeFont = host.Settings.LargeFont;
+        _advisorEnabled = host.Settings.AdvisorEnabled;
+        _advisorProviderIndex = host.Settings.AdvisorProvider == ZapretAutoTuner.Mcp.Advisor.AdvisorProvider.Claude ? 0 : 1;
+        _advisorModel = host.Settings.AdvisorModel;
+        _advisorEndpoint = host.Settings.AdvisorEndpoint;
+        _advisorKey = host.Settings.AdvisorKey;
     }
 
     public override string TitleKey => "nav.settings";
@@ -189,6 +194,44 @@ public sealed partial class SettingsViewModel : PageViewModel
     private string _sshKeysStatus = "";
 
     partial void OnRouterHostChanged(string value) => _host.Settings.RouterHost = value.Trim();
+
+    // ---- the built-in advisor (PLAN 4a.2, MCP M4); the key stays in memory for this run only
+
+    [ObservableProperty]
+    private bool _advisorEnabled;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AdvisorLocal))]
+    private int _advisorProviderIndex;
+
+    [ObservableProperty]
+    private string _advisorModel;
+
+    [ObservableProperty]
+    private string _advisorEndpoint;
+
+    [ObservableProperty]
+    private string _advisorKey;
+
+    public bool AdvisorLocal => AdvisorProviderIndex == 1;
+
+    partial void OnAdvisorEnabledChanged(bool value) => _host.Settings.AdvisorEnabled = value;
+
+    partial void OnAdvisorProviderIndexChanged(int value)
+    {
+        var p = value == 1 ? ZapretAutoTuner.Mcp.Advisor.AdvisorProvider.OpenAiCompatible : ZapretAutoTuner.Mcp.Advisor.AdvisorProvider.Claude;
+        if (p == _host.Settings.AdvisorProvider)
+            return;
+        _host.Settings.AdvisorProvider = p;
+        // the other provider's default model does not fit this one
+        AdvisorModel = p == ZapretAutoTuner.Mcp.Advisor.AdvisorProvider.Claude ? ZapretAutoTuner.Mcp.Advisor.AdvisorOptions.DefaultClaudeModel : ZapretAutoTuner.Mcp.Advisor.AdvisorOptions.DefaultLocalModel;
+    }
+
+    partial void OnAdvisorModelChanged(string value) => _host.Settings.AdvisorModel = value;
+
+    partial void OnAdvisorEndpointChanged(string value) => _host.Settings.AdvisorEndpoint = value;
+
+    partial void OnAdvisorKeyChanged(string value) => _host.Settings.AdvisorKey = value;
 
     partial void OnLargeFontChanged(bool value)
     {

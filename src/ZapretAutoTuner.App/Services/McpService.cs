@@ -28,7 +28,7 @@ public sealed partial class McpService : ObservableObject, IUserConfirm, IAsyncD
         Session.Audit.Added += _ => Dispatcher.UIThread.Post(Refresh);
         _timer = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => Refresh());
         _timer.Start();
-        Loc.Loc.I.PropertyChanged += (_, _) => Refresh();
+        Loc.Loc.I.PropertyChanged += OnLanguage;
     }
 
     public McpSession Session { get; }
@@ -160,6 +160,8 @@ public sealed partial class McpService : ObservableObject, IUserConfirm, IAsyncD
         return await Dispatcher.UIThread.InvokeAsync(() => ask(title, text)).WaitAsync(ct).ConfigureAwait(false);
     }
 
+    private void OnLanguage(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Refresh();
+
     private void Refresh()
     {
         var recent = Session.LastCall is { } t && DateTime.UtcNow - t.ToUniversalTime() < ActiveWindow;
@@ -170,6 +172,7 @@ public sealed partial class McpService : ObservableObject, IUserConfirm, IAsyncD
     /// <summary>Call on the UI thread: the timer stops at once, the rest finishes off it.</summary>
     public async ValueTask DisposeAsync()
     {
+        Loc.Loc.I.PropertyChanged -= OnLanguage;
         if (Dispatcher.UIThread.CheckAccess())
             _timer.Stop();
         await _stdio.CancelAsync().ConfigureAwait(false);

@@ -1,0 +1,34 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.AdvisorView"
+             x:DataType="vm:AdvisorViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Spacing="8">
+      <TextBlock Classes="h1" Text="{l:T advisor.title}" />
+      <TextBlock Classes="muted" Text="{l:T advisor.subtitle}" />
+      <TextBox Text="{Binding Task}" AcceptsReturn="True" TextWrapping="Wrap" Height="60" Watermark="{l:T advisor.task}" />
+      <WrapPanel>
+        <Button Classes="accent" Content="{l:T advisor.start}" Command="{Binding StartCommand}" Margin="0,0,8,8" />
+        <Button Content="{l:T common.stop}" Command="{Binding StopCommand}" Margin="0,0,8,8" />
+      </WrapPanel>
+      <TextBlock Text="{Binding Status}" Classes="muted" />
+    </StackPanel>
+    <ScrollViewer Margin="0,8,0,0">
+      <ItemsControl ItemsSource="{Binding Lines}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:AdvisorLine">
+            <Border Classes="card" Margin="0,0,0,6">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="13" />
+                <TextBlock Classes="error" Text="{l:T advisor.error}" FontSize="11" IsVisible="{Binding IsError}" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

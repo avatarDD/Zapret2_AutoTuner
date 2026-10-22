@@ -222,6 +222,35 @@ public sealed class AppSettings
         }
     }
 
+    /// <summary>The built-in advisor (PLAN 4a.2, MCP M4): off by default; nothing is sent until the user presses Start.</summary>
+    public bool AdvisorEnabled
+    {
+        get => Flag("advisor.enabled");
+        set => SetFlag("advisor.enabled", value);
+    }
+
+    public Mcp.Advisor.AdvisorProvider AdvisorProvider
+    {
+        get => kb.GetSetting("advisor.provider") == "openai" ? Mcp.Advisor.AdvisorProvider.OpenAiCompatible : Mcp.Advisor.AdvisorProvider.Claude;
+        set => kb.SetSetting("advisor.provider", value == Mcp.Advisor.AdvisorProvider.OpenAiCompatible ? "openai" : "claude");
+    }
+
+    public string AdvisorModel
+    {
+        get => kb.GetSetting("advisor.model") is { Length: > 0 } m ? m
+            : AdvisorProvider == Mcp.Advisor.AdvisorProvider.Claude ? Mcp.Advisor.AdvisorOptions.DefaultClaudeModel : Mcp.Advisor.AdvisorOptions.DefaultLocalModel;
+        set => kb.SetSetting("advisor.model", value.Trim());
+    }
+
+    public string AdvisorEndpoint
+    {
+        get => kb.GetSetting("advisor.endpoint") ?? Mcp.Advisor.AdvisorOptions.DefaultLocalEndpoint;
+        set => kb.SetSetting("advisor.endpoint", value.Trim());
+    }
+
+    /// <summary>The provider's API key: a secret, so in memory for this run only, like <see cref="GuiToken"/>.</summary>
+    public string AdvisorKey { get; set; } = "";
+
     /// <summary>The user's targets (the wizard's domains and the ones added over MCP after a yes).</summary>
     public IReadOnlyList<string> Targets
     {

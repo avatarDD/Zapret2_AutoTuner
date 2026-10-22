@@ -61,6 +61,20 @@
         <CheckBox x:Name="ShowToken" Content="{l:T mcp.show_token}" IsVisible="{Binding McpHttp}" />
         <TextBlock Text="{Binding McpError}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding McpError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
       </StackPanel>
+      <TextBlock Classes="h2" Text="{l:T advisor.title}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T advisor.settings_hint}" />
+      <CheckBox Content="{l:T advisor.enabled}" IsChecked="{Binding AdvisorEnabled}" />
+      <StackPanel Spacing="6" Margin="24,0,0,0" IsEnabled="{Binding AdvisorEnabled}">
+        <ComboBox SelectedIndex="{Binding AdvisorProviderIndex}" MinWidth="260">
+          <ComboBoxItem Content="{l:T advisor.provider_claude}" />
+          <ComboBoxItem Content="{l:T advisor.provider_local}" />
+        </ComboBox>
+        <TextBox Text="{Binding AdvisorModel}" Watermark="{l:T advisor.model}" />
+        <TextBox Text="{Binding AdvisorEndpoint}" Watermark="http://127.0.0.1:11434/v1" IsVisible="{Binding AdvisorLocal}" />
+        <TextBox Text="{Binding AdvisorKey}" PasswordChar="•" Watermark="{l:T advisor.key}" />
+        <TextBlock Classes="muted" Text="{l:T advisor.key_session}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T advisor.data}" />
+      </StackPanel>
       <TextBlock Classes="muted" Text="{l:T settings.privacy}" />
       <SelectableTextBlock Text="{Binding DataDir}" Classes="muted" FontSize="12" />
     </StackPanel>

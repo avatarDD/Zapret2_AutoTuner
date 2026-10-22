@@ -16,7 +16,9 @@ public sealed partial class MainViewModel : ObservableObject
         Mcp = new McpService(host, Monitor);
         Reports.McpAudit = Mcp.AuditLines;
         Settings = new SettingsViewModel(host, Mcp);
-        Pages = [Home, Wizard, Monitor, Reports, Expert, Settings];
+        Advisor = new AdvisorViewModel(host, Mcp.Tools);
+        Mcp.Stopped += Advisor.Cancel;
+        Pages = [Home, Wizard, Monitor, Reports, Expert, Advisor, Settings];
         _current = Home;
         host.AgentLost += m => AgentStatus = Loc.Loc.I.F("agent.lost", m);
     }
@@ -32,6 +34,8 @@ public sealed partial class MainViewModel : ObservableObject
     public ExpertViewModel Expert { get; }
 
     public SettingsViewModel Settings { get; }
+
+    public AdvisorViewModel Advisor { get; }
 
     public McpService Mcp { get; }
 

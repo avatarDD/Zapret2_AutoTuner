@@ -59,10 +59,21 @@ internal sealed class EngineManager : IDisposable
         if (policy.Count > 0)
             return new CheckResult(false, "policy", policy);
         var ctx = new ValidationContext { Catalog = LuaCatalog.Default, Platform = Platform };
-        var result = new StrategyValidator(ctx).ValidateArgv(argv, f => File.Exists(f) ? new FileInfo(f).Length : null);
+        var result = new StrategyValidator(ctx).ValidateArgv(argv, f => File.Exists(f) ? new FileInfo(f).Length : null, UserLuaFunctions);
         if (!result.Ok)
             return new CheckResult(false, "validator", result.Errors.Select(e => e.ToString()).ToList());
         return null;
+    }
+
+    /// <summary>
+    /// The desync functions of a user Lua file (PLAN 4a.5) the argv loads, so the Validator accepts calls to them. The
+    /// user approved the script in the UI; the Agent only reads which functions the file it will load defines.
+    /// </summary>
+    private static IReadOnlyCollection<string>? UserLuaFunctions(string path)
+    {
+        if (!path.EndsWith(".lua", StringComparison.Ordinal) || !File.Exists(path) || new FileInfo(path).Length > Core.Resources.ResourceRules.MaxLuaBytes)
+            return null;
+        return Core.Resources.LuaScriptCheck.FindDesyncFunctions(File.ReadAllText(path));
     }
 
     /// <summary><c>--dry-run</c>, then <c>--intercept=0</c> (catches lua-init errors), nfqws2-engine §9.</summary>

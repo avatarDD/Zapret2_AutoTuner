@@ -30,6 +30,9 @@ public static partial class ZapretGuiExporter
 
     public static string GuiIpset(string name) => $"zt-{name}-ipset";
 
+    /// <summary>The GUI's name of a Lua file (<c>/api/lua/&lt;name&gt;</c>): the file name without <c>.lua</c>.</summary>
+    public static string GuiLua(string file) => file.EndsWith(".lua", StringComparison.Ordinal) ? file[..^4] : file;
+
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     /// <summary>The checks of §5 for zapret-gui on top of the common ones.</summary>
@@ -56,7 +59,9 @@ public static partial class ZapretGuiExporter
         p.ToArgs(path).Where(a => !a.StartsWith("--name=", StringComparison.Ordinal));
 
     /// <summary>Global options the strategy needs inside its first profile (the GUI has no other place for them).</summary>
-    private static List<string> Globals(Solution s) => Unifier.NeedsIpcacheHostname(s) ? ["--ipcache-hostname"] : [];
+    /// <remarks>Our Lua files go in as <c>--lua-init=@lua/&lt;file&gt;</c>, the GUI's placeholder for its lua_path.</remarks>
+    private static List<string> Globals(Solution s) =>
+        [.. Unifier.NeedsIpcacheHostname(s) ? ["--ipcache-hostname"] : Array.Empty<string>(), .. ExportCommon.LuaInits(s, "lua")];
 
     public static string StrategyId(Solution s, string? title = null)
     {
@@ -70,9 +75,11 @@ public static partial class ZapretGuiExporter
     {
         Check(s);
         var sb = new StringBuilder("NFQWS2_OPT=\"\n");
+        foreach (var init in ExportCommon.LuaInits(s, $"{Root}/lua"))
+            sb.Append(init).Append('\n');
         foreach (var name in s.Blobs.Keys)
             sb.Append($"--blob={name}:@{Root}/files/fake/{name}.bin\n");
-        var globals = Globals(s);
+        var globals = Globals(s).Where(g => !g.StartsWith("--lua-init=", StringComparison.Ordinal)).ToList();
         for (int i = 0; i < s.Profiles.Count; i++)
         {
             var tokens = ProfileTokens(s.Profiles[i], (r, ipset) => ipset ? $"{Root}/ipset/{GuiIpset(r.Name)}.txt" : $"{Root}/lists/{GuiHostlist(r.Name)}.txt");
@@ -173,6 +180,7 @@ public static partial class ZapretGuiExporter
             pkg.AddText($"ipset/{GuiIpset(name)}.txt", ExportCommon.ListLines(cidrs));
         foreach (var (name, bytes) in s.Blobs)
             pkg.Files[$"blobs/{name}.bin"] = bytes;
+        ExportCommon.AddLuaFiles(pkg, s);
 
         var todo = new StringBuilder();
         foreach (var name in s.Hostlists.Keys)
@@ -181,6 +189,10 @@ public static partial class ZapretGuiExporter
             todo.Append($"  - ipset {GuiIpset(name)} (ipset/{GuiIpset(name)}.txt)\n");
         foreach (var name in s.Blobs.Keys)
             todo.Append($"  - блоб / blob {name} (blobs/{name}.bin)\n");
+        foreach (var file in s.LuaFiles.Keys)
+            todo.Append($"  - Lua-скрипт / Lua script {GuiLua(file)} (lua/{file})\n");
+        if (s.LuaFiles.Count > 0)
+            pkg.Warnings.Add("в бэкапе zapret-gui нет Lua-скриптов: создайте их в «Lua-скрипты» или отправьте из AutoTuner / the zapret-gui backup has no Lua scripts: create them under Lua scripts or send them from AutoTuner");
         if (s.Ipsets.Count > 0 || s.Blobs.Count > 0)
             pkg.Warnings.Add("в бэкапе zapret-gui нет блобов и ipset: создайте их вручную / the zapret-gui backup has no blobs or ipsets: create them by hand");
         pkg.AddText("README.txt", ExportCommon.Header(s) + $"""

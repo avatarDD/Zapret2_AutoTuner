@@ -321,6 +321,19 @@ zapret2 в `/opt/zapret2` (lua `lua/`, блобы `files/fake/`, hostlist
 - Ещё есть MCP-сервер `POST /api/mcp` (Bearer-токен) с инструментами
   стратегий, списков и блобов. Его можно использовать вместо REST, если
   токен выдан.
+- Эксперименты на роутере (`core/mcp/tools/experiments.py`, разрешение
+  `experiments`, действует только с `control` и `probes`):
+  `strategy_experiment_start` — до 20 вариантов, до 10 целей, вариант
+  задаётся `profiles` (до 8, `args` профиля ≤ 2000 символов, без `--new`),
+  `baseline` меряет цели без обхода, `ttl_sec` — дедмен-свитч, `keep_best`
+  оставляет лучший вариант применённым до срока. `strategy_experiment_commit`
+  подтверждает только вариант, оставленный `keep_best` (авто-откат
+  отменяется); `save_as` + `make_active` сохраняют его пользовательской
+  стратегией и требуют `strategies_write` (иначе ответ `ok: false`,
+  `permission: strategies_write`). `strategy_get` без `id` отдаёт
+  применённую стратегию (профили с `enabled`), без выбранной — `ok: true,
+  available: false`. AutoTuner вызывает `commit` только после
+  подтверждения пользователя.
 
 ### 3.3 Бэкап zapret-gui (файл, без сети)
 

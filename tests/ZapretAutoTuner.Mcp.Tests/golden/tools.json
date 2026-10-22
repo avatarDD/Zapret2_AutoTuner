@@ -575,5 +575,149 @@
       ],
       "additionalProperties": false
     }
+  },
+  {
+    "name": "router_experiment_start",
+    "scope": "router",
+    "confirms": true,
+    "description": "Tries strategy variants on the router through zapret-gui: the router measures the targets without bypass first, then applies each variant (the router's current strategy profiles stay after it) and probes the targets from the router; everything reverts by itself after ttl_sec unless committed. Each strategy passes the Validator for Linux. Starting needs the user's yes in the AutoTuner window. Poll router_experiment_status. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "variants": {
+          "type": "array",
+          "description": "Variants",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Variant name",
+                "maxLength": 32,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "strategy": {
+                "type": "string",
+                "description": "A strategy in nfqws2 syntax: only --payload=, --in-range=, --out-range= and --lua-desync= with catalog functions. Checked by the Validator before anything runs.",
+                "maxLength": 2048
+              },
+              "strategy_id": {
+                "type": "string",
+                "description": "A strategy id (s-…) from another answer of this server",
+                "maxLength": 14,
+                "pattern": "^s-[0-9a-f]{12}$"
+              },
+              "l4": {
+                "type": "string",
+                "description": "Transport",
+                "enum": [
+                  "tcp",
+                  "udp"
+                ]
+              }
+            },
+            "required": [
+              "label"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 5,
+          "minItems": 1
+        },
+        "targets": {
+          "type": "array",
+          "description": "Targets from targets_list (default: all, at most 10)",
+          "items": {
+            "type": "string",
+            "description": "A target from targets_list (a host name, never a URL)",
+            "maxLength": 253,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+          },
+          "maxItems": 10
+        },
+        "repeats": {
+          "type": "integer",
+          "description": "Probes per target and variant (default 3)",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "ttl_sec": {
+          "type": "integer",
+          "description": "Automatic revert on the router after this many seconds (default 300)",
+          "minimum": 60,
+          "maximum": 900
+        },
+        "keep_best": {
+          "type": "boolean",
+          "description": "Keep the best variant applied on the router until the deadline (still not committed)"
+        }
+      },
+      "required": [
+        "variants"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_experiment_status",
+    "scope": "router",
+    "confirms": false,
+    "description": "The router experiment's state (awaiting_confirmation, running, finished, failed, reverted, committed), the router's phase, awaiting_commit, and whether zapret-gui is set up in AutoTuner.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_experiment_result",
+    "scope": "router",
+    "confirms": false,
+    "description": "The router's report: targets open without bypass, per variant and target the probes from the router, success rate, score, zapret-gui's hints; the best variant. The results are stored with source router.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "description": "The run (default: the last)",
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_experiment_commit",
+    "scope": "router",
+    "confirms": true,
+    "description": "Keeps a variant on the router: it becomes zapret-gui's strategy (save=true also saves it as a user strategy and makes it active). Needs the user's yes in the AutoTuner window; the answer is pending until then. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "The variant (default: best)",
+          "maxLength": 32,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "save": {
+          "type": "boolean",
+          "description": "Also save it as a user strategy on the router and make it active"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_experiment_rollback",
+    "scope": "router",
+    "confirms": false,
+    "description": "Reverts the router at once to its state before the experiment (a kept variant too). A committed variant stays.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
   }
 ]

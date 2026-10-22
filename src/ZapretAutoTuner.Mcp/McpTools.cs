@@ -118,6 +118,29 @@ public static class McpTools
                 ("items", S.Arr("Target and strategy pairs (default: the best known strategy of each target)", S.Obj([("target", Target()), ("strategy_id", StrategyId())], "target", "strategy_id"), 20)),
                 ("save", S.Bool("Ask the user to save the package")),
             ], "format"), Confirms: true),
+
+        // router: zapret-gui's experiments on the router, with the address and token the user entered in AutoTuner
+        new("router_experiment_start", McpScope.Router,
+            "Tries strategy variants on the router through zapret-gui: the router measures the targets without bypass first, then applies each variant (the router's current strategy profiles stay after it) and probes the targets from the router; everything reverts by itself after ttl_sec unless committed. Each strategy passes the Validator for Linux. Starting needs the user's yes in the AutoTuner window. Poll router_experiment_status.",
+            S.Obj([
+                ("variants", S.Arr("Variants", S.Obj([("label", S.Str("Variant name", 32, "^[A-Za-z0-9_-]+$")), ("strategy", StrategyText()), ("strategy_id", StrategyId()), ("l4", S.Str("Transport", values: ["tcp", "udp"]))], "label"), 5, 1)),
+                ("targets", S.Arr("Targets from targets_list (default: all, at most 10)", Target(), 10)),
+                ("repeats", S.Int("Probes per target and variant (default 3)", 1, 5)),
+                ("ttl_sec", S.Int("Automatic revert on the router after this many seconds (default 300)", 60, 900)),
+                ("keep_best", S.Bool("Keep the best variant applied on the router until the deadline (still not committed)")),
+            ], "variants"), Confirms: true),
+        new("router_experiment_status", McpScope.Router,
+            "The router experiment's state (awaiting_confirmation, running, finished, failed, reverted, committed), the router's phase, awaiting_commit, and whether zapret-gui is set up in AutoTuner.",
+            S.Empty()),
+        new("router_experiment_result", McpScope.Router,
+            "The router's report: targets open without bypass, per variant and target the probes from the router, success rate, score, zapret-gui's hints; the best variant. The results are stored with source router.",
+            S.Obj([("run_id", S.Str("The run (default: the last)", 64, "^[A-Za-z0-9_.:-]+$"))])),
+        new("router_experiment_commit", McpScope.Router,
+            "Keeps a variant on the router: it becomes zapret-gui's strategy (save=true also saves it as a user strategy and makes it active). Needs the user's yes in the AutoTuner window; the answer is pending until then.",
+            S.Obj([("label", S.Str("The variant (default: best)", 32, "^[A-Za-z0-9_-]+$")), ("save", S.Bool("Also save it as a user strategy on the router and make it active"))]), Confirms: true),
+        new("router_experiment_rollback", McpScope.Router,
+            "Reverts the router at once to its state before the experiment (a kept variant too). A committed variant stays.",
+            S.Empty()),
     ];
 
     public static McpToolDefinition? Find(string name) => All.FirstOrDefault(t => t.Name == name);

@@ -49,6 +49,7 @@
         <CheckBox Content="{l:T mcp.perm_control}" IsChecked="{Binding PermControl}" />
         <CheckBox Content="{l:T mcp.perm_experiments}" IsChecked="{Binding PermExperiments}" />
         <CheckBox Content="{l:T mcp.perm_export}" IsChecked="{Binding PermExport}" />
+        <CheckBox Content="{l:T mcp.perm_router}" IsChecked="{Binding PermRouter}" />
         <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T mcp.perm_hint}" />
         <TextBlock Text="{l:T mcp.stdio}" />
         <SelectableTextBlock Text="{Binding StdioSnippet}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />

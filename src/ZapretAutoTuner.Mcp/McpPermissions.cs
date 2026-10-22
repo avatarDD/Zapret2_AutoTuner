@@ -10,18 +10,23 @@ public enum McpScope
     Control,
     Experiments,
     Export,
+
+    /// <summary>Experiments on the router through zapret-gui (router_experiment_*).</summary>
+    Router,
 }
 
 /// <summary>
 /// The user's switches, all off by default. <c>experiments</c> works only with <c>control</c> and <c>probes</c>, as in
-/// zapret-gui; an unmet dependency is explained, not silently ignored. There is no switch for anything else: the
+/// zapret-gui, and <c>router</c> (the router's experiments through zapret-gui) likewise; an unmet dependency is explained,
+/// not silently ignored. There is no switch for anything else: the
 /// program has no code for a shell, files or the OS, so there is nothing to switch on.
 /// </summary>
-public sealed record McpPermissions(bool Probes = false, bool Control = false, bool Experiments = false, bool Export = false)
+public sealed record McpPermissions(bool Probes = false, bool Control = false, bool Experiments = false, bool Export = false, bool Router = false)
 {
     public static IReadOnlyDictionary<McpScope, McpScope[]> Requires { get; } = new Dictionary<McpScope, McpScope[]>
     {
         [McpScope.Experiments] = [McpScope.Control, McpScope.Probes],
+        [McpScope.Router] = [McpScope.Control, McpScope.Probes],
     };
 
     public static string Name(McpScope s) => s.ToString().ToLowerInvariant();
@@ -34,6 +39,7 @@ public sealed record McpPermissions(bool Probes = false, bool Control = false, b
         McpScope.Control => Control,
         McpScope.Experiments => Experiments,
         McpScope.Export => Export,
+        McpScope.Router => Router,
         _ => false,
     };
 

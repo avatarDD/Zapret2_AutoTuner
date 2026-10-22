@@ -367,6 +367,22 @@
   "найдено исправление",
   "fix found"
  ],
+ "journal.router_applied": [
+  "закреплено на роутере",
+  "kept on the router"
+ ],
+ "journal.router_failing": [
+  "не работает на роутере",
+  "failing on the router"
+ ],
+ "journal.router_new_host": [
+  "новый хост с роутера",
+  "new host from the router"
+ ],
+ "journal.router_recovered": [
+  "снова работает на роутере",
+  "works on the router again"
+ ],
  "journal.site_down": [
   "сайт недоступен",
   "site down"
@@ -422,6 +438,10 @@
  "mcp.perm_probes": [
   "Пробы: классификация и проверки целей из списка",
   "Probes: classify and check the listed targets"
+ ],
+ "mcp.perm_router": [
+  "router — эксперименты на роутере через zapret-gui (нужны control и probes)",
+  "router — experiments on the router through zapret-gui (needs control and probes)"
  ],
  "mcp.permissions": [
   "Разрешения (чтение доступно всегда):",
@@ -775,6 +795,78 @@
   "{0}: работает {1}/{2} · {3}",
   "{0}: works {1}/{2} · {3}"
  ],
+ "wizard.router_cannot": [
+  "Эту стратегию нельзя перенести в эксперимент zapret-gui:\n{0}\nСохраните её через экспорт (шаг 5).",
+  "This strategy cannot be carried into a zapret-gui experiment:\n{0}\nSave it through the export (step 5)."
+ ],
+ "wizard.router_commit": [
+  "Закрепить на роутере…",
+  "Keep on the router…"
+ ],
+ "wizard.router_commit_text": [
+  "Проверка с роутера:\n{0}\n\nСтратегия будет сохранена в zapret-gui как пользовательская {1} и станет активной. Если отказаться, роутер сразу вернёт прежнее состояние.\n\n{2}",
+  "Probes from the router:\n{0}\n\nThe strategy is saved in zapret-gui as the user strategy {1} and made active. If you decline, the router restores its previous state at once.\n\n{2}"
+ ],
+ "wizard.router_commit_title": [
+  "Закрепить стратегию на роутере?",
+  "Keep the strategy on the router?"
+ ],
+ "wizard.router_committed": [
+  "Закреплено на роутере. Обратная связь с роутера пишется в журнал мониторинга.",
+  "Kept on the router. The router's feedback goes to the monitor's journal."
+ ],
+ "wizard.router_connected": [
+  "Подключено к zapret-gui {0}, профилей текущей стратегии: {1}",
+  "Connected to zapret-gui {0}, current strategy profiles: {1}"
+ ],
+ "wizard.router_domains_only": [
+  "Для роутера укажите сайты (домены).",
+  "For the router, enter sites (domains)."
+ ],
+ "wizard.router_failed": [
+  "Ошибка zapret-gui: {0}",
+  "zapret-gui error: {0}"
+ ],
+ "wizard.router_found": [
+  "Стратегия найдена на роутере. Её можно закрепить: роутер применит её, проверит сайты, и только после вашего подтверждения она сохранится.",
+  "A strategy was found on the router. You can keep it: the router applies it, probes the sites, and it is saved only after you confirm."
+ ],
+ "wizard.router_hint": [
+  "Стратегии испытываются прямо на роутере: zapret-gui по очереди применяет варианты, проверяет сайты с самого роутера и сам возвращает прежнее состояние. Нужны адрес zapret-gui и MCP-токен с разрешением experiments (с ним control и probes). Права администратора на ПК не нужны. Провайдеры подбираются только на ПК.",
+  "Strategies are tried on the router itself: zapret-gui applies the variants in turn, probes the sites from the router and restores its previous state by itself. You need zapret-gui's address and an MCP token with the experiments permission (with control and probes). No administrator rights on this PC. Providers are tuned on the PC only."
+ ],
+ "wizard.router_keeping": [
+  "Роутер применяет стратегию и проверяет сайты…",
+  "The router applies the strategy and probes the sites…"
+ ],
+ "wizard.router_missing_tools": [
+  "Токену zapret-gui не хватает инструментов: {0}. Включите разрешение experiments (вместе с control и probes) в настройках MCP zapret-gui.",
+  "The zapret-gui token lacks these tools: {0}. Enable the experiments permission (with control and probes) in zapret-gui's MCP settings."
+ ],
+ "wizard.router_not_kept": [
+  "Роутер не оставил стратегию, всё возвращено: {0}",
+  "The router did not keep the strategy, everything is reverted: {0}"
+ ],
+ "wizard.router_not_set": [
+  "Укажите адрес zapret-gui и MCP-токен.",
+  "Enter zapret-gui's address and MCP token."
+ ],
+ "wizard.router_rolled_back": [
+  "Роутер вернул прежнее состояние.",
+  "The router restored its previous state."
+ ],
+ "wizard.router_saved": [
+  "Закреплено на роутере и сохранено как {0}. Обратная связь с роутера пишется в журнал мониторинга.",
+  "Kept on the router and saved as {0}. The router's feedback goes to the monitor's journal."
+ ],
+ "wizard.router_session_text": [
+  "zapret-gui: {0}\nСайты: {1}\nТекущая стратегия роутера: {2} (профилей: {3}), её профили остаются после испытуемого.\n\nСначала роутер проверит сайты без обхода, затем по очереди применит варианты и проверит каждый. После каждого эксперимента роутер сам вернёт прежнее состояние (и при обрыве связи тоже). Навсегда ничего не сохраняется без отдельного подтверждения.",
+  "zapret-gui: {0}\nSites: {1}\nThe router's current strategy: {2} ({3} profiles); its profiles stay after the one on trial.\n\nThe router first probes the sites without bypass, then applies the variants in turn and probes each. After every experiment the router restores its previous state by itself (also if the connection drops). Nothing is kept without a separate confirmation."
+ ],
+ "wizard.router_session_title": [
+  "Начать испытания на роутере?",
+  "Start trials on the router?"
+ ],
  "wizard.solution": [
   "Готово: профилей в итоговой стратегии {0}. Дальше — экспорт.",
   "Done: {0} profiles in the final strategy. Next is export."
@@ -818,5 +910,17 @@
  "wizard.trying": [
   "{0}: пробую [{1}] {2}",
   "{0}: trying [{1}] {2}"
+ ],
+ "wizard.where": [
+  "Где подбирать:",
+  "Where to tune:"
+ ],
+ "wizard.where_pc": [
+  "Этот ПК",
+  "This PC"
+ ],
+ "wizard.where_router": [
+  "Роутер через zapret-gui",
+  "Router through zapret-gui"
  ]
 }

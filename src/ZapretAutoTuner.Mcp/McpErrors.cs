@@ -26,7 +26,7 @@ internal static class McpErrors
     /// The strategy of a call: <c>strategy</c> (text) or <c>strategy_id</c>, exactly one. Either way it passes
     /// <see cref="StrategyPolicy"/> again: an id is a shortcut, not a pass.
     /// </summary>
-    public static (CheckedStrategy? Strategy, JsonObject? Refusal) StrategyFrom(McpSession session, JsonObject args, ClientProfile? client = null)
+    public static (CheckedStrategy? Strategy, JsonObject? Refusal) StrategyFrom(McpSession session, JsonObject args, ClientProfile? client = null, Core.Validation.EnginePlatform? platform = null)
     {
         var text = (string?)args["strategy"];
         var id = (string?)args["strategy_id"];
@@ -40,7 +40,7 @@ internal static class McpErrors
             text = known.Strategy.ToString();
             l4 = known.L4;
         }
-        var c = StrategyPolicy.Check(text!, l4, client);
+        var c = StrategyPolicy.Check(text!, l4, client, platform: platform);
         return c.Ok ? (c, null) : (null, StrategyPolicy.Refusal(c));
     }
 }

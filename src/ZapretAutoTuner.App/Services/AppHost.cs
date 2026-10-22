@@ -36,6 +36,11 @@ public sealed class AppHost : IAsyncDisposable
 
     public bool AgentRunning => _agent is not null;
 
+    /// <summary>zapret-gui on the router: the experiments link and the feedback after a commit (PLAN 7.6).</summary>
+    public RouterService Router => _router ??= new RouterService(this);
+
+    private RouterService? _router;
+
     /// <summary>The Agent dropped (crash, the user closed the elevation prompt): the UI says so and offers to restart.</summary>
     public event Action<string>? AgentLost;
 
@@ -71,6 +76,8 @@ public sealed class AppHost : IAsyncDisposable
         // the Agent removes its firewall rules and stops engines on shutdown (AGENTS.md rule 6)
         if (_agent is not null)
             await _agent.DisposeAsync().ConfigureAwait(false);
+        if (_router is not null)
+            await _router.DisposeAsync().ConfigureAwait(false);
         Kb.Dispose();
         _agentGate.Dispose();
     }
@@ -212,13 +219,14 @@ public sealed class AppSettings
     /// <summary>The permission groups beyond "read" (all off by default, as in zapret-gui).</summary>
     public Mcp.McpPermissions McpPermissions
     {
-        get => new(Flag("mcp.perm.probes"), Flag("mcp.perm.control"), Flag("mcp.perm.experiments"), Flag("mcp.perm.export"));
+        get => new(Flag("mcp.perm.probes"), Flag("mcp.perm.control"), Flag("mcp.perm.experiments"), Flag("mcp.perm.export"), Flag("mcp.perm.router"));
         set
         {
             SetFlag("mcp.perm.probes", value.Probes);
             SetFlag("mcp.perm.control", value.Control);
             SetFlag("mcp.perm.experiments", value.Experiments);
             SetFlag("mcp.perm.export", value.Export);
+            SetFlag("mcp.perm.router", value.Router);
         }
     }
 

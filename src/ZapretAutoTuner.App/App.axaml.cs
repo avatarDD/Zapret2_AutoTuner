@@ -40,6 +40,8 @@ public sealed partial class App : Application
                 Task.Run(async () =>
                 {
                     await mcp.ConfigureAwait(false);
+                    // an uncommitted router experiment of the wizard is rolled back (AGENTS.md rule 7)
+                    await main.Wizard.ShutdownAsync().ConfigureAwait(false);
                     await main.Monitor.ShutdownAsync().ConfigureAwait(false);
                     await host.DisposeAsync().ConfigureAwait(false);
                 }).GetAwaiter().GetResult();

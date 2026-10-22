@@ -8,8 +8,11 @@ namespace ZapretAutoTuner.Tuning;
 /// <summary>
 /// Writes what the search learns into the knowledge base (PLAN 3.2): every attempt, every refinement step and the
 /// checkpoint, so an interrupted search continues where it stopped and the next one starts from what worked here.
+/// <paramref name="source"/> overrides the candidates' own source (the router's trials are stored as
+/// <see cref="CandidateSource.Router"/>), <paramref name="clientProfile"/> is where they were measured.
 /// </summary>
-public sealed class KnowledgeBaseSearchLog(KnowledgeBase kb, long sessionId, TrialTarget target, long? networkId = null, string? blockLabel = null) : ISearchLog
+public sealed class KnowledgeBaseSearchLog(KnowledgeBase kb, long sessionId, TrialTarget target, long? networkId = null, string? blockLabel = null,
+    string? source = null, string clientProfile = "default") : ISearchLog
 {
     public long SessionId => sessionId;
 
@@ -28,7 +31,8 @@ public sealed class KnowledgeBaseSearchLog(KnowledgeBase kb, long sessionId, Tri
             SessionId = sessionId,
             NetworkId = networkId,
             BlockLabel = blockLabel,
-            Source = candidate.Source,
+            Source = source ?? candidate.Source,
+            ClientProfile = clientProfile,
         });
 
     public void Tuning(Strategy parent, Mutation child, Efficiency efficiency, bool accepted) =>
@@ -68,12 +72,12 @@ public static class TuningSession
     };
 
     /// <summary>Stores the ranking of the found strategies and closes the session.</summary>
-    public static void Finish(KnowledgeBase kb, long sessionId, string host, SearchResult result, long? networkId = null)
+    public static void Finish(KnowledgeBase kb, long sessionId, string host, SearchResult result, long? networkId = null, string clientProfile = "default")
     {
         foreach (var f in result.Working)
-            kb.SetScore(f.Candidate.Strategy, host, f.Score.Total, networkId);
+            kb.SetScore(f.Candidate.Strategy, host, f.Score.Total, networkId, clientProfile);
         if (result.BestPartial is { } p)
-            kb.SetScore(p.Candidate.Strategy, host, p.Score.Total, networkId);
+            kb.SetScore(p.Candidate.Strategy, host, p.Score.Total, networkId, clientProfile);
         kb.UpdateSession(sessionId, result.Reason switch
         {
             SearchStopReason.Cancelled => "paused",

@@ -55,6 +55,8 @@ public sealed partial class MonitorViewModel : PageViewModel
             if (e.PropertyName == nameof(Loc.Loc.English))
                 LoadJournal();
         };
+        // the router's commits and feedback write to the same journal (PLAN 7.6.5)
+        host.Router.JournalChanged += () => Dispatcher.UIThread.Post(LoadJournal);
         LoadJournal();
     }
 

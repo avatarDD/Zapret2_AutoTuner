@@ -22,6 +22,21 @@
       <ScrollViewer IsVisible="{Binding IsStep1}">
         <StackPanel Spacing="10">
           <TextBlock Classes="h2" Text="{l:T wizard.step1}" />
+          <!-- where to tune: this PC or the router through zapret-gui (PLAN 4a.4) -->
+          <StackPanel Orientation="Horizontal" Spacing="16">
+            <TextBlock Text="{l:T wizard.where}" VerticalAlignment="Center" />
+            <RadioButton GroupName="where" Content="{l:T wizard.where_pc}" IsChecked="{Binding OnPc}" />
+            <RadioButton GroupName="where" Content="{l:T wizard.where_router}" IsChecked="{Binding OnRouter}" />
+          </StackPanel>
+          <Border Classes="card" IsVisible="{Binding OnRouter}">
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
+              <TextBlock Grid.ColumnSpan="2" Classes="muted" Text="{l:T wizard.router_hint}" TextWrapping="Wrap" Margin="0,0,0,6" />
+              <TextBlock Grid.Row="1" Text="{l:T export.gui_url}" VerticalAlignment="Center" Margin="0,0,8,6" />
+              <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding GuiUrl}" Watermark="http://192.168.1.1:8080" Margin="0,0,0,6" />
+              <TextBlock Grid.Row="2" Text="{l:T settings.gui_token}" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding GuiToken}" PasswordChar="•" />
+            </Grid>
+          </Border>
           <TextBlock Classes="muted" Text="{l:T wizard.input_hint}" />
           <ItemsControl ItemsSource="{Binding PresetNames}">
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -94,6 +109,10 @@
         <StackPanel Spacing="8">
           <TextBlock Classes="h2" Text="{l:T wizard.step4}" />
           <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+          <StackPanel Spacing="6" IsVisible="{Binding OnRouter}">
+            <Button Classes="accent" Content="{l:T wizard.router_commit}" Command="{Binding CommitRouterCommand}" IsVisible="{Binding CanCommitRouter}" IsEnabled="{Binding !Running}" />
+            <SelectableTextBlock Text="{Binding RouterStatus}" TextWrapping="Wrap" />
+          </StackPanel>
           <ItemsControl ItemsSource="{Binding Results}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="x:String">

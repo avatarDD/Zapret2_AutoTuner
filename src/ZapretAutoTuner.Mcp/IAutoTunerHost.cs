@@ -50,6 +50,17 @@ public interface IAutoTunerHost
 
     /// <summary>Saves an export package in the program's export folder (after the user said yes); returns the file name.</summary>
     Task<string> SaveExportAsync(string name, byte[] zip, CancellationToken ct);
+
+    /// <summary>
+    /// zapret-gui's experiments on the router, with the address and MCP token the user entered in AutoTuner; null when
+    /// either is missing. The model never sees or passes the address or the token.
+    /// </summary>
+    Delivery.ZapretGuiExperiments? RouterExperiments() => null;
+
+    /// <summary>A router experiment was committed (after the user's yes): the app starts reading the router's feedback.</summary>
+    void RouterCommitted(IReadOnlyList<string> targets, string strategy)
+    {
+    }
 }
 
 /// <summary>Packet capture of a trial, limited to the target's addresses and port.</summary>

@@ -75,7 +75,7 @@ public sealed class AutoTunerTools(McpSession session)
                 data = McpErrors.Error($"the Agent refused to start the engine ({e.Stage}): {e.Message}");
             }
             catch (Exception e) when (e is InvalidOperationException or IOException or HttpRequestException or Grpc.Core.RpcException or TimeoutException
-                                          or System.Net.Sockets.SocketException or FormatException or Core.Export.ExportException)
+                                          or System.Net.Sockets.SocketException or FormatException or Core.Export.ExportException or Delivery.ZapretGuiException)
             {
                 data = McpErrors.Error(e.Message);
             }
@@ -114,6 +114,11 @@ public sealed class AutoTunerTools(McpSession session)
         ["strategy_experiment_commit"] = (a, ct) => Task.FromResult(session.Experiments.Commit((string?)a["label"])),
         ["strategy_experiment_rollback"] = (a, ct) => session.Experiments.RollbackAsync(),
         ["export_preview"] = (a, ct) => Task.FromResult(ExportPreview.Build(session, a)),
+        ["router_experiment_start"] = (a, ct) => Task.FromResult(session.Router.Start(a)),
+        ["router_experiment_status"] = (a, ct) => Task.FromResult(session.Router.Status()),
+        ["router_experiment_result"] = (a, ct) => Task.FromResult(session.Router.Result((string?)a["run_id"])),
+        ["router_experiment_commit"] = (a, ct) => Task.FromResult(session.Router.Commit((string?)a["label"], (bool?)a["save"] ?? false)),
+        ["router_experiment_rollback"] = (a, ct) => session.Router.RollbackAsync(),
     };
 
     internal bool HasHandler(string name) => (_handlers ??= Handlers()).ContainsKey(name);

@@ -92,6 +92,9 @@ public sealed partial class SettingsViewModel : PageViewModel
     private bool _permExport;
 
     [ObservableProperty]
+    private bool _permRouter;
+
+    [ObservableProperty]
     private string _mcpToken = "";
 
     [ObservableProperty]
@@ -108,7 +111,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         McpEnabled = _host.Settings.McpEnabled;
         McpHttp = _host.Settings.McpHttp;
         var p = _host.Settings.McpPermissions;
-        (PermProbes, PermControl, PermExperiments, PermExport) = (p.Probes, p.Control, p.Experiments, p.Export);
+        (PermProbes, PermControl, PermExperiments, PermExport, PermRouter) = (p.Probes, p.Control, p.Experiments, p.Export, p.Router);
         McpToken = _host.Settings.McpToken;
         _loading = false;
     }
@@ -125,13 +128,15 @@ public sealed partial class SettingsViewModel : PageViewModel
 
     partial void OnPermExportChanged(bool value) => SaveMcp();
 
+    partial void OnPermRouterChanged(bool value) => SaveMcp();
+
     private void SaveMcp()
     {
         if (_loading)
             return;
         _host.Settings.McpEnabled = McpEnabled;
         _host.Settings.McpHttp = McpHttp;
-        _host.Settings.McpPermissions = new ZapretAutoTuner.Mcp.McpPermissions(PermProbes, PermControl, PermExperiments, PermExport);
+        _host.Settings.McpPermissions = new ZapretAutoTuner.Mcp.McpPermissions(PermProbes, PermControl, PermExperiments, PermExport, PermRouter);
         _ = ApplyMcpAsync();
     }
 

@@ -1,6 +1,8 @@
 using System.Net;
 using ZapretAutoTuner.Core.Diagnostics;
 using ZapretAutoTuner.Core.Model;
+using ZapretAutoTuner.Core.Resources;
+using ZapretAutoTuner.Delivery;
 using ZapretAutoTuner.Probes.Http;
 using ZapretAutoTuner.Storage;
 using ZapretAutoTuner.Tuning;
@@ -50,6 +52,19 @@ public interface IAutoTunerHost
 
     /// <summary>Saves an export package in the program's export folder (after the user said yes); returns the file name.</summary>
     Task<string> SaveExportAsync(string name, byte[] zip, CancellationToken ct);
+
+    /// <summary>The strategy resources (PLAN 4a.5); null when the program has none to offer.</summary>
+    ResourceStore? Resources => null;
+
+    /// <summary>
+    /// Prepares a resource change on the router the user configured (zapret-gui or nfqws2-keenetic): the plan for the
+    /// confirmation dialog and the action that runs after a yes. Throws when no router is configured.
+    /// </summary>
+    Task<RouterResourceOperation> PrepareRouterResourceAsync(RouterResourceAction action, ResourceKind kind, string name, CancellationToken ct) =>
+        throw new InvalidOperationException("no router is configured in AutoTuner / роутер не настроен в AutoTuner");
+
+    /// <summary>What the program knows for a bug report draft (event log, environment); the tool adds the caller's description.</summary>
+    BugReportInput BugReportContext() => new();
 }
 
 /// <summary>Packet capture of a trial, limited to the target's addresses and port.</summary>

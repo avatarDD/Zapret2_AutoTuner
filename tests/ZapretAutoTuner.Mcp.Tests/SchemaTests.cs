@@ -78,8 +78,23 @@ public sealed partial class SchemaTests
     [Fact]
     public void NoSchemaNamesAPathCommandArgsUrlOrScript()
     {
-        var bad = McpTools.All.SelectMany(t => PropertyNames(t.InputSchema).Where(p => Forbidden().IsMatch(p)).Select(p => $"{t.Name}.{p}")).ToList();
+        var bad = McpTools.All.SelectMany(t => PropertyNames(t.InputSchema).Where(p => Forbidden().IsMatch(p) && !Allowed(t, p)).Select(p => $"{t.Name}.{p}")).ToList();
         Assert.Equal([], bad);
+    }
+
+    /// <summary>
+    /// PLAN 4a.5: the one exception is the typed Lua draft of resource_create and resource_update; it is data the
+    /// program checks and stores as a draft, and only the user can approve it in the window.
+    /// </summary>
+    private static bool Allowed(McpToolDefinition t, string property) =>
+        property == "lua_source" && t.Name is "resource_create" or "resource_update";
+
+    [Fact]
+    public void OnlyTheResourceToolsTakeLuaSource()
+    {
+        Assert.Equal(["resource_create", "resource_update"],
+            McpTools.All.Where(t => PropertyNames(t.InputSchema).Contains("lua_source")).Select(t => t.Name));
+        Assert.All(McpTools.All.Where(t => PropertyNames(t.InputSchema).Contains("lua_source")), t => Assert.True(t.Confirms));
     }
 
     [Fact]
@@ -107,13 +122,15 @@ public sealed partial class SchemaTests
     public void TheToolsAreTheDesignTable()
     {
         Assert.Equal(
-            ["targets_list", "diagnose", "trials_history", "catalog_functions", "strategy_validate", "kb_query"],
+            ["targets_list", "diagnose", "trials_history", "catalog_functions", "strategy_validate", "kb_query", "bug_report_draft"],
             McpTools.All.Where(t => t.Scope == McpScope.Read).Select(t => t.Name));
         Assert.Equal(["target_add", "trial_run"], McpTools.All.Where(t => t.Scope == McpScope.Probes).Select(t => t.Name));
         Assert.Equal(["search_start", "search_status", "search_pause", "search_stop", "search_enqueue", "search_prune_family"], McpTools.All.Where(t => t.Scope == McpScope.Control).Select(t => t.Name));
         Assert.Equal(["strategy_experiment_start", "strategy_experiment_status", "strategy_experiment_result", "strategy_experiment_commit", "strategy_experiment_rollback"],
             McpTools.All.Where(t => t.Scope == McpScope.Experiments).Select(t => t.Name));
         Assert.Equal(["export_preview"], McpTools.All.Where(t => t.Scope == McpScope.Export).Select(t => t.Name));
+        Assert.Equal(["resource_list", "resource_get", "resource_diff", "resource_create", "resource_update", "resource_delete", "router_resource_push", "router_resource_delete"],
+            McpTools.All.Where(t => t.Scope == McpScope.Resources).Select(t => t.Name));
     }
 
     [Fact]

@@ -25,7 +25,7 @@ public sealed class TransportTests
         {
             Assert.Equal(McpServerSetup.ServerName, client.ServerInfo.Name);
             var tools = await client.ListToolsAsync(cancellationToken: cts.Token);
-            Assert.Equal(6, tools.Count);
+            Assert.Equal(7, tools.Count);
             Assert.Contains(tools, t => t.Name == "strategy_validate");
 
             var r = await client.CallToolAsync("targets_list", new Dictionary<string, object?>(), cancellationToken: cts.Token);
@@ -86,7 +86,7 @@ public sealed class TransportTests
             AdditionalHeaders = new Dictionary<string, string> { ["Authorization"] = "Bearer " + token },
         }));
         var tools = await mcp.ListToolsAsync();
-        Assert.Equal(6, tools.Count);
+        Assert.Equal(7, tools.Count);
     }
 
     [Fact]

@@ -158,6 +158,14 @@ internal sealed class FakeHost : IAutoTunerHost, IDisposable
         return Task.FromResult(name);
     }
 
+    public ResourceStore? Resources { get; set; }
+
+    /// <summary>The configured router of resource pushes; null: none is configured.</summary>
+    public Func<Delivery.RouterResourceAction, Core.Resources.ResourceKind, string, Delivery.RouterResourceOperation>? Router { get; set; }
+
+    public Task<Delivery.RouterResourceOperation> PrepareRouterResourceAsync(Delivery.RouterResourceAction action, Core.Resources.ResourceKind kind, string name, CancellationToken ct) =>
+        Router is null ? throw new InvalidOperationException("no router is configured") : Task.FromResult(Router(action, kind, name));
+
     public void Dispose() => Kb.Dispose();
 }
 

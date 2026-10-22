@@ -575,5 +575,404 @@
       ],
       "additionalProperties": false
     }
+  },
+  {
+    "name": "bug_report_draft",
+    "scope": "read",
+    "confirms": false,
+    "description": "Drafts an issue about a problem found in AutoTuner, zapret-gui or zapret2: the fixed template with versions, the classifier's verdict, the event log tail, addresses always masked (domains on request), a suggestion where to file it and GitHub's new-issue link. Returns text only: nothing is opened or sent; show it to the user, who reviews and submits it (or uses Reports → Report a problem in AutoTuner).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "What went wrong",
+          "enum": [
+            "app_error",
+            "engine_refused",
+            "validator_mismatch",
+            "tuning_failed",
+            "zapret_gui_error",
+            "engine_crash",
+            "engine_behaviour"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "description": "One line on what happened",
+          "maxLength": 300
+        },
+        "what_did": {
+          "type": "string",
+          "description": "What was done",
+          "maxLength": 2000
+        },
+        "expected": {
+          "type": "string",
+          "description": "What was expected",
+          "maxLength": 2000
+        },
+        "got": {
+          "type": "string",
+          "description": "What happened instead",
+          "maxLength": 2000
+        },
+        "about": {
+          "type": "string",
+          "description": "A target from targets_list whose diagnosis goes in",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "tracker": {
+          "type": "string",
+          "description": "Where to file it (default: suggested)",
+          "enum": [
+            "autotuner",
+            "zapret_gui",
+            "zapret2"
+          ]
+        },
+        "mask_domains": {
+          "type": "boolean",
+          "description": "Replace domains with d1, d2… (addresses are masked always)"
+        },
+        "language": {
+          "type": "string",
+          "description": "Template language (default ru)",
+          "enum": [
+            "ru",
+            "en"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_list",
+    "scope": "resources",
+    "confirms": false,
+    "description": "The user's strategy resources (hostlists, ipsets, blobs, Lua scripts) with version, size, the solutions that use them and, for Lua, whether a version is approved.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Only this kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_get",
+    "scope": "resources",
+    "confirms": false,
+    "description": "One resource with its content (domains, entries, hex or lua_source) and its versions. Addresses in answers are masked as in the report.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        },
+        "version": {
+          "type": "integer",
+          "description": "A version (default: the current one)",
+          "minimum": 1,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_diff",
+    "scope": "resources",
+    "confirms": false,
+    "description": "Line diff between two versions of a resource. For a Lua script the default is from the approved version to the current draft (what the user will be shown before approving).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        },
+        "from_version": {
+          "type": "integer",
+          "description": "Old version (default: approved for Lua, else the previous one)",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "to_version": {
+          "type": "integer",
+          "description": "New version (default: the current one)",
+          "minimum": 1,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_create",
+    "scope": "resources",
+    "confirms": true,
+    "description": "Creates a resource from typed content: domains for a hostlist, entries for an ipset, hex for a blob, lua_source for a Lua script. Checked first; then the user decides in the AutoTuner window (pending until then, call again with the same arguments). A Lua script is created as a draft: you cannot approve it, only the user can, in the AutoTuner window after seeing the whole text and the diff. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        },
+        "domains": {
+          "type": "array",
+          "description": "hostlist: the domains, one per item (normalised: lower case, IDN to punycode, ^domain for no subdomains)",
+          "items": {
+            "type": "string",
+            "description": "A domain",
+            "maxLength": 260
+          },
+          "maxItems": 10000
+        },
+        "entries": {
+          "type": "array",
+          "description": "ipset: IP addresses and CIDRs, one per item",
+          "items": {
+            "type": "string",
+            "description": "An address or CIDR",
+            "maxLength": 64
+          },
+          "maxItems": 10000
+        },
+        "hex": {
+          "type": "string",
+          "description": "blob: the bytes in hex (spaces and : allowed), 1 to 16384 bytes",
+          "maxLength": 40000
+        },
+        "lua_source": {
+          "type": "string",
+          "description": "lua: the script source; desync functions are function name(ctx, desync) and must not reuse zapret2's names",
+          "maxLength": 262144
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_update",
+    "scope": "resources",
+    "confirms": true,
+    "description": "Replaces the content of a resource with a new version (same fields as resource_create); the user decides in the AutoTuner window. Editing a Lua script makes a new draft: the approved version stays in effect until the user approves the new one in the window; you cannot approve it. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        },
+        "domains": {
+          "type": "array",
+          "description": "hostlist: the domains, one per item (normalised: lower case, IDN to punycode, ^domain for no subdomains)",
+          "items": {
+            "type": "string",
+            "description": "A domain",
+            "maxLength": 260
+          },
+          "maxItems": 10000
+        },
+        "entries": {
+          "type": "array",
+          "description": "ipset: IP addresses and CIDRs, one per item",
+          "items": {
+            "type": "string",
+            "description": "An address or CIDR",
+            "maxLength": 64
+          },
+          "maxItems": 10000
+        },
+        "hex": {
+          "type": "string",
+          "description": "blob: the bytes in hex (spaces and : allowed), 1 to 16384 bytes",
+          "maxLength": 40000
+        },
+        "lua_source": {
+          "type": "string",
+          "description": "lua: the script source; desync functions are function name(ctx, desync) and must not reuse zapret2's names",
+          "maxLength": 262144
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_delete",
+    "scope": "resources",
+    "confirms": true,
+    "description": "Deletes a resource with all its versions after the user's yes. Refused while a saved or the current solution uses it (the answer names them). Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_resource_push",
+    "scope": "resources",
+    "confirms": true,
+    "description": "Writes a resource to the router the user configured (zapret-gui or nfqws2-keenetic) after the user's yes in the AutoTuner window, which shows exactly what is written. Also needs the export permission. A Lua script goes only in its approved version; a draft is refused. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_resource_delete",
+    "scope": "resources",
+    "confirms": true,
+    "description": "Removes one of AutoTuner's resources from the configured router after the user's yes (zapret-gui: refused while a GUI strategy uses it; keenetic: kept as .bak, refused while nfqws2.conf refers to it). Also needs the export permission. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
   }
 ]

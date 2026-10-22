@@ -10,6 +10,9 @@ public enum McpScope
     Control,
     Experiments,
     Export,
+
+    /// <summary>Strategy resources (PLAN 4a.5): hostlists, ipsets, blobs, Lua drafts; never approval of a script.</summary>
+    Resources,
 }
 
 /// <summary>
@@ -17,7 +20,7 @@ public enum McpScope
 /// zapret-gui; an unmet dependency is explained, not silently ignored. There is no switch for anything else: the
 /// program has no code for a shell, files or the OS, so there is nothing to switch on.
 /// </summary>
-public sealed record McpPermissions(bool Probes = false, bool Control = false, bool Experiments = false, bool Export = false)
+public sealed record McpPermissions(bool Probes = false, bool Control = false, bool Experiments = false, bool Export = false, bool Resources = false)
 {
     public static IReadOnlyDictionary<McpScope, McpScope[]> Requires { get; } = new Dictionary<McpScope, McpScope[]>
     {
@@ -34,6 +37,7 @@ public sealed record McpPermissions(bool Probes = false, bool Control = false, b
         McpScope.Control => Control,
         McpScope.Experiments => Experiments,
         McpScope.Export => Export,
+        McpScope.Resources => Resources,
         _ => false,
     };
 

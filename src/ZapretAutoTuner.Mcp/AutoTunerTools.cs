@@ -114,7 +114,8 @@ public sealed class AutoTunerTools(McpSession session)
         ["strategy_experiment_commit"] = (a, ct) => Task.FromResult(session.Experiments.Commit((string?)a["label"])),
         ["strategy_experiment_rollback"] = (a, ct) => session.Experiments.RollbackAsync(),
         ["export_preview"] = (a, ct) => Task.FromResult(ExportPreview.Build(session, a)),
-    };
+        ["bug_report_draft"] = (a, ct) => Task.FromResult(BugReportTool.Draft(session, a)),
+    }.Concat(new ResourceTools(session).Handlers()).ToDictionary(StringComparer.Ordinal);
 
     internal bool HasHandler(string name) => (_handlers ??= Handlers()).ContainsKey(name);
 

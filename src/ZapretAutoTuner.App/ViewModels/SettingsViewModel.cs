@@ -5,7 +5,7 @@ using ZapretAutoTuner.App.Services;
 
 namespace ZapretAutoTuner.App.ViewModels;
 
-/// <summary>Settings, kept in the knowledge base. Secrets (the MCP token) are kept only when the user asks.</summary>
+/// <summary>Settings, kept in the knowledge base. Secrets (the MCP token) are kept in memory for this run only.</summary>
 public sealed partial class SettingsViewModel : PageViewModel
 {
     private readonly AppHost _host;
@@ -19,8 +19,8 @@ public sealed partial class SettingsViewModel : PageViewModel
         _autoApply = host.Settings.ApplyPolicy == "auto";
         _learning = host.Settings.Learning;
         _providerAsn = host.Settings.ProviderAsn;
+        host.Settings.ApplyPolicyChanged += () => AutoApply = host.Settings.ApplyPolicy == "auto";
         _guiUrl = host.Settings.GuiUrl;
-        _rememberToken = host.Settings.GuiToken.Length > 0;
         _guiToken = host.Settings.GuiToken;
         _routerHost = host.Settings.RouterHost;
         _largeFont = host.Settings.LargeFont;
@@ -57,9 +57,6 @@ public sealed partial class SettingsViewModel : PageViewModel
     private string _guiToken;
 
     [ObservableProperty]
-    private bool _rememberToken;
-
-    [ObservableProperty]
     private string _routerHost;
 
     [ObservableProperty]
@@ -87,9 +84,19 @@ public sealed partial class SettingsViewModel : PageViewModel
 
     partial void OnGuiUrlChanged(string value) => _host.Settings.GuiUrl = value.Trim();
 
-    partial void OnGuiTokenChanged(string value) => _host.Settings.GuiToken = RememberToken ? value : "";
+    partial void OnGuiTokenChanged(string value) => _host.Settings.GuiToken = value;
 
-    partial void OnRememberTokenChanged(bool value) => _host.Settings.GuiToken = value ? GuiToken : "";
+    /// <summary>Forgets the remembered SSH host keys, after the user changed the router or its key on purpose.</summary>
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void ForgetSshKeys()
+    {
+        foreach (var k in _host.Kb.AllSettings().Keys.Where(k => k.StartsWith("ssh.hostkey.", StringComparison.Ordinal)).ToList())
+            _host.Kb.RemoveSetting(k);
+        SshKeysStatus = L["settings.ssh_forgotten"];
+    }
+
+    [ObservableProperty]
+    private string _sshKeysStatus = "";
 
     partial void OnRouterHostChanged(string value) => _host.Settings.RouterHost = value.Trim();
 

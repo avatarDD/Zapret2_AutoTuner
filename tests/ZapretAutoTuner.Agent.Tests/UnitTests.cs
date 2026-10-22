@@ -8,6 +8,28 @@ namespace ZapretAutoTuner.Agent.Tests;
 public class UnitTests
 {
     [Fact]
+    public void Under_pkexec_the_engine_and_hosts_file_options_are_ignored()
+    {
+        string[] args = ["--socket=/run/x.sock", "--token-file=/t", "--ui-pid=42", "--data-dir=/d", "--engine=/home/u/evil", "--hosts-file=/etc/shadow"];
+        var direct = AgentOptions.Parse(args, _ => null);
+        Assert.False(direct.Pkexec);
+        Assert.Equal("/home/u/evil", direct.Engine);
+        Assert.Equal("/etc/shadow", direct.HostsFile);
+        Assert.Empty(direct.Ignored);
+
+        var elevated = AgentOptions.Parse(args, n => n == "PKEXEC_UID" ? "1000" : null);
+        Assert.True(elevated.Pkexec);
+        Assert.Null(elevated.Engine);
+        Assert.Null(elevated.HostsFile);
+        Assert.Equal(1000, elevated.OwnerUid);
+        Assert.Equal(["--engine", "--hosts-file"], elevated.Ignored);
+
+        // an explicit owner wins; a garbage PKEXEC_UID is not pkexec
+        Assert.Equal(7, AgentOptions.Parse([.. args, "--owner-uid=7"], n => n == "PKEXEC_UID" ? "1000" : null).OwnerUid);
+        Assert.False(AgentOptions.Parse(args, n => n == "PKEXEC_UID" ? "x" : null).Pkexec);
+    }
+
+    [Fact]
     public void Options_parse_and_require_endpoint_token_and_ui()
     {
         var o = AgentOptions.Parse(["--socket=/run/x.sock", "--token-file=/t", "--ui-pid=42", "--data-dir=/d", "--heartbeat-timeout=1500"]);

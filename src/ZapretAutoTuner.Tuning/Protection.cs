@@ -14,12 +14,24 @@ public static class Protection
     /// <summary>The protection's own queue, apart from the trials' (300), so a repair can probe while it runs.</summary>
     public const int QueueNum = 310;
 
+    /// <summary>
+    /// The second protection queue. A hot swap starts the new instance while the old one still holds its queue, and
+    /// the Agent refuses a busy queue, so the instances take 310 and 311 in turn.
+    /// </summary>
+    public const int AltQueueNum = 311;
+
+    /// <summary>The monitor's repair trials: apart from the wizard's (300), so both can run at once.</summary>
+    public const int RepairQueueNum = 320;
+
+    /// <summary>The queue the next instance takes after one on <paramref name="current"/>.</summary>
+    public static int NextQueue(int current) => current == QueueNum ? AltQueueNum : QueueNum;
+
     /// <summary>argv and queue for the whole solution; hostlists inline, all addresses (the filter is the hostlist).</summary>
-    public static (List<string> Argv, QueueRule? Queue) Launch(Solution s, string luaDir) =>
+    public static (List<string> Argv, QueueRule? Queue) Launch(Solution s, string luaDir, int queueNum = QueueNum) =>
         ConfigCheck.BuildLaunch(s, [], new AgentTrialOptions
         {
             LuaDir = luaDir,
-            QueueNum = QueueNum,
+            QueueNum = queueNum,
             Blobs = s.Blobs.ToDictionary(b => b.Key, b => "0x" + Convert.ToHexString(b.Value), StringComparer.Ordinal),
         });
 

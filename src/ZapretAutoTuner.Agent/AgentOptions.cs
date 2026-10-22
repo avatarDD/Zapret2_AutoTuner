@@ -44,7 +44,22 @@ internal sealed class AgentOptions
     /// <summary>Only remove leftovers of a crashed Agent (firewall table, sysctls, engines) and exit.</summary>
     public bool CleanupOnly { get; set; }
 
-    public static AgentOptions Parse(IReadOnlyList<string> args)
+    /// <summary>
+    /// Started through pkexec (<c>PKEXEC_UID</c> is set): the caller is an unprivileged user, so nothing it names may
+    /// pick what runs or what is written as root. <c>--engine</c> and <c>--hosts-file</c> are ignored, the engine is
+    /// the one bundled next to the Agent binary and the hosts file is the system one. (On Windows the UI elevates
+    /// through UAC with the administrator's consent; the same options are honoured there, since the elevated user
+    /// already is an administrator who could run anything.)
+    /// </summary>
+    public bool Pkexec { get; set; }
+
+    /// <summary>Options dropped because the Agent runs under pkexec; reported on stderr.</summary>
+    public List<string> Ignored { get; } = [];
+
+    public static AgentOptions Parse(IReadOnlyList<string> args) => Parse(args, Environment.GetEnvironmentVariable);
+
+    /// <param name="env">Reads an environment variable (tests pass their own).</param>
+    public static AgentOptions Parse(IReadOnlyList<string> args, Func<string, string?> env)
     {
         var o = new AgentOptions();
         foreach (var a in args)
@@ -68,8 +83,17 @@ internal sealed class AgentOptions
                 default: throw new ArgumentException($"unknown option {a}");
             }
         }
-        if (o.OwnerUid is null && int.TryParse(Environment.GetEnvironmentVariable("PKEXEC_UID"), NumberStyles.None, CultureInfo.InvariantCulture, out var uid))
-            o.OwnerUid = uid;
+        if (int.TryParse(env("PKEXEC_UID"), NumberStyles.None, CultureInfo.InvariantCulture, out var uid))
+        {
+            o.Pkexec = true;
+            o.OwnerUid ??= uid;
+            if (o.Engine is not null)
+                o.Ignored.Add("--engine");
+            if (o.HostsFile is not null)
+                o.Ignored.Add("--hosts-file");
+            o.Engine = null;
+            o.HostsFile = null;
+        }
         if (!o.CleanupOnly)
         {
             if (o.Socket is null == (o.Pipe is null))

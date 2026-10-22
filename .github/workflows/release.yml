@@ -101,10 +101,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq rpm
-          arch=$([ "${{ matrix.rid }}" = linux-arm64 ] && echo aarch64 || echo x86_64)
-          curl -fsSL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$arch.AppImage"
-          chmod +x appimagetool
-          APPIMAGETOOL="$PWD/appimagetool" packaging/linux/build.sh ${{ matrix.rid }} "$VER" artifacts/publish/ZapretAutoTuner dist
+          packaging/linux/build.sh ${{ matrix.rid }} "$VER" artifacts/publish/ZapretAutoTuner dist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -140,7 +137,7 @@ jobs:
           Engine: zapret2 {lock['version']}, official upstream binaries only. No telemetry.
 
           - Windows: `*-setup.exe` (установщик) или `*-portable.zip`. Антивирус может ругаться на WinDivert: это драйвер перехвата из zapret2, см. docs/USER.md.
-          - Linux: `.deb`, `.rpm`, `.AppImage` или `.tar.gz`. Нужны nftables (или iptables) и polkit.
+          - Linux: `.deb`, `.rpm` или `.tar.gz`. Нужны nftables (или iptables) и polkit.
           - Проверка файлов: `SHA256SUMS.txt`.
           """
           open("notes.md", "w").write(notes)

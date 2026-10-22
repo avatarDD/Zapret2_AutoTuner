@@ -29,6 +29,23 @@ public sealed class ZapretGuiClient
                 Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user ?? "admin"}:{password}")));
     }
 
+    /// <summary>
+    /// The GUI's base address from what the user typed: <c>192.168.1.1:8080</c> becomes <c>http://192.168.1.1:8080/</c>.
+    /// Null for anything that is not an http(s) address of a host.
+    /// </summary>
+    public static Uri? BaseAddress(string? text)
+    {
+        var t = text?.Trim() ?? "";
+        if (t.Length == 0)
+            return null;
+        if (!t.Contains("://", StringComparison.Ordinal))
+            t = "http://" + t;
+        if (!Uri.TryCreate(t.TrimEnd('/') + "/", UriKind.Absolute, out var u) || u.Scheme is not ("http" or "https") || u.Host.Length == 0
+            || u.Query.Length > 0 || u.Fragment.Length > 0 || u.UserInfo.Length > 0)
+            return null;
+        return u;
+    }
+
     /// <summary>Reads the GUI's strategies and says what <see cref="SaveAsync"/> will do, for the confirmation dialog.</summary>
     public async Task<GuiSavePlan> PlanAsync(Solution s, CancellationToken ct = default)
     {

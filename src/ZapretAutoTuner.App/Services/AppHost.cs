@@ -75,8 +75,20 @@ public sealed class AppHost : IAsyncDisposable
 }
 
 /// <summary>Settings in the knowledge base's <c>settings</c> table (PLAN: SQLite for settings).</summary>
-public sealed class AppSettings(KnowledgeBase kb)
+public sealed class AppSettings
 {
+    private readonly KnowledgeBase kb;
+
+    public AppSettings(KnowledgeBase kb)
+    {
+        this.kb = kb;
+        // earlier versions could keep the MCP token in plain text: it goes (see GuiToken)
+        kb.RemoveSetting("gui.token");
+    }
+
+    /// <summary>The auto-apply choice changed (the settings page and the monitor show the same switch).</summary>
+    public event Action? ApplyPolicyChanged;
+
     public string Language
     {
         get => kb.GetSetting("ui.language") ?? "";
@@ -99,7 +111,13 @@ public sealed class AppSettings(KnowledgeBase kb)
     public string ApplyPolicy
     {
         get => kb.GetSetting("monitor.apply") ?? "ask";
-        set => kb.SetSetting("monitor.apply", value);
+        set
+        {
+            if (value == ApplyPolicy)
+                return;
+            kb.SetSetting("monitor.apply", value);
+            ApplyPolicyChanged?.Invoke();
+        }
     }
 
     public string GuiUrl
@@ -108,18 +126,11 @@ public sealed class AppSettings(KnowledgeBase kb)
         set => kb.SetSetting("gui.url", value);
     }
 
-    /// <summary>The MCP token is a secret: kept only if the user asked to remember it.</summary>
-    public string GuiToken
-    {
-        get => kb.GetSetting("gui.token") ?? "";
-        set
-        {
-            if (string.IsNullOrEmpty(value))
-                kb.RemoveSetting("gui.token");
-            else
-                kb.SetSetting("gui.token", value);
-        }
-    }
+    /// <summary>
+    /// The MCP token is a secret and the knowledge base is a plain file: it lives in memory for this run only (no
+    /// protected store is available on both platforms without another dependency).
+    /// </summary>
+    public string GuiToken { get; set; } = "";
 
     public string RouterHost
     {
@@ -146,6 +157,10 @@ public sealed class AppSettings(KnowledgeBase kb)
                 kb.SetSetting("search.asn", value.Trim());
         }
     }
+    /// <summary>The SSH host key remembered for a router (trust on first use), or null.</summary>
+    public string? RouterHostKey(string host, int port) => kb.GetSetting(Delivery.HostKeys.SettingKey(host, port));
+
+    public void RememberRouterHostKey(string host, int port, string fingerprint) => kb.SetSetting(Delivery.HostKeys.SettingKey(host, port), fingerprint);
 
     public bool LargeFont
     {

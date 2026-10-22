@@ -43,6 +43,9 @@ public static partial class FailureReport
         sb.AppendLine("## Окружение / environment");
         sb.AppendLine(CultureInfo.InvariantCulture, $"- ОС: {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})");
         sb.AppendLine(CultureInfo.InvariantCulture, $"- zapret2: {AppInfo.Zapret2Version}");
+        // the targets get their d1, d2… first, so an environment line that names one is masked too
+        foreach (var t in targets)
+            mask.Domain(t.Host);
         foreach (var e in o.Environment)
             sb.AppendLine(CultureInfo.InvariantCulture, $"- {mask.Line(e)}");
         foreach (var t in targets)
@@ -126,8 +129,16 @@ public static partial class FailureReport
 
     private static string Csv(string s) => s.Contains(';', StringComparison.Ordinal) || s.Contains('"', StringComparison.Ordinal) ? "\"" + s.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"" : s;
 
-    [GeneratedRegex(@"\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{0,4}\b")]
-    private static partial Regex AddressRe();
+    /// <summary>
+    /// Candidate address tokens: runs of hex digits, dots and colons not glued to a word. Whether one is an address is
+    /// decided by <see cref="IPAddress.TryParse(string?, out IPAddress?)"/>, so compressed IPv6 (<c>2a00:1450::8a</c>,
+    /// <c>fe80::1</c>, <c>::ffff:1.2.3.4</c>) is caught as well as the full form.
+    /// </summary>
+    [GeneratedRegex(@"(?<![\w.])[0-9A-Fa-f:.]*[:.][0-9A-Fa-f:.]*(?![\w:.])")]
+    private static partial Regex TokenRe();
+
+    [GeneratedRegex(@"^\d{1,3}(?:\.\d{1,3}){3}$")]
+    private static partial Regex Ipv4Re();
 
     /// <summary>
     /// Private and CGNAT addresses (the user's own) become "lan-N", public ones keep their prefix only
@@ -153,11 +164,33 @@ public static partial class FailureReport
 
         public string Line(string line)
         {
-            var s = AddressRe().Replace(line, m => Address(m.Value));
+            var s = TokenRe().Replace(line, m => Token(m.Value));
             if (domains)
                 foreach (var (k, v) in _map.Where(kv => kv.Key.StartsWith("d:", StringComparison.Ordinal)).ToList())
                     s = s.Replace(k[2..], v, StringComparison.OrdinalIgnoreCase);
             return s;
+        }
+
+        /// <summary>A token with its address masked; trailing punctuation and an IPv4 port are kept as they were.</summary>
+        private string Token(string token)
+        {
+            var core = token.TrimEnd('.', ':');
+            var tail = token[core.Length..];
+            if (IsAddress(core))
+                return Address(core) + tail;
+            // 192.0.2.10:443
+            int colon = core.LastIndexOf(':');
+            if (colon > 0 && core.IndexOf(':', StringComparison.Ordinal) == colon && Ipv4Re().IsMatch(core[..colon]))
+                return Address(core[..colon]) + core[colon..] + tail;
+            return token;
+        }
+
+        private static bool IsAddress(string s)
+        {
+            if (Ipv4Re().IsMatch(s))
+                return IPAddress.TryParse(s, out _);
+            // IPv6 has at least two colons; "12:30" (a time) and "a:b" are not addresses
+            return s.Count(c => c == ':') >= 2 && IPAddress.TryParse(s, out var ip) && ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6;
         }
 
         private string Map(string key, string prefix)

@@ -50,13 +50,26 @@ public sealed class ZapretGuiMcp
         return data;
     }
 
-    /// <summary>The tools this token may call (the GUI hides tools whose permission is off).</summary>
+    /// <summary>The tools this token may call (the GUI hides tools whose permission is off), every page of the list.</summary>
     public async Task<HashSet<string>> ToolsAsync(CancellationToken ct = default)
     {
         if (_negotiated is null)
             await InitializeAsync(ct).ConfigureAwait(false);
-        var result = await RpcAsync("tools/list", new JsonObject(), ct).ConfigureAwait(false);
-        return (result?["tools"] as JsonArray ?? []).Select(t => (string?)t?["name"]).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        string? cursor = null;
+        do
+        {
+            var p = new JsonObject();
+            if (cursor is not null)
+                p["cursor"] = cursor;
+            var result = await RpcAsync("tools/list", p, ct).ConfigureAwait(false);
+            names.UnionWith((result?["tools"] as JsonArray ?? []).Select(t => (string?)t?["name"]).OfType<string>());
+            cursor = (string?)result?["nextCursor"];
+        }
+        // a server that hands the same cursor back would loop forever
+        while (!string.IsNullOrEmpty(cursor) && seen.Add(cursor));
+        return names;
     }
 
     private static JsonObject ParseText(JsonNode result)

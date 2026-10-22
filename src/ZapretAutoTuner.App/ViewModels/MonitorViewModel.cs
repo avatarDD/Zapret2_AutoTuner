@@ -7,6 +7,7 @@ using ZapretAutoTuner.App.Services;
 using ZapretAutoTuner.Core.Model;
 using ZapretAutoTuner.Core.Monitor;
 using ZapretAutoTuner.Core.Search;
+using ZapretAutoTuner.Storage;
 using ZapretAutoTuner.Tuning;
 
 namespace ZapretAutoTuner.App.ViewModels;
@@ -31,22 +32,29 @@ public sealed record PendingRepair(RepairResult Result, string Text);
 
 /// <summary>
 /// "Монитор" (PLAN 7.1–7.5): runs the final solution as protection, watches its domains passively, repairs a
-/// degraded one and either asks (default) or applies the fix by itself, as the user chose in the settings.
+/// degraded one and either asks (default) or applies the fix by itself, as the user chose in the settings. The
+/// protection itself (engine, queues, swaps, the repair flow) is <see cref="ProtectionController"/>; this only shows it.
 /// </summary>
 public sealed partial class MonitorViewModel : PageViewModel
 {
     private readonly AppHost _host;
-    private readonly SemaphoreSlim _repairGate = new(1, 1);
+    private readonly Dictionary<string, (DateTime At, IReadOnlyList<IPAddress> Addresses)> _addresses = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _cts;
     private IEngineControl? _engine;
-    private string? _engineId;
-    private Solution? _solution;
-    private RepairCoordinator? _coordinator;
+    private ProtectionController? _protection;
 
     public MonitorViewModel(AppHost host)
     {
         _host = host;
-        AutoApply = host.Settings.ApplyPolicy == "auto";
+        _autoApply = host.Settings.ApplyPolicy == "auto";
+        // one source of truth: the settings page and this switch both write the setting, and both follow it
+        host.Settings.ApplyPolicyChanged += () => Dispatcher.UIThread.Post(() => AutoApply = host.Settings.ApplyPolicy == "auto");
+        // the journal keeps both languages; the page shows the current one
+        Loc.Loc.I.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Loc.Loc.English))
+                LoadJournal();
+        };
         LoadJournal();
     }
 
@@ -67,12 +75,9 @@ public sealed partial class MonitorViewModel : PageViewModel
     [ObservableProperty]
     private bool _autoApply;
 
-    partial void OnAutoApplyChanged(bool value)
-    {
-        _host.Settings.ApplyPolicy = value ? "auto" : "ask";
-        if (_coordinator is not null)
-            _coordinator.Policy = value ? ApplyPolicy.Auto : ApplyPolicy.Ask;
-    }
+    partial void OnAutoApplyChanged(bool value) => _host.Settings.ApplyPolicy = value ? "auto" : "ask";
+
+    private ApplyPolicy Policy() => _host.Settings.ApplyPolicy == "auto" ? ApplyPolicy.Auto : ApplyPolicy.Ask;
 
     [RelayCommand]
     private async Task ToggleAsync()
@@ -90,55 +95,88 @@ public sealed partial class MonitorViewModel : PageViewModel
         _cts = new CancellationTokenSource();
         try
         {
+            // the chart needs a week at most; older windows only grow the file
+            _host.Kb.PruneMonitorWindows(DateTimeOffset.UtcNow.AddDays(-7));
             var agent = await _host.AgentAsync(_cts.Token);
             _engine = new AgentEngineControl(agent.Client);
-            _solution = solution;
-            var (argv, queue) = Protection.Launch(solution, _host.Bundle.LuaDir);
-            _engineId = await _engine.StartAsync(argv, queue, "protection", _cts.Token);
+            var protection = new ProtectionController(_engine, RepairSteps(), (s, q) => Protection.Launch(s, _host.Bundle.LuaDir, q), Policy);
+            Wire(protection);
+            await protection.StartAsync(solution);
+            _protection = protection;
             Active = true;
             Domains.Clear();
+            Pending.Clear();
             foreach (var d in Protection.Domains(solution))
                 Domains.Add(new DomainHealthViewModel(d));
             Status = L.F("monitor.active", Domains.Count);
 
             var monitor = new LiveMonitor(new AgentProgramMonitor(agent.Client), new LiveMonitorOptions { Domains = [.. Protection.Domains(solution)] });
             monitor.WindowClosed += w => Dispatcher.UIThread.Post(() => OnWindow(w));
-            monitor.Changed += e => _ = HandleAsync(e, null);
-            _coordinator = new RepairCoordinator(RepairSteps(), d => _solution is null ? null : Protection.CurrentOf(_solution, d), AutoApply ? ApplyPolicy.Auto : ApplyPolicy.Ask);
-            _coordinator.Journal += (d, kind, reason) => Dispatcher.UIThread.Post(() =>
-            {
-                _host.Kb.AddChange(d, kind, reason);
-                LoadJournal();
-            });
-            _ = Task.Run(() => monitor.RunAsync(_cts.Token));
+            monitor.Changed += e => _ = Task.Run(() => protection.HandleAsync(e));
+            monitor.Failed += (e, n) => Dispatcher.UIThread.Post(() => Status = L.F("monitor.capture_failed", e.Message, n));
+            var ct = _cts.Token;
+            _ = Task.Run(() => monitor.RunAsync(ct));
         }
         catch (OperationCanceledException)
         {
             Status = L["common.stopped"];
+            await ShutdownAsync();
         }
-        catch (Exception e) when (e is EngineRefusedException or InvalidOperationException or IOException or Grpc.Core.RpcException)
+        catch (Exception e)
         {
+            // a declined UAC / pkexec prompt, a refused engine, a dropped Agent: said, not crashed
+            await ShutdownAsync();
+            Active = false;
             Status = e.Message;
-            await StopAsync();
         }
+    }
+
+    private void Wire(ProtectionController p)
+    {
+        p.Journal += (d, kind, ru, en) => Dispatcher.UIThread.Post(() =>
+        {
+            _host.Kb.AddChange(d, kind, JournalReason.Encode(ru, en));
+            LoadJournal();
+        });
+        p.Repairing += d => Dispatcher.UIThread.Post(() => SetState(d, "monitor.state_repairing", "#D9A21B"));
+        p.Finished += r => Dispatcher.UIThread.Post(() =>
+        {
+            if (r.Verdict is RepairVerdict.Replaced or RepairVerdict.BlockLifted)
+                Pending.Add(new PendingRepair(r, $"{r.Domain}: {L.Pick(r.ReasonRu, r.ReasonEn)}{(r.Strategy is { } s ? "\n" + s.Strategy : "")}"));
+            SetState(r.Domain, r.Verdict == RepairVerdict.NotFound ? "monitor.state_broken" : "monitor.state_ok", r.Verdict == RepairVerdict.NotFound ? "#D0443E" : "#2E9E5B");
+        });
+        p.Applied += (r, next) => Dispatcher.UIThread.Post(() => OnApplied(r, next));
+        p.Problem += (d, message) => Dispatcher.UIThread.Post(() =>
+        {
+            Status = d is null ? message : L.F("monitor.repair_failed", d, message);
+            if (d is not null)
+                SetState(d, "monitor.state_broken", "#D0443E");
+        });
     }
 
     /// <summary>"Не работает сейчас": the user's word starts the repair at once (PLAN 7.5).</summary>
     [RelayCommand]
     private void ReportBroken(DomainHealthViewModel? row)
     {
-        if (row is not null && Active)
-            _ = HandleAsync(new HealthEvent(row.Domain, HealthChange.Degraded, DateTime.UtcNow, []), "пользователь сообщил, что не работает / the user reported it broken");
+        if (row is not null && Active && _protection is { } p)
+            _ = Task.Run(() => p.HandleAsync(new HealthEvent(row.Domain, HealthChange.Degraded, DateTime.UtcNow, []), RepairCoordinator.UserReport));
     }
 
     [RelayCommand]
     private async Task ApplyAsync(PendingRepair? p)
     {
-        if (p is null || _solution is null)
+        if (p is null || _protection is not { } protection)
             return;
         Pending.Remove(p);
-        var next = Protection.ReplaceDomain(_solution, p.Result.Domain, p.Result.Verdict == RepairVerdict.Replaced ? p.Result.Strategy : null);
-        await SwapAsync(next, applied: true, p.Result);
+        try
+        {
+            // the controller builds the edit on the solution running now, through the same gate as the repairs
+            await protection.ApplyAsync(p.Result);
+        }
+        catch (Exception e)
+        {
+            Status = e.Message;
+        }
     }
 
     [RelayCommand]
@@ -147,88 +185,54 @@ public sealed partial class MonitorViewModel : PageViewModel
         if (p is null)
             return;
         Pending.Remove(p);
-        _host.Kb.AddChange(p.Result.Domain, "dismissed", "пользователь отказался / the user declined");
+        _host.Kb.AddChange(p.Result.Domain, "dismissed", JournalReason.Encode("пользователь отказался", "the user declined"));
         LoadJournal();
     }
 
-    private async Task HandleAsync(HealthEvent e, string? why)
+    private void OnApplied(RepairResult r, Solution next)
     {
-        if (_coordinator is null || _solution is null || _cts is null)
-            return;
-        if (e.Change == HealthChange.Recovered)
+        if (SessionState.I.Last is { } last)
+            SessionState.I.Last = last with { Solution = next };
+        _host.Kb.AddChange(r.Domain, r.Verdict == RepairVerdict.BlockLifted ? "removed" : "applied", JournalReason.Encode(r.ReasonRu, r.ReasonEn), null,
+            r.Strategy?.Strategy.ToString(), applied: true);
+        LoadJournal();
+        foreach (var stale in Pending.Where(x => string.Equals(x.Result.Domain, r.Domain, StringComparison.OrdinalIgnoreCase)).ToList())
+            Pending.Remove(stale);
+        if (r.Verdict == RepairVerdict.BlockLifted)
         {
-            await _coordinator.OnEventAsync(e, _cts.Token);
-            Dispatcher.UIThread.Post(() => SetState(e.Domain, "monitor.state_ok", "#2E9E5B"));
-            return;
+            if (Domains.FirstOrDefault(d => string.Equals(d.Domain, r.Domain, StringComparison.OrdinalIgnoreCase)) is { } row)
+                Domains.Remove(row);
         }
-        if (_coordinator.IsRunning(e.Domain) || !await _repairGate.WaitAsync(0))
-            return;
-        var original = _solution;
-        try
+        else
         {
-            Dispatcher.UIThread.Post(() => SetState(e.Domain, "monitor.state_repairing", "#D9A21B"));
-            // the protection must not touch the domain while the repair probes it
-            await SwapAsync(Protection.ReplaceDomain(original, e.Domain, null), applied: false, null);
-            var r = await _coordinator.OnEventAsync(e, _cts.Token, why);
-            if (r is { Verdict: RepairVerdict.Replaced } && AutoApply)
-            {
-                await SwapAsync(Protection.ReplaceDomain(original, e.Domain, r.Strategy), applied: true, r);
-                return;
-            }
-            await SwapAsync(original, applied: false, null);
-            if (r is null)
-                return;
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (r.Verdict is RepairVerdict.Replaced or RepairVerdict.BlockLifted)
-                    Pending.Add(new PendingRepair(r, $"{r.Domain}: {L.Pick(r.ReasonRu, r.ReasonEn)}{(r.Strategy is { } s ? "\n" + s.Strategy : "")}"));
-                SetState(e.Domain, r.Verdict == RepairVerdict.NotFound ? "monitor.state_broken" : "monitor.state_ok", r.Verdict == RepairVerdict.NotFound ? "#D0443E" : "#2E9E5B");
-            });
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception ex) when (ex is EngineRefusedException or InvalidOperationException or IOException or Grpc.Core.RpcException)
-        {
-            Dispatcher.UIThread.Post(() => Status = ex.Message);
-        }
-        finally
-        {
-            _repairGate.Release();
+            SetState(r.Domain, "monitor.state_ok", "#2E9E5B");
         }
     }
 
-    /// <summary>The new instance starts before the old one stops (PLAN 7.3.4).</summary>
-    private async Task SwapAsync(Solution next, bool applied, RepairResult? r)
+    /// <summary>The domain's live addresses (as the classifier picks them), kept a few minutes: every repair step asks.</summary>
+    private async Task<IReadOnlyList<IPAddress>> AddressesAsync(string domain, CancellationToken ct)
     {
-        if (_engine is null)
-            return;
-        var (argv, queue) = Protection.Launch(next, _host.Bundle.LuaDir);
-        _engineId = await HotSwap.ReplaceAsync(_engine, _engineId, argv, queue, "protection", CancellationToken.None);
-        _solution = next;
-        if (!applied || r is null)
-            return;
-        if (SessionState.I.Last is { } last)
-            SessionState.I.Last = last with { Solution = next };
-        Dispatcher.UIThread.Post(() =>
+        lock (_addresses)
         {
-            _host.Kb.AddChange(r.Domain, r.Verdict == RepairVerdict.BlockLifted ? "removed" : "applied", r.ReasonRu, null, r.Strategy?.Strategy.ToString(), applied: true);
-            LoadJournal();
-            if (r.Verdict == RepairVerdict.BlockLifted)
-                Domains.Remove(Domains.FirstOrDefault(d => d.Domain == r.Domain)!);
-            else
-                SetState(r.Domain, "monitor.state_ok", "#2E9E5B");
-        });
+            if (_addresses.TryGetValue(domain, out var c) && DateTime.UtcNow - c.At < TimeSpan.FromMinutes(5))
+                return c.Addresses;
+        }
+        var live = await LiveAddresses.ResolveAsync(domain, ct);
+        lock (_addresses)
+            _addresses[domain] = (DateTime.UtcNow, live);
+        return live;
     }
 
     private SearchRepairSteps RepairSteps()
     {
         var mode = Enum.TryParse<SearchMode>(_host.Settings.SearchMode, out var m) ? m : SearchMode.Standard;
-        var options = new AgentTrialOptions { LuaDir = _host.Bundle.LuaDir };
+        var engine = _engine!;
+        // its own queue: a wizard run may hold the trials' 300 at the same time
+        var options = new AgentTrialOptions { LuaDir = _host.Bundle.LuaDir, QueueNum = Protection.RepairQueueNum };
         async Task<AgentTrialExecutor> For(string domain, CancellationToken ct)
         {
-            var addresses = await Dns.GetHostAddressesAsync(domain, ct);
-            return new AgentTrialExecutor(_engine!, new TrialTarget { Host = domain, Addresses = addresses }, options);
+            var addresses = await AddressesAsync(domain, ct);
+            return new AgentTrialExecutor(engine, new TrialTarget { Host = domain, Addresses = addresses }, options);
         }
         return new SearchRepairSteps(
             async (d, ct) => await For(d, ct),
@@ -261,31 +265,39 @@ public sealed partial class MonitorViewModel : PageViewModel
     {
         Journal.Clear();
         foreach (var c in _host.Kb.Changes(200))
-            Journal.Add($"{c.Time.ToLocalTime():dd.MM HH:mm} {c.Domain} · {L["journal." + c.Kind]} · {c.Reason}{(c.NewArgs is null ? "" : " → " + c.NewArgs)}");
+        {
+            var (ru, en) = JournalReason.Decode(c.Reason);
+            Journal.Add($"{c.Time.ToLocalTime():dd.MM HH:mm} {c.Domain} · {L["journal." + c.Kind]} · {L.Pick(ru, en)}{(c.NewArgs is null ? "" : " → " + c.NewArgs)}");
+        }
     }
 
     public async Task StopAsync()
     {
         await ShutdownAsync();
-        _coordinator = null;
         Active = false;
+        Pending.Clear();
         Status = L["monitor.stopped"];
     }
 
-    /// <summary>Stops the protection engine; safe off the UI thread (on exit).</summary>
+    /// <summary>
+    /// Stops the protection: a repair in flight is cancelled and a swap in flight is waited for, so no instance it
+    /// starts is left behind. Safe off the UI thread (on exit).
+    /// </summary>
     public async Task ShutdownAsync()
     {
         _cts?.Cancel();
-        var (engine, id) = (_engine, _engineId);
-        _engineId = null;
-        if (engine is null || id is null)
+        var protection = _protection;
+        _protection = null;
+        _engine = null;
+        if (protection is null)
             return;
         try
         {
-            await engine.StopAsync(id, CancellationToken.None).ConfigureAwait(false);
+            await protection.StopAsync().ConfigureAwait(false);
         }
-        catch (Exception e) when (e is InvalidOperationException or IOException or Grpc.Core.RpcException)
+        catch (Exception)
         {
+            // the Agent stops every engine when it exits anyway
         }
     }
 }

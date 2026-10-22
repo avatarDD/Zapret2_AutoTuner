@@ -32,7 +32,8 @@ internal sealed class EngineManager : IDisposable
         _options = options;
         _state = state;
         _firewall = firewall;
-        EnginePath = options.Engine ?? Tools.Zapret2Bundle.Locate().EnginePath;
+        // under pkexec only the engine next to the Agent binary: ZT_ZAPRET2_DIR is the caller's to set
+        EnginePath = options.Engine ?? (options.Pkexec ? new Tools.Zapret2Bundle(Path.Combine(AppContext.BaseDirectory, "zapret2")) : Tools.Zapret2Bundle.Locate()).EnginePath;
         if (OperatingSystem.IsWindows())
             _job = new WindowsJob();
     }

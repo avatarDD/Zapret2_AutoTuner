@@ -81,21 +81,53 @@ public sealed class ZapretGuiExperiments(ZapretGuiMcp mcp)
     }
 
     /// <summary>Polls until the run is no longer running (the variants are measured; a kept winner may still be applied).</summary>
-    public async Task<ExperimentReport> WaitAsync(string runId, TimeSpan poll, CancellationToken ct = default)
+    public Task<ExperimentReport> WaitAsync(string runId, TimeSpan poll, CancellationToken ct = default) => WaitAsync(runId, poll, null, true, ct);
+
+    /// <inheritdoc cref="WaitAsync(string, TimeSpan, CancellationToken)"/>
+    /// <param name="labels">The variants wanted: the result is paged until every one of them is in.</param>
+    /// <param name="includeLog">The engine log tail of each variant; it makes the pages big.</param>
+    public async Task<ExperimentReport> WaitAsync(string runId, TimeSpan poll, IReadOnlyCollection<string>? labels, bool includeLog, CancellationToken ct = default)
     {
         while (true)
         {
             var (state, _, awaiting) = await StatusAsync(ct).ConfigureAwait(false);
             if (state != "running" || awaiting)
-                return await ResultAsync(runId, ct).ConfigureAwait(false);
+                return await ResultAsync(runId, labels, includeLog, ct).ConfigureAwait(false);
             await Task.Delay(poll, ct).ConfigureAwait(false);
         }
     }
 
-    public async Task<ExperimentReport> ResultAsync(string runId, CancellationToken ct = default)
+    public Task<ExperimentReport> ResultAsync(string runId, CancellationToken ct = default) => ResultAsync(runId, null, true, ct);
+
+    /// <summary>
+    /// The report, page by page (<c>offset</c>/<c>limit</c>, at most 20 variants a page): until every wanted label is
+    /// in, or, without labels, until the last page.
+    /// </summary>
+    public async Task<ExperimentReport> ResultAsync(string runId, IReadOnlyCollection<string>? labels, bool includeLog, CancellationToken ct = default)
     {
-        var r = await mcp.CallAsync("strategy_experiment_result", new JsonObject { ["run_id"] = runId, ["include_log"] = true, ["limit"] = 20 }, ct).ConfigureAwait(false);
-        return Parse(r);
+        const int pageSize = 20, maxPages = 50;
+        ExperimentReport? first = null;
+        var variants = new List<ExperimentVariantResult>();
+        int offset = 0;
+        for (int page = 0; page < maxPages; page++)
+        {
+            var r = await mcp.CallAsync("strategy_experiment_result", new JsonObject
+            {
+                ["run_id"] = runId,
+                ["include_log"] = includeLog,
+                ["offset"] = offset,
+                ["limit"] = pageSize,
+            }, ct).ConfigureAwait(false);
+            var report = Parse(r);
+            first ??= report;
+            variants.AddRange(report.Variants.Where(v => variants.All(x => x.Label != v.Label)));
+            if (labels is not null && labels.All(l => variants.Any(v => v.Label == l)))
+                break;
+            if ((bool?)r["truncated"] != true || report.Variants.Count == 0)
+                break;
+            offset = (int?)r["next_offset"] ?? offset + report.Variants.Count;
+        }
+        return first! with { Variants = variants };
     }
 
     /// <summary>Reverts at once (a kept winner too); harmless when nothing is applied.</summary>

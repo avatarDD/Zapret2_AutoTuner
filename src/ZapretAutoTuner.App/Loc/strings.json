@@ -79,6 +79,10 @@
   "Скопировать одну строку для nfqws2/winws2",
   "Copy one line for nfqws2/winws2"
  ],
+ "export.bad_url": [
+  "Адрес zapret-gui не распознан: «{0}». Пример: 192.168.1.1:8080",
+  "Not a zapret-gui address: '{0}'. Example: 192.168.1.1:8080"
+ ],
  "export.copied": [
   "Скопировано",
   "Copied"
@@ -86,6 +90,10 @@
  "export.delivered": [
   "Установлено на роутер, nfqws2 перезапущен",
   "Installed on the router, nfqws2 restarted"
+ ],
+ "export.failed": [
+  "Не удалось: {0}",
+  "Failed: {0}"
  ],
  "export.gui": [
   "zapret-gui",
@@ -122,6 +130,18 @@
  "export.gui_url": [
   "Адрес zapret-gui",
   "zapret-gui address"
+ ],
+ "export.hostkey_first": [
+  "Первое подключение к {0}. Отпечаток ключа SSH: {1}\nСверьте его с роутером: после «Да» он будет запомнен, и другой ключ будет отвергнут.",
+  "First connection to {0}. SSH key fingerprint: {1}\nCompare it with the router: after Yes it is remembered and any other key is refused."
+ ],
+ "export.hostkey_known": [
+  "Ключ SSH совпадает с запомненным: {0}",
+  "The SSH key matches the remembered one: {0}"
+ ],
+ "export.hostkey_mismatch": [
+  "Ключ SSH роутера {0} изменился: был {1}, сейчас {2}. Подключение отменено — это может быть другое устройство или перехват. Если ключ сменился из-за сброса или прошивки, нажмите «Забыть ключи SSH роутеров» в настройках.",
+  "The SSH key of router {0} changed: it was {1}, now {2}. Connection refused: this may be another device or an interception. If the key changed after a reset or a firmware update, press 'Forget routers' SSH keys' in the settings."
  ],
  "export.keenetic": [
   "Keenetic (nfqws2-keenetic)",
@@ -162,6 +182,10 @@
  "export.targets_hint": [
   "Без адреса роутера или zapret-gui будет сохранён файл. Ничего не устанавливается без вашего подтверждения.",
   "Without a router or zapret-gui address a file is saved. Nothing is installed without your confirmation."
+ ],
+ "export.timeout": [
+  "Нет ответа вовремя: {0}",
+  "No answer in time: {0}"
  ],
  "export.zapret2": [
   "zapret2 (Linux, OpenWrt)",
@@ -259,6 +283,10 @@
   "Не работает сейчас",
   "Broken now"
  ],
+ "monitor.capture_failed": [
+  "Наблюдение прервалось ({0}), повтор после паузы (сбой подряд: {1})",
+  "Watching broke off ({0}); retrying after a pause (failures in a row: {1})"
+ ],
  "monitor.dismiss": [
   "Отклонить",
   "Dismiss"
@@ -270,6 +298,10 @@
  "monitor.no_solution": [
   "Сначала подберите или импортируйте стратегию.",
   "First tune or import a strategy."
+ ],
+ "monitor.repair_failed": [
+  "Восстановление {0} не удалось: {1}. Домен остался под прежней стратегией.",
+  "Repairing {0} failed: {1}. The domain stays under its old strategy."
  ],
  "monitor.start": [
   "Включить защиту",
@@ -395,6 +427,10 @@
   "По умолчанию найденное исправление ждёт вашего «Применить».",
   "By default a found fix waits for your Apply."
  ],
+ "settings.forget_ssh": [
+  "Забыть ключи SSH роутеров",
+  "Forget routers' SSH keys"
+ ],
  "settings.gui_token": [
   "MCP-токен zapret-gui",
   "zapret-gui MCP token"
@@ -435,13 +471,13 @@
   "ASN провайдера, например AS12389 (необязательно)",
   "Provider ASN, e.g. AS12389 (optional)"
  ],
- "settings.remember_token": [
-  "Запомнить токен на этом компьютере",
-  "Remember the token on this PC"
- ],
  "settings.router": [
   "Роутер",
   "Router"
+ ],
+ "settings.ssh_forgotten": [
+  "Ключи забыты: при следующем подключении отпечаток покажут снова",
+  "Keys forgotten: the fingerprint is shown again on the next connection"
  ],
  "settings.theme": [
   "Тема",
@@ -462,6 +498,10 @@
  "settings.title": [
   "Настройки",
   "Settings"
+ ],
+ "settings.token_session": [
+  "Токен хранится только до закрытия программы",
+  "The token is kept only until the app closes"
  ],
  "stage.classify": [
   "диагностика",

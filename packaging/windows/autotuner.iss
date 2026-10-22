@@ -40,6 +40,6 @@ Name: "{autodesktop}\Zapret2 AutoTuner"; Filename: "{app}\ZapretAutoTuner.exe"; 
 Filename: "{app}\ZapretAutoTuner.exe"; Description: "{cm:LaunchProgram,Zapret2 AutoTuner}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-; the Agent removes its WinDivert filters on exit; make sure no engine is left behind
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM winws2.exe"; Flags: runhidden; RunOnceId: "KillEngine"
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM ztuner-agent.exe"; Flags: runhidden; RunOnceId: "KillAgent"
+; the Agent removes its WinDivert filters on exit; make sure no engine of ours is left behind. Only processes started
+; from {app}: a winws2.exe of another zapret install keeps running.
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ""$d = '{app}\'; Get-Process -Name winws2,ztuner-agent -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -and $_.Path.StartsWith($d, [StringComparison]::OrdinalIgnoreCase) }} | Stop-Process -Force"""; Flags: runhidden; RunOnceId: "KillOurs"

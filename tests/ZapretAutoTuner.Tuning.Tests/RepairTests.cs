@@ -188,7 +188,11 @@ public sealed class RepairCoordinatorTests
         var c = new RepairCoordinator(steps, currentOf ?? (_ => Current), policy);
         var journal = new List<(string, string, string)>();
         var finished = new List<(RepairResult, bool)>();
-        c.Journal += (d, k, r) => journal.Add((d, k, r));
+        c.Journal += (d, k, r, en) =>
+        {
+            Assert.NotEmpty(en);
+            journal.Add((d, k, r));
+        };
         c.Finished += (r, apply) => finished.Add((r, apply));
         return (c, journal, finished);
     }

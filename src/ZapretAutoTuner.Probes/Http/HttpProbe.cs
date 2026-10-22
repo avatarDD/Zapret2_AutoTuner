@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using ZapretAutoTuner.Core.Diagnostics;
@@ -260,6 +261,7 @@ public static class HttpProbe
                 }
             }
 
+            r.BodyHash.AppendData(chunk);
             r.BodyBytes += body.Feed(chunk, out bool done);
             if (body.Malformed)
             {
@@ -448,6 +450,9 @@ public static class HttpProbe
         public IReadOnlyList<string> CertNames = [];
         public ProbeError Error;
 
+        /// <summary>The body bytes as received (chunk framing included): a fingerprint, never the content.</summary>
+        public readonly IncrementalHash BodyHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
         public void Certificate(HttpProbeOptions o, X509Certificate? cert, SslPolicyErrors errors)
         {
             if (cert is null)
@@ -524,6 +529,7 @@ public static class HttpProbe
             BytesIn = BytesIn,
             BytesOut = raw?.BytesOut ?? 0,
             BodyBytes = BodyBytes,
+            BodySha256 = BodyBytes > 0 ? Convert.ToHexStringLower(BodyHash.GetHashAndReset()) : null,
             ContentLength = ContentLength,
             Complete = Complete,
             ConnectTime = ConnectTime,

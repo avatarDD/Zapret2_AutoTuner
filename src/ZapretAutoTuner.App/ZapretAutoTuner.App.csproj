@@ -26,6 +26,7 @@
     <ProjectReference Include="..\ZapretAutoTuner.Delivery\ZapretAutoTuner.Delivery.csproj" />
     <ProjectReference Include="..\ZapretAutoTuner.Storage\ZapretAutoTuner.Storage.csproj" />
     <ProjectReference Include="..\ZapretAutoTuner.Protocol\ZapretAutoTuner.Protocol.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Mcp\ZapretAutoTuner.Mcp.csproj" />
   </ItemGroup>
   <!-- The engine bundle produced by tools/bundle is shipped as <app>/zapret2 -->
   <ItemGroup Condition="'$(RuntimeIdentifier)' != ''">

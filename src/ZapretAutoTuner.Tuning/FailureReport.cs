@@ -25,6 +25,9 @@ public sealed record ReportOptions
     public IReadOnlyList<string> Environment { get; init; } = [];
 
     public int MaxLogLines { get; init; } = 300;
+
+    /// <summary>The MCP audit log: every call an external agent made (already masked).</summary>
+    public IReadOnlyList<string> McpAudit { get; init; } = [];
 }
 
 /// <summary>
@@ -79,6 +82,15 @@ public static partial class FailureReport
                 sb.AppendLine(CultureInfo.InvariantCulture,
                     $"- {f.Protocol} → {mask.Address(f.Server.Address.ToString())}:{f.Server.Port} sni={mask.Domain(f.ClientHello?.Sni ?? "-")} out={f.BytesOut} in={f.BytesIn} retrans={f.Retransmissions}{rst}");
             }
+        }
+        if (o.McpAudit.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Журнал MCP / MCP audit");
+            sb.AppendLine("```");
+            foreach (var l in o.McpAudit.TakeLast(o.MaxLogLines))
+                sb.AppendLine(mask.Line(l));
+            sb.AppendLine("```");
         }
         if (o.EngineLog.Count > 0)
         {

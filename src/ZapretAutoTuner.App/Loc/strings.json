@@ -267,6 +267,78 @@
   "сайт недоступен",
   "site down"
  ],
+ "mcp.banner": [
+  "Подбором управляет внешний агент",
+  "An external agent is driving the search"
+ ],
+ "mcp.confirm_from_agent": [
+  "Запрос внешнего агента ({0}). Агент не может ответить за вас.",
+  "A request from the external agent ({0}). The agent cannot answer for you."
+ ],
+ "mcp.enabled": [
+  "Включить MCP-сервер",
+  "Enable the MCP server"
+ ],
+ "mcp.hint": [
+  "Позволяет LLM-агенту (Claude Desktop и др.) вести подбор через типизированные инструменты. Никаких путей, команд и произвольных опций: только цели из списка, проверенные стратегии и ваше подтверждение в этом окне. Телеметрии нет.",
+  "Lets an LLM agent (Claude Desktop and others) drive the search through typed tools. No paths, commands or arbitrary options: only the listed targets, validated strategies and your confirmation in this window. No telemetry."
+ ],
+ "mcp.http": [
+  "Streamable HTTP на 127.0.0.1 (с токеном)",
+  "Streamable HTTP on 127.0.0.1 (with a token)"
+ ],
+ "mcp.http_failed": [
+  "HTTP не запустился: {0}",
+  "HTTP did not start: {0}"
+ ],
+ "mcp.http_running": [
+  "HTTP: {0}",
+  "HTTP: {0}"
+ ],
+ "mcp.new_token": [
+  "Новый токен",
+  "New token"
+ ],
+ "mcp.perm_control": [
+  "Управление: пробы стратегий и перебор",
+  "Control: strategy trials and the search"
+ ],
+ "mcp.perm_experiments": [
+  "Эксперименты на живом трафике (нужны «Пробы» и «Управление»)",
+  "Live-traffic experiments (needs Probes and Control)"
+ ],
+ "mcp.perm_export": [
+  "Экспорт: предпросмотр и сохранение пакета",
+  "Export: preview and save a package"
+ ],
+ "mcp.perm_hint": [
+  "Добавление цели, запуск эксперимента, применение и сохранение экспорта всегда спрашивают вас здесь. Число проб ограничено в минуту и за сессию.",
+  "Adding a target, starting an experiment, committing and saving an export always ask you here. Trials are limited per minute and per session."
+ ],
+ "mcp.perm_probes": [
+  "Пробы: классификация и проверки целей из списка",
+  "Probes: classify and check the listed targets"
+ ],
+ "mcp.permissions": [
+  "Разрешения (чтение доступно всегда):",
+  "Permissions (reading is always allowed):"
+ ],
+ "mcp.show_token": [
+  "Показать токен",
+  "Show the token"
+ ],
+ "mcp.stdio": [
+  "Для Claude Desktop (claude_desktop_config.json):",
+  "For Claude Desktop (claude_desktop_config.json):"
+ ],
+ "mcp.stop": [
+  "Остановить",
+  "Stop"
+ ],
+ "mcp.title": [
+  "MCP-сервер (внешний агент)",
+  "MCP server (external agent)"
+ ],
  "monitor.active": [
   "Защита активна, сайтов под наблюдением: {0}",
   "Protection is on, {0} sites watched"

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ZapretAutoTuner.Mcp</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ZapretAutoTuner.Core\ZapretAutoTuner.Core.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Tuning\ZapretAutoTuner.Tuning.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- the skills are the model's reference: served as ztuner://skills/<name> -->
+    <EmbeddedResource Include="..\..\.claude\skills\nfqws2-lua\SKILL.md" LogicalName="ZapretAutoTuner.Mcp.skills.nfqws2-lua.md" />
+    <EmbeddedResource Include="..\..\.claude\skills\nfqws2-engine\SKILL.md" LogicalName="ZapretAutoTuner.Mcp.skills.nfqws2-engine.md" />
+    <EmbeddedResource Include="..\..\.claude\skills\dpi-diagnostics\SKILL.md" LogicalName="ZapretAutoTuner.Mcp.skills.dpi-diagnostics.md" />
+    <InternalsVisibleTo Include="ZapretAutoTuner.Mcp.Tests" />
+  </ItemGroup>
+</Project>

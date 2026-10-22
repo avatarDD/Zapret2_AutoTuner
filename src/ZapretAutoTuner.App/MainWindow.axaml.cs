@@ -22,6 +22,7 @@ public sealed partial class MainWindow : Window
         m.Wizard.CopyText = m.Reports.CopyText = CopyAsync;
         m.Wizard.Confirm = (title, text) => ConfirmDialog.AskAsync(this, title, text);
         m.Expert.OpenFile = OpenFileAsync;
+        m.Mcp.Ask = (title, text) => ConfirmDialog.AskAsync(this, title, text);
     }
 
     private async Task SaveFileAsync(string name, byte[] bytes)

@@ -1,4 +1,108 @@
 {
+ "advisor.data": [
+  "Выбранному провайдеру отправляются: ваш текст задания, ответы инструментов AutoTuner (вердикты, результаты проб, стратегии) и справочники по zapret2. Ваши адреса маскируются так же, как в отчёте (локальные — lan-N, внешние — до /24); имена целей отправляются как есть. Содержимое страниц и пакеты не отправляются. Сессия ограничена: 12 ходов, 30 вызовов инструментов, 400 000 токенов.",
+  "Sent to the chosen provider: your task text, the answers of AutoTuner's tools (verdicts, probe results, strategies) and the zapret2 references. Your addresses are masked as in the report (local ones become lan-N, public ones keep their /24); target names are sent as they are. Page content and packets are never sent. A session is bounded: 12 turns, 30 tool calls, 400,000 tokens."
+ ],
+ "advisor.done_failed": [
+  "Ошибка запроса к модели (подробности в журнале ниже): ходов {0}, вызовов {1}, токенов {2}.",
+  "The request to the model failed (details below): {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_finished": [
+  "Готово: ходов {0}, вызовов инструментов {1}, токенов {2}.",
+  "Done: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_refused": [
+  "Модель отказалась отвечать: ходов {0}, вызовов {1}, токенов {2}.",
+  "The model declined: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_stopped": [
+  "Остановлено: ходов {0}, вызовов инструментов {1}, токенов {2}.",
+  "Stopped: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_tokenlimit": [
+  "Достигнут лимит токенов: ходов {0}, вызовов {1}, токенов {2}.",
+  "Token limit reached: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_toolcalllimit": [
+  "Достигнут лимит вызовов инструментов: ходов {0}, вызовов {1}, токенов {2}.",
+  "Tool-call limit reached: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_turnlimit": [
+  "Достигнут лимит ходов: ходов {0}, вызовов {1}, токенов {2}.",
+  "Turn limit reached: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.enabled": [
+  "Включить советника",
+  "Enable the advisor"
+ ],
+ "advisor.error": [
+  "Ошибка",
+  "Error"
+ ],
+ "advisor.key": [
+  "API-ключ (для локального сервера — если он его требует)",
+  "API key (for a local server: only if it needs one)"
+ ],
+ "advisor.key_session": [
+  "Ключ хранится только в памяти до закрытия программы.",
+  "The key is kept in memory only, until the program closes."
+ ],
+ "advisor.missing_endpoint": [
+  "Укажите адрес OpenAI-совместимого сервера (http:// или https://) в Настройках → «Советник».",
+  "Enter the OpenAI-compatible server address (http:// or https://) in Settings → Advisor."
+ ],
+ "advisor.missing_key": [
+  "Введите API-ключ Claude в Настройках → «Советник».",
+  "Enter the Claude API key in Settings → Advisor."
+ ],
+ "advisor.missing_model": [
+  "Укажите модель в Настройках → «Советник».",
+  "Enter the model in Settings → Advisor."
+ ],
+ "advisor.model": [
+  "Модель",
+  "Model"
+ ],
+ "advisor.off": [
+  "Советник выключен. Включите его в Настройках → «Советник».",
+  "The advisor is off. Turn it on in Settings → Advisor."
+ ],
+ "advisor.provider_claude": [
+  "Claude (API Anthropic, ваш ключ)",
+  "Claude (Anthropic API, your key)"
+ ],
+ "advisor.provider_local": [
+  "Локальная модель (OpenAI-совместимый сервер)",
+  "Local model (OpenAI-compatible server)"
+ ],
+ "advisor.running": [
+  "Советник работает… «Остановить» прерывает его сразу.",
+  "The advisor is working… Stop interrupts it at once."
+ ],
+ "advisor.says": [
+  "Советник",
+  "Advisor"
+ ],
+ "advisor.settings_hint": [
+  "Встроенный советник: Claude по вашему API-ключу или локальная модель через OpenAI-совместимый сервер. Выключен по умолчанию; запросы уходят, только когда вы нажимаете «Начать» на странице «Советник». Он пользуется разрешениями MCP: пока MCP выключен — только чтение.",
+  "The built-in advisor: Claude with your API key, or a local model through an OpenAI-compatible server. Off by default; requests go out only when you press Start on the Advisor page. It uses the MCP permissions: while MCP is off, reading only."
+ ],
+ "advisor.start": [
+  "Начать",
+  "Start"
+ ],
+ "advisor.subtitle": [
+  "Модель разбирается в блокировке через инструменты AutoTuner — те же, что у MCP, с теми же разрешениями. Всё, что что-то меняет, ждёт вашего «Да». Каждый вызов попадает в журнал MCP и в отчёт.",
+  "The model works on the block through AutoTuner's tools — the same as over MCP, with the same permissions. Anything that changes something waits for your Yes. Every call goes to the MCP log and into the report."
+ ],
+ "advisor.task": [
+  "Что сделать (необязательно). Пусто — найти причину и стратегию для заблокированных целей.",
+  "What to do (optional). Empty: find the cause and a strategy for the blocked targets."
+ ],
+ "advisor.title": [
+  "Советник (языковая модель)",
+  "Advisor (language model)"
+ ],
  "agent.lost": [
   "Агент остановился: {0}. Он запустится снова при следующем действии.",
   "The agent stopped: {0}. It starts again on the next action."
@@ -410,6 +514,10 @@
  "monitor.window": [
   "успешно {0} из {1}, чаще всего: {2}",
   "{0} of {1} ok, mostly: {2}"
+ ],
+ "nav.advisor": [
+  "Советник",
+  "Advisor"
  ],
  "nav.expert": [
   "Эксперт",

@@ -20,6 +20,9 @@ internal sealed class FakeMcpGui : HttpMessageHandler
 
     public List<string> ToolNames { get; set; } = [];
 
+    /// <summary>When set, tools/list answers in pages of this size with a <c>nextCursor</c>.</summary>
+    public int? ToolPageSize { get; set; }
+
     /// <summary>The tool calls in order: (name, arguments).</summary>
     public List<(string Name, JsonObject Args)> Calls =>
         Requests.Where(r => r.Method == "tools/call").Select(r => ((string)r.Body["params"]!["name"]!, (JsonObject)r.Body["params"]!["arguments"]!)).ToList();
@@ -49,7 +52,12 @@ internal sealed class FakeMcpGui : HttpMessageHandler
                 init.Headers.Add("Mcp-Session-Id", "sess-1");
                 return init;
             case "tools/list":
-                result = new JsonObject { ["tools"] = new JsonArray([.. ToolNames.Select(n => (JsonNode)new JsonObject { ["name"] = n })]) };
+                int from = int.TryParse((string?)body["params"]?["cursor"], out var c) ? c : 0;
+                int size = ToolPageSize ?? ToolNames.Count;
+                var page = ToolNames.Skip(from).Take(size).ToList();
+                result = new JsonObject { ["tools"] = new JsonArray([.. page.Select(n => (JsonNode)new JsonObject { ["name"] = n })]) };
+                if (from + page.Count < ToolNames.Count)
+                    result["nextCursor"] = (from + page.Count).ToString(System.Globalization.CultureInfo.InvariantCulture);
                 break;
             case "tools/call":
                 var name = (string)body["params"]!["name"]!;
@@ -508,5 +516,41 @@ public sealed class RouterFeedbackTests
 
         await RouterFeedback.FromZapretGuiAsync(mcp, since: 1760954401.25);
         Assert.Equal(1760954401.25, (double)gui.Calls[^1].Args["since"]!);
+    }
+
+    [Fact]
+    public async Task Tools_list_follows_next_cursor_over_every_page()
+    {
+        var gui = new FakeMcpGui { ToolNames = [.. ZapretGuiExperiments.RequiredTools, "nfqws_status", "docs_get"], ToolPageSize = 2 };
+        var tools = await gui.Client().ToolsAsync();
+        Assert.Equal(ZapretGuiExperiments.RequiredTools.Length + 2, tools.Count);
+        var lists = gui.Requests.Where(r => r.Method == "tools/list").ToList();
+        Assert.Equal(4, lists.Count);
+        Assert.Null(lists[0].Body["params"]!["cursor"]);
+        Assert.Equal(["2", "4", "6"], lists.Skip(1).Select(r => (string)r.Body["params"]!["cursor"]!));
+        Assert.Empty(await new ZapretGuiExperiments(gui.Client()).MissingToolsAsync());
+    }
+
+    [Theory]
+    [InlineData("192.168.1.1:8080", "http://192.168.1.1:8080/")]
+    [InlineData(" https://router.lan/gui ", "https://router.lan/gui/")]
+    [InlineData("http://[fe80::1]:8080/", "http://[fe80::1]:8080/")]
+    [InlineData("", null)]
+    [InlineData("ftp://192.168.1.1", null)]
+    [InlineData("http://user:pw@192.168.1.1", null)]
+    [InlineData("http:// bad host", null)]
+    public void Gui_address_is_normalised(string text, string? expected)
+    {
+        Assert.Equal(expected, ZapretGuiClient.BaseAddress(text)?.ToString());
+    }
+
+    [Fact]
+    public void Host_key_trust_on_first_use()
+    {
+        Assert.Equal(HostKeyCheck.FirstUse, HostKeys.Check(null, "SHA256:abc"));
+        Assert.Equal(HostKeyCheck.FirstUse, HostKeys.Check("", "SHA256:abc"));
+        Assert.Equal(HostKeyCheck.Match, HostKeys.Check("SHA256:abc", "SHA256:abc"));
+        Assert.Equal(HostKeyCheck.Mismatch, HostKeys.Check("SHA256:abc", "SHA256:ABC"));
+        Assert.Equal("ssh.hostkey.router.lan:22", HostKeys.SettingKey(" Router.LAN ", 22));
     }
 }

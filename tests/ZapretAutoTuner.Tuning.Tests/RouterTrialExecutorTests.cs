@@ -20,6 +20,12 @@ internal sealed class RouterGui : HttpMessageHandler
 
     public List<string> OpenWithoutBypass { get; set; } = [];
 
+    /// <summary>When set, a result page holds at most this many variants (the GUI pages by offset/limit).</summary>
+    public int? PageSize { get; set; }
+
+    /// <summary>When set, the n-th start (1-based) is refused by the GUI with this error.</summary>
+    public (int Start, string Error)? RefuseStart { get; set; }
+
     /// <summary>Status answers in turn; the last one repeats.</summary>
     public List<string> States { get; set; } = ["finished"];
 
@@ -49,16 +55,19 @@ internal sealed class RouterGui : HttpMessageHandler
             Calls.Add((name, args));
             var payload = name switch
             {
+                "strategy_experiment_start" when RefuseStart is { } refuse && refuse.Start == Starts =>
+                    new JsonObject { ["ok"] = false, ["error"] = refuse.Error, ["error_code"] = "busy", ["__isError"] = true },
                 "strategy_experiment_start" => Start(args),
                 "strategy_experiment_status" => new JsonObject { ["ok"] = true, ["state"] = States[Math.Min(_status++, States.Count - 1)], ["phase"] = "variant", ["awaiting_commit"] = false },
-                "strategy_experiment_result" => Result(),
+                "strategy_experiment_result" => Result(args),
                 _ => new JsonObject { ["ok"] = true },
             };
+            bool isError = payload.Remove("__isError");
             result = new JsonObject
             {
                 ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = payload.ToJsonString() }),
                 ["structuredContent"] = payload,
-                ["isError"] = false,
+                ["isError"] = isError,
             };
         }
         var json = new JsonObject { ["jsonrpc"] = "2.0", ["id"] = body["id"]!.DeepClone(), ["result"] = result };
@@ -73,10 +82,13 @@ internal sealed class RouterGui : HttpMessageHandler
         return new JsonObject { ["ok"] = true, ["run_id"] = "exp-" + Starts, ["ttl_sec"] = args["ttl_sec"]!.DeepClone() };
     }
 
-    private JsonObject Result()
+    private JsonObject Result(JsonObject args)
     {
         var items = new JsonArray();
-        foreach (var v in _variants)
+        int offset = (int?)args["offset"] ?? 0;
+        int limit = Math.Min((int?)args["limit"] ?? 8, PageSize ?? int.MaxValue);
+        var window = _variants.Skip(offset).Take(limit).ToList();
+        foreach (var v in window)
         {
             var candidate = (string)v!["profiles"]![0]!["args"]!;
             var rows = new JsonArray();
@@ -97,9 +109,12 @@ internal sealed class RouterGui : HttpMessageHandler
                 ["success_rate"] = 0.0, ["score"] = 0.0, ["hints"] = new JsonArray(), ["nfqws_log"] = new JsonArray(),
             });
         }
+        bool truncated = offset + window.Count < _variants.Count;
         return new JsonObject
         {
-            ["ok"] = true, ["items"] = items, ["run_id"] = "exp-" + Starts, ["state"] = "finished",
+            ["ok"] = true, ["items"] = items, ["total"] = _variants.Count, ["offset"] = offset, ["truncated"] = truncated,
+            ["next_offset"] = truncated ? offset + window.Count : null,
+            ["run_id"] = "exp-" + Starts, ["state"] = "finished",
             ["baseline"] = new JsonObject { ["measured"] = true, ["open_without_bypass"] = new JsonArray([.. OpenWithoutBypass.Select(t => (JsonNode)t)]) },
             ["best"] = "", ["awaiting_commit"] = false, ["committed"] = false, ["restored"] = true, ["error"] = "",
         };

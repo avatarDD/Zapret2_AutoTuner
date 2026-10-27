@@ -30,6 +30,7 @@ public sealed class SearchController(McpSession session)
     private string? _error;
     private bool _budgetSpent;
     private DateTime? _started;
+    private int _generation;
 
     private McpSession Session => session;
 
@@ -52,6 +53,7 @@ public sealed class SearchController(McpSession session)
             return McpErrors.Error("busy: an experiment is running; roll it back first / занято: идёт эксперимент");
         if (session.LocalWorkRefusal() is { } localBusy)
             return localBusy;
+        int generation;
         lock (_lock)
         {
             if (_state == "starting")
@@ -63,23 +65,32 @@ public sealed class SearchController(McpSession session)
                 return McpErrors.Error($"a search is already running for {_target}; search_stop first / поиск уже идёт");
             }
             _state = "starting";
+            generation = ++_generation;
         }
-        IEngineControl engine;
         try
         {
-            engine = await session.Host.EngineAsync(ct).ConfigureAwait(false);
+            return await BeginAsync(target, mode, verdict!, generation, ct).ConfigureAwait(false);
         }
         catch
         {
+            // anything between "starting" and "running" (the Agent, the knowledge base, an address) must not leave the
+            // search "starting" for good: that counts as busy and would block MCP and the wizard until a restart
             lock (_lock)
-                _state = "idle";
+                if (_state == "starting" && _generation == generation)
+                    _state = "idle";
             throw;
         }
+    }
+
+    private async Task<JsonObject> BeginAsync(string target, string mode, Core.Diagnostics.ClassifierVerdict verdict, int generation, CancellationToken ct)
+    {
+        var engine = await session.Host.EngineAsync(ct).ConfigureAwait(false);
         // the wizard may have started its own tuning (or the user «Защита») while the Agent came up
         if (session.LocalWorkRefusal() is { } busyNow)
         {
             lock (_lock)
-                _state = "idle";
+                if (_state == "starting" && _generation == generation)
+                    _state = "idle";
             return busyNow;
         }
         var trialTarget = new TrialTarget
@@ -91,17 +102,27 @@ public sealed class SearchController(McpSession session)
         var kb = session.Host.Kb;
         var searchMode = mode switch { "quick" => SearchMode.Quick, "full" => SearchMode.Full, _ => SearchMode.Standard };
         long sessionId = kb.StartSession(target, searchMode.ToString(), blockLabel: verdict.Primary.ToString());
-        var log = new KnowledgeBaseSearchLog(kb, sessionId, trialTarget, blockLabel: verdict.Primary.ToString());
         var queued = new List<StrategyCandidate>();
         while (_queue.TryDequeue(out var q))
             queued.Add(q);
-        var options = TuningSession.Prepare(kb, new SearchOptions
+        KnowledgeBaseSearchLog log;
+        SearchOptions options;
+        try
         {
-            Generator = new GeneratorOptions { Mode = searchMode, Labels = verdict.Labels },
-            // the tool promises they go first: in front of the learned order too, not one more arm of it
-            First = queued,
-            Learning = session.Host.SearchLearning(verdict.Primary.ToString()),
-        }, sessionId, null);
+            log = new KnowledgeBaseSearchLog(kb, sessionId, trialTarget, blockLabel: verdict.Primary.ToString());
+            options = TuningSession.Prepare(kb, new SearchOptions
+            {
+                Generator = new GeneratorOptions { Mode = searchMode, Labels = verdict.Labels },
+                // the tool promises they go first: in front of the learned order too, not one more arm of it
+                First = queued,
+                Learning = session.Host.SearchLearning(verdict.Primary.ToString()),
+            }, sessionId, null);
+        }
+        catch
+        {
+            Abandon(kb, sessionId, queued);
+            throw;
+        }
         var cts = CancellationTokenSource.CreateLinkedTokenSource(session.StopToken);
         var executor = new ControlledExecutor(this, new AgentTrialExecutor(engine, trialTarget, session.Host.TrialOptions) { Probe = session.Host.ProbeAsync }, target, log, options, cts);
         var search = new StrategySearch(executor, options, log, new DirectProgress<SearchProgress>(p =>
@@ -111,6 +132,13 @@ public sealed class SearchController(McpSession session)
         }));
         lock (_lock)
         {
+            // search_stop (or Stop in the window) while it was starting: do not start after all
+            if (_state != "starting" || _generation != generation)
+            {
+                cts.Dispose();
+                Abandon(kb, sessionId, queued);
+                return McpErrors.Error("the search was stopped while it was starting / поиск остановлен при запуске");
+            }
             _cts = cts;
             _target = target;
             _state = "running";
@@ -157,6 +185,21 @@ public sealed class SearchController(McpSession session)
             ["queued_first"] = queued.Count,
             ["hint"] = "poll search_status; trials run at the Runner's pace with punishment pauses",
         };
+    }
+
+    /// <summary>A search that never ran: its knowledge-base session is closed and the model's candidates wait for the next one.</summary>
+    private void Abandon(Storage.KnowledgeBase kb, long sessionId, List<StrategyCandidate> queued)
+    {
+        foreach (var q in queued)
+            _queue.Enqueue(q);
+        try
+        {
+            kb.UpdateSession(sessionId, state: "cancelled");
+        }
+        catch (Exception)
+        {
+            // the knowledge base failing is what got us here: the session row stays as it is
+        }
     }
 
     public JsonObject Status()
@@ -227,6 +270,12 @@ public sealed class SearchController(McpSession session)
         lock (_lock)
         {
             task = _task;
+            if (_state == "starting")
+            {
+                // StartAsync sees this before it starts the Runner and gives up
+                _state = "idle";
+                return new JsonObject { ["ok"] = true, ["state"] = _state };
+            }
             if (_state is not ("running" or "paused"))
                 return new JsonObject { ["ok"] = true, ["state"] = _state };
             _cts?.Cancel();

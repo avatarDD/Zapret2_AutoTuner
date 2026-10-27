@@ -90,6 +90,17 @@ public sealed class AutoTunerTools(McpSession session)
             {
                 data = McpErrors.Error(e.Message);
             }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // not the client's cancel and not Stop: a timeout inside (HttpClient, the Agent's channel)
+                data = McpErrors.Error("timed out / превышено время ожидания");
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                // the knowledge base (SqliteException), a malformed document (JsonException)…: an audited error answer,
+                // not an exception that escapes the transport without a trace
+                data = McpErrors.Error($"internal error ({e.GetType().Name}): {e.Message} / внутренняя ошибка");
+            }
             isError = (bool?)data["ok"] == false && (string?)data["status"] is not ("pending_confirmation" or "confirmed_running");
         }
         data = Bound(Mask(data));

@@ -50,6 +50,14 @@ internal static class S
         return o;
     }
 
+    /// <summary>
+    /// A schema pattern (ECMA-262, where a final <c>$</c> is the end of the input) for .NET, where <c>$</c> also
+    /// matches before a trailing newline: "name\n" must not pass <c>^[a-z]+$</c>. The published schema keeps the
+    /// <c>$</c> its clients understand.
+    /// </summary>
+    internal static string NetPattern(string pattern) =>
+        pattern.EndsWith('$') && !pattern.EndsWith("\\$", StringComparison.Ordinal) ? pattern[..^1] + "\\z" : pattern;
+
     private static long Long(JsonNode? n) => long.Parse(n!.ToJsonString(), CultureInfo.InvariantCulture);
 
     /// <summary>Checks <paramref name="value"/> against <paramref name="schema"/>; returns the first problem or null.</summary>
@@ -83,7 +91,7 @@ internal static class S
                     return $"{at}: one of {string.Join(", ", values.Select(x => (string?)x))} is expected";
                 if (schema["maxLength"] is JsonNode ml && s.Length > (int)ml)
                     return $"{at}: longer than {(int)ml} characters";
-                if (schema["pattern"] is JsonNode pat && !System.Text.RegularExpressions.Regex.IsMatch(s, (string)pat!, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1)))
+                if (schema["pattern"] is JsonNode pat && !System.Text.RegularExpressions.Regex.IsMatch(s, NetPattern((string)pat!),System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1)))
                     return $"{at}: does not match {(string?)pat}";
                 return null;
             case "integer":

@@ -218,31 +218,54 @@ public sealed class ResourceStore
         var check = LuaScriptCheck.Check(source, _catalog);
         if (!check.Ok)
             throw ResourceException.From([.. check.Problems]);
+        // the file first: if it cannot be written, the database does not claim an approved version that has no file
+        WriteLua(luaName, source);
         if (row.Approved != version)
             _kb.ApproveResource(row.Id, version);
-        WriteLua(luaName, source);
         return Info(Require(ResourceKind.LuaScript, luaName));
     }
 
     /// <summary>
     /// The approved scripts with the files the engine loads (<c>--lua-init=@Path</c>), rewritten from the database when
-    /// missing or changed on disk: what runs is always the approved text.
+    /// missing or changed on disk: what runs is always the approved text. A script that cannot be read or written is
+    /// left out and named in <see cref="ScriptProblems"/> (and in <paramref name="problems"/>); the others still load.
     /// </summary>
-    public IReadOnlyList<UserLuaScript> ApprovedScripts()
+    public IReadOnlyList<UserLuaScript> ApprovedScripts(List<string>? problems = null)
     {
         var list = new List<UserLuaScript>();
+        var bad = new List<string>();
         foreach (var row in _kb.ResourceRows("lua").Where(r => r.Approved is not null))
         {
-            var source = Source(row, row.Approved!.Value);
-            var path = WriteLua(row.Name, source);
-            list.Add(new UserLuaScript(row.Name, row.Approved.Value, ResourceNames.LuaFile(row.Name), path, LuaScriptCheck.FindDesyncFunctions(source)));
+            try
+            {
+                var source = Source(row, row.Approved!.Value);
+                var path = WriteLua(row.Name, source);
+                list.Add(new UserLuaScript(row.Name, row.Approved.Value, ResourceNames.LuaFile(row.Name), path, LuaScriptCheck.FindDesyncFunctions(source)));
+            }
+            catch (Exception e) when (e is ResourceException or IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                bad.Add($"Lua-скрипт «{row.Name}» пропущен / the Lua script '{row.Name}' is skipped: {e.Message}");
+            }
         }
+        ScriptProblems = bad;
+        problems?.AddRange(bad);
         return list;
     }
 
+    /// <summary>The scripts the last <see cref="ApprovedScripts"/> had to leave out, with the reason; empty when none.</summary>
+    public IReadOnlyList<string> ScriptProblems { get; private set; } = [];
+
     /// <summary>Approved function → script file path, for the launch (<see cref="ResourceRefs.LuaPathsFor"/>).</summary>
-    public IReadOnlyDictionary<string, string> ApprovedLuaPaths() =>
-        ApprovedScripts().SelectMany(s => s.Functions.Select(f => (f, s.Path))).ToDictionary(x => x.f, x => x.Path, StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, string> ApprovedLuaPaths()
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var s in ApprovedScripts())
+        {
+            foreach (var f in s.Functions)
+                map.TryAdd(f, s.Path);
+        }
+        return map;
+    }
 
     /// <summary>
     /// The validator context with the user's Lua: approved functions are accepted, functions that exist only in a

@@ -65,7 +65,8 @@ public sealed partial class ResourcesViewModel : PageViewModel
                 Items.Add(new ResourceRowViewModel(i));
             if (keep is not null)
             {
-                _selected = Items.FirstOrDefault(r => r.Name == keep.Name);
+                // a hostlist and an ipset may share a name: the kind tells them apart
+                _selected = Items.FirstOrDefault(r => r.Info.Kind == keep.Kind && r.Name == keep.Name);
                 OnPropertyChanged(nameof(Selected));
                 Approval = keep.Kind == ResourceKind.LuaScript ? ApprovalText(keep) : "";
             }
@@ -175,13 +176,13 @@ public sealed partial class ResourcesViewModel : PageViewModel
     [RelayCommand]
     public void Reload()
     {
-        var keep = Selected?.Name;
+        var keep = Selected?.Info;
         Items.Clear();
         foreach (var i in _store.List(Kind))
             Items.Add(new ResourceRowViewModel(i));
         OnPropertyChanged(nameof(RouterText));
         OnPropertyChanged(nameof(RouterPassword));
-        if (keep is not null && Items.FirstOrDefault(r => r.Name == keep) is { } row)
+        if (keep is not null && Items.FirstOrDefault(r => r.Info.Kind == keep.Kind && r.Name == keep.Name) is { } row)
             Selected = row;
     }
 

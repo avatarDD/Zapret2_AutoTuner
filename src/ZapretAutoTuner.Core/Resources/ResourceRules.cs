@@ -14,10 +14,10 @@ public static partial class ResourceNames
 {
     public const int MaxLength = 48;
 
-    [GeneratedRegex("^[a-z0-9_-]{1,48}$")]
+    [GeneratedRegex("^[a-z0-9_-]{1,48}\\z")]
     private static partial Regex NameRe();
 
-    [GeneratedRegex("^zt-([a-z0-9_-]{1,48})\\.lua$")]
+    [GeneratedRegex("^zt-([a-z0-9_-]{1,48})\\.lua\\z")]
     private static partial Regex LuaFileRe();
 
     /// <summary>The Lua file of a script: <c>zt-&lt;name&gt;.lua</c> (the prefix keeps it apart from zapret2's own files).</summary>
@@ -90,7 +90,7 @@ public static partial class ResourceRules
     /// <summary>Blobs a router package ships under these names (keenetic <c>blobs/</c>): a user blob must not shadow them.</summary>
     private static readonly string[] PackageBlobs = ["quic_initial", "tls_clienthello"];
 
-    [GeneratedRegex("^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$")]
+    [GeneratedRegex("^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?\\z")]
     private static partial Regex LabelRe();
 
     [GeneratedRegex("^(?:0x)?[0-9a-fA-F\\s:]+$")]

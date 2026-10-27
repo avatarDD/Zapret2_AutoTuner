@@ -84,8 +84,8 @@ public sealed class BenchmarkTests(ITestOutputHelper output)
 
     /// <summary>
     /// PLAN 4a.3 / M6: on warm scenarios (a sibling DPI on the same provider was searched before) the learned order must
-    /// not be worse than the static one. Per scenario it can be: see the printed table (provider A, where the static
-    /// order already starts with the right family, is where the bandit loses).
+    /// not be worse than the static one. Per scenario see <see cref="OnTheSmallSetTheBanditIsNoWorseInAnyScenario"/>
+    /// and the printed table.
     /// </summary>
     [Fact]
     public async Task TheBanditIsNoWorseThanStaticOnWarmScenarios()
@@ -96,6 +96,32 @@ public sealed class BenchmarkTests(ITestOutputHelper output)
         Assert.Equal(Small.Length * 3, warm[BenchArm.Static].Runs);
         Assert.True(BenchFormat.NoWorse(warm[BenchArm.Bandit], warm[BenchArm.Static]),
             string.Join("\n", BenchFormat.Verdict(report)));
+    }
+
+    /// <summary>
+    /// Per scenario, not only overall. Provider A is the case the static order already gets right (it starts with the
+    /// splits): the siblings' searches made nearly all of A's trials with the winning family, and the learned order used
+    /// to compare that family with a bar raised by its own results, so untried families went first (≈ 60 strategies
+    /// against 3–12). Leaving an arm's own trials out of its prior keeps it first.
+    /// </summary>
+    [Fact]
+    public async Task OnTheSmallSetTheBanditIsNoWorseInAnyScenario()
+    {
+        // ten seeds: a-disorder is a flaky DPI (a multisplit passes 40% of the time), three seeds are mostly luck there
+        var report = await new SearchBenchmark(SmallOptions with { Seeds = 10 }).RunAsync();
+        foreach (var id in Small)
+        {
+            var arms = report.Summaries(r => r.Scenario == id).ToDictionary(s => s.Arm);
+            // the median and the failures, as in the per-scenario table: over three seeds the p90 is one run's exploration
+            var (b, st) = (arms[BenchArm.Bandit], arms[BenchArm.Static]);
+            Assert.True(b.Failures <= st.Failures && (b.Median ?? int.MaxValue) <= (st.Median ?? int.MaxValue),
+                $"{id}: bandit median {b.Median} ({b.Failures} failed), static {st.Median} ({st.Failures} failed)");
+        }
+        // a deterministic DPI whose winner the learned order knows: it is tried first in most draws (static: 3; before
+        // the leave-one-out prior the median was 60), and an exploring draw costs one untried family, not all of them
+        var midsld = report.Runs.Where(r => r.Scenario == "a-split-midsld" && r.Arm == BenchArm.Bandit).ToList();
+        Assert.True(midsld.Count(r => r.Success && r.Strategies == 1) >= 7, string.Join(", ", midsld.Select(r => r.Strategies)));
+        Assert.All(midsld, r => Assert.True(r.Success && r.Strategies <= 30, $"seed {r.Seed}: {r.Strategies}"));
     }
 
     [Fact]

@@ -54,14 +54,57 @@ public sealed class SearchLearningTests
         // the pool starts at 0.5 with 4 pseudo-attempts: Beta(2 + 8, 2 + 2)
         Assert.Equal(10, order.Pool.Alpha, 9);
         Assert.Equal(4, order.Pool.Beta, 9);
+        // the arm's prior leaves its own trials out (they would count twice): with no other arm it is the neutral 0.5
         var a = order.Strategy("a");
+        Assert.Equal(4 * 0.5 + 8, a.Alpha, 9);
+        Assert.Equal(4 * 0.5 + 2, a.Beta, 9);
+        // nothing known: the prior is the whole pool
         double m = order.Pool.Mean;
-        Assert.Equal(4 * m + 8, a.Alpha, 9);
-        Assert.Equal(4 * (1 - m) + 2, a.Beta, 9);
-        // nothing known: the prior itself
         var none = order.Strategy("nothing");
         Assert.Equal(m, none.Mean, 9);
         Assert.Equal(4, none.Alpha + none.Beta, 9);
+
+        // with another arm, the prior is that arm's pool: b went 0/10, so a starts from Beta(2, 2 + 10)
+        var two = new ThompsonOrder(L([Row("a", 8, 10), Row("b", 0, 10)]));
+        double rest = 2.0 / 14;
+        Assert.Equal(4 * rest + 8, two.Strategy("a").Alpha, 9);
+        Assert.Equal(4 * (1 - rest) + 2, two.Strategy("a").Beta, 9);
+    }
+
+    /// <summary>
+    /// PLAN 4a.3: on a provider where the search started with the right family and stopped at its winner, that family
+    /// made nearly all of the provider's trials. Its own results must not set the bar it is compared with, or the untried
+    /// families would jump ahead of it about every second draw (bandit ≈ 60 strategies against the static 3).
+    /// </summary>
+    [Fact]
+    public void Family_that_made_the_providers_trials_is_not_its_own_bar()
+    {
+        var set = Standard;
+        var first = set.Candidates[0].Family;
+        var mine = set.OfFamily(first).ToList();
+        var history = new List<ArmStat>();
+        // this provider: the static order tried the first family, two variants failed, the third won
+        history.Add(Row(mine[0].Key, 0, 2, Asn, Sni, 1, first));
+        history.Add(Row(mine[1].Key, 0, 2, Asn, Sni, 1, first));
+        history.Add(Row(mine[2].Key, 3, 3, Asn, Sni, 1, first));
+        // other providers with the same label: long failed searches over many families, the first one included
+        foreach (var c in set.Candidates.Take(150))
+            history.Add(Row(c.Key, 0, 2, 3, Sni, 1, c.Family));
+
+        var order = new ThompsonOrder(L(history, new LearningContext(Asn, Sni)));
+        // the pool of this provider is the family's own 3/7; the other families have nothing here
+        Assert.True(order.Pool.Mean > 0.2, order.Pool.ToString());
+        Assert.True(order.Family(first).Mean > 0.3, order.Family(first).ToString());
+        int familyFirst = 0, winnerFirst = 0;
+        for (int seed = 0; seed < 100; seed++)
+        {
+            var plan = new ThompsonOrder(L(history, new LearningContext(Asn, Sni), seed)).Arrange([], set.Candidates);
+            familyFirst += plan.Take(mine.Count).All(c => c.Family == first) ? 1 : 0;
+            winnerFirst += plan[0].Key == mine[2].Key ? 1 : 0;
+        }
+        // Thompson sampling still explores now and then; with the family's own trials in its bar this was 61 and 57
+        Assert.True(familyFirst >= 90, $"family first in {familyFirst}/100 draws");
+        Assert.True(winnerFirst >= 80, $"winner first in {winnerFirst}/100 draws");
     }
 
     [Fact]

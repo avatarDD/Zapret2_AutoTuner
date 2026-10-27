@@ -232,7 +232,7 @@ public sealed class AppSettings
     /// <summary>The permission groups beyond "read" (all off by default, as in zapret-gui).</summary>
     public Mcp.McpPermissions McpPermissions
     {
-        get => new(Flag("mcp.perm.probes"), Flag("mcp.perm.control"), Flag("mcp.perm.experiments"), Flag("mcp.perm.export"), Flag("mcp.perm.router"), Flag("mcp.perm.resources"));
+        get => new(Flag("mcp.perm.probes"), Flag("mcp.perm.control"), Flag("mcp.perm.experiments"), Flag("mcp.perm.export"), Flag("mcp.perm.router"), Flag("mcp.perm.resources"), Flag("mcp.perm.router_proxy"));
         set
         {
             SetFlag("mcp.perm.probes", value.Probes);
@@ -241,6 +241,24 @@ public sealed class AppSettings
             SetFlag("mcp.perm.export", value.Export);
             SetFlag("mcp.perm.router", value.Router);
             SetFlag("mcp.perm.resources", value.Resources);
+            SetFlag("mcp.perm.router_proxy", value.RouterProxy);
+        }
+    }
+
+    /// <summary>
+    /// The browser extensions allowed to call the HTTP transport (PLAN 4a.7), as normalized Origins
+    /// (chrome-extension://…, moz-extension://…); empty by default: every foreign Origin is refused.
+    /// </summary>
+    public IReadOnlyList<string> McpBridgeOrigins
+    {
+        get => Mcp.BridgeOrigins.Parse(kb.GetSetting("mcp.bridge.origins")).Valid;
+        set
+        {
+            var valid = value.Select(Mcp.BridgeOrigins.Normalize).OfType<string>().Distinct().ToList();
+            if (valid.Count == 0)
+                kb.RemoveSetting("mcp.bridge.origins");
+            else
+                kb.SetSetting("mcp.bridge.origins", string.Join("\n", valid));
         }
     }
 

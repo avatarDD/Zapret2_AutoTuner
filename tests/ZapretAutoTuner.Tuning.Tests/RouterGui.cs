@@ -33,6 +33,17 @@ internal sealed class RouterGui : HttpMessageHandler
     /// <summary>The tools the token may call (tools/list).</summary>
     public List<string> Tools { get; set; } = [.. ZapretGuiExperiments.RequiredTools, "strategy_experiment_commit", "strategy_get", "logs_tail"];
 
+    /// <summary>Full tool definitions for tools/list (schemas, annotations); when null, <see cref="Tools"/> by name.</summary>
+    public List<JsonObject>? ToolDefinitions { get; set; }
+
+    /// <summary>When set, tools/list pages by this many tools (nextCursor).</summary>
+    public int? ToolsPageSize { get; set; }
+
+    public int ToolLists { get; private set; }
+
+    /// <summary>A whole tools/call result for a tool (content, structuredContent, isError); null falls through to the built-in answers.</summary>
+    public Func<string, JsonObject, CancellationToken, Task<JsonObject?>>? OnTool { get; set; }
+
     /// <summary>The strategy the router runs now (strategy_get): its enabled profiles.</summary>
     public (string Id, List<(string Name, string Args, bool Enabled)> Profiles) Active { get; set; } = ("", []);
 
@@ -64,7 +75,13 @@ internal sealed class RouterGui : HttpMessageHandler
         }
         else if (method == "tools/list")
         {
-            result = new JsonObject { ["tools"] = new JsonArray([.. Tools.Select(t => (JsonNode)new JsonObject { ["name"] = t })]) };
+            ToolLists++;
+            var all = ToolDefinitions?.Select(t => (JsonNode)t.DeepClone()).ToList() ?? [.. Tools.Select(t => (JsonNode)new JsonObject { ["name"] = t })];
+            int from = int.TryParse((string?)body["params"]?["cursor"], out var c) ? c : 0;
+            int size = ToolsPageSize ?? all.Count;
+            result = new JsonObject { ["tools"] = new JsonArray([.. all.Skip(from).Take(size)]) };
+            if (from + size < all.Count)
+                result["nextCursor"] = (from + size).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
         else
         {
@@ -73,6 +90,11 @@ internal sealed class RouterGui : HttpMessageHandler
             Calls.Add((name, args));
             if (name == "strategy_experiment_start" && BeforeStart is { } wait)
                 await wait(ct);
+            if (OnTool is { } custom && await custom(name, args, ct) is { } whole)
+            {
+                var reply = new JsonObject { ["jsonrpc"] = "2.0", ["id"] = body["id"]!.DeepClone(), ["result"] = whole };
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(reply.ToJsonString(), Encoding.UTF8, "application/json") };
+            }
             var payload = name switch
             {
                 "strategy_experiment_start" when RefuseStart is { } refuse && refuse.Start == Starts =>
@@ -159,5 +181,7 @@ internal sealed class RouterGui : HttpMessageHandler
         };
     }
 
-    public ZapretGuiExperiments Experiments() => new(new ZapretGuiMcp(new HttpClient(this) { BaseAddress = new Uri("http://192.168.1.1:8080/") }, "tok"));
+    public ZapretGuiExperiments Experiments() => new(Mcp());
+
+    public ZapretGuiMcp Mcp() => new(new HttpClient(this, disposeHandler: false) { BaseAddress = new Uri("http://192.168.1.1:8080/") }, "tok");
 }

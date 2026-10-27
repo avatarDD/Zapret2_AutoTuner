@@ -28,12 +28,15 @@ public sealed class AutoTunerTools(McpSession session)
 
     public McpSession Session => session;
 
-    /// <summary>The tools the current permissions allow (tools/list).</summary>
+    /// <summary>Our own tools the current permissions allow (tools/list without the router's relayed gui_* tools).</summary>
     public IReadOnlyList<McpToolDefinition> ListTools()
     {
         var p = session.Permissions();
         return [.. McpTools.All.Where(t => p.Granted(t.Scope))];
     }
+
+    /// <summary>The router's zapret-gui tools relayed as gui_* (router_proxy on, zapret-gui set up), as tools/list shows them.</summary>
+    public Task<IReadOnlyList<JsonObject>> ListRouterToolsAsync(CancellationToken ct = default) => session.Proxy.ListAsync(ct);
 
     public async Task<McpToolResult> CallAsync(string name, JsonObject? arguments, string client = "mcp", CancellationToken ct = default)
     {
@@ -42,17 +45,21 @@ public sealed class AutoTunerTools(McpSession session)
         JsonObject data;
         bool isError;
         var def = McpTools.Find(name);
-        if (def is null)
+        // our tools never start with gui_ (a test pins it): such a name is the router's zapret-gui tool (PLAN 4a.7)
+        bool proxied = def is null && RouterProxy.IsProxied(name);
+        var scope = proxied ? McpScope.RouterProxy : def?.Scope ?? McpScope.Read;
+        var perms = session.Permissions();
+        if (def is null && !proxied)
         {
             data = McpErrors.Error($"unknown tool {name}");
             isError = true;
         }
-        else if (session.Permissions() is var perms && !perms.Granted(def.Scope))
+        else if (!perms.Granted(scope))
         {
-            data = perms.Denial(def.Scope);
+            data = perms.Denial(scope);
             isError = true;
         }
-        else if (S.Check(def.InputSchema, args) is { } problem)
+        else if (def is not null && S.Check(def.InputSchema, args) is { } problem)
         {
             data = McpErrors.Error("invalid arguments: " + problem);
             isError = true;
@@ -61,12 +68,16 @@ public sealed class AutoTunerTools(McpSession session)
         {
             session.Client = client;
             session.LastCall = session.Time.GetUtcNow().UtcDateTime;
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, session.StopToken);
+            // Stop swaps the session's token for a fresh one: remember the one this call runs under
+            var stop = session.StopToken;
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, stop);
             try
             {
-                data = await DispatchAsync(name, args, linked.Token).ConfigureAwait(false);
+                data = proxied
+                    ? await session.Proxy.CallAsync(name, args, linked.Token).ConfigureAwait(false)
+                    : await DispatchAsync(name, args, linked.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (session.StopToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
             {
                 data = McpErrors.Error("stopped by the user in AutoTuner / остановлено пользователем");
             }

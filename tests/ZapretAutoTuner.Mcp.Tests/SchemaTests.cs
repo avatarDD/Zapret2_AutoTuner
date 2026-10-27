@@ -42,6 +42,11 @@ public sealed partial class SchemaTests
         Assert.Equal("^a\\$", S.NetPattern("^a\\$"));
     }
 
+    /// <summary>
+    /// Pins our own tools (<see cref="McpTools.All"/>) only. The router's zapret-gui tools relayed as gui_* with the
+    /// router_proxy permission (PLAN 4a.7) are dynamic, zapret-gui's own schemas: they are not in the golden file, and
+    /// BridgeTests checks that no tool of ours takes their prefix or scope.
+    /// </summary>
     [Fact]
     public void TheToolListMatchesTheGoldenFile()
     {
@@ -85,6 +90,7 @@ public sealed partial class SchemaTests
         }
     }
 
+    /// <summary>Our own tools only; the relayed gui_* tools carry zapret-gui's schemas, behind its token and the user's yes.</summary>
     [Fact]
     public void NoSchemaNamesAPathCommandArgsUrlOrScript()
     {

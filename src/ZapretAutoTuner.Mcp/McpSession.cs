@@ -36,6 +36,7 @@ public sealed class McpSession
         Search = new SearchController(this);
         Experiments = new ExperimentRunner(this);
         Router = new RouterExperimentRunner(this);
+        Proxy = new RouterProxy(this);
     }
 
     public IAutoTunerHost Host { get; }
@@ -54,6 +55,9 @@ public sealed class McpSession
 
     /// <summary>Experiments on the router through zapret-gui (router_experiment_*).</summary>
     public RouterExperimentRunner Router { get; }
+
+    /// <summary>zapret-gui's own tools relayed as gui_* (router_proxy).</summary>
+    public RouterProxy Proxy { get; }
 
     public McpAudit Audit { get; } = new();
 

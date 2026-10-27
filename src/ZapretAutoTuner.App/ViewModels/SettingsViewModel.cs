@@ -18,7 +18,14 @@ public sealed partial class SettingsViewModel : PageViewModel
         _host = host;
         _mcp = mcp;
         mcp.Stopped += LoadMcp;
+        mcp.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(McpService.HttpStatus))
+                RefreshBridge();
+        };
+        L.PropertyChanged += (_, _) => RefreshBridge();
         LoadMcp();
+        _bridgeOriginsText = string.Join("\n", host.Settings.McpBridgeOrigins);
         _english = L.English;
         _themeIndex = host.Settings.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
         _modeIndex = Array.IndexOf(Modes, host.Settings.SearchMode) is var i and >= 0 ? i : 1;
@@ -98,6 +105,10 @@ public sealed partial class SettingsViewModel : PageViewModel
     private bool _permResources;
 
     [ObservableProperty]
+    private bool _permRouterProxy;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BridgeProxyHttpSnippet), nameof(BridgeDirectSnippet))]
     private string _mcpToken = "";
 
     [ObservableProperty]
@@ -114,7 +125,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         McpEnabled = _host.Settings.McpEnabled;
         McpHttp = _host.Settings.McpHttp;
         var p = _host.Settings.McpPermissions;
-        (PermProbes, PermControl, PermExperiments, PermExport, PermRouter, PermResources) = (p.Probes, p.Control, p.Experiments, p.Export, p.Router, p.Resources);
+        (PermProbes, PermControl, PermExperiments, PermExport, PermRouter, PermResources, PermRouterProxy) = (p.Probes, p.Control, p.Experiments, p.Export, p.Router, p.Resources, p.RouterProxy);
         McpToken = _host.Settings.McpToken;
         _loading = false;
     }
@@ -135,13 +146,19 @@ public sealed partial class SettingsViewModel : PageViewModel
 
     partial void OnPermResourcesChanged(bool value) => SaveMcp();
 
+    partial void OnPermRouterProxyChanged(bool value)
+    {
+        SaveMcp();
+        OnPropertyChanged(nameof(BridgeGuiMissing));
+    }
+
     private void SaveMcp()
     {
         if (_loading)
             return;
         _host.Settings.McpEnabled = McpEnabled;
         _host.Settings.McpHttp = McpHttp;
-        _host.Settings.McpPermissions = new ZapretAutoTuner.Mcp.McpPermissions(PermProbes, PermControl, PermExperiments, PermExport, PermRouter, PermResources);
+        _host.Settings.McpPermissions = new ZapretAutoTuner.Mcp.McpPermissions(PermProbes, PermControl, PermExperiments, PermExport, PermRouter, PermResources, PermRouterProxy);
         _ = ApplyMcpAsync();
     }
 
@@ -192,9 +209,64 @@ public sealed partial class SettingsViewModel : PageViewModel
 
     partial void OnProviderAsnChanged(string value) => _host.Settings.ProviderAsn = value;
 
-    partial void OnGuiUrlChanged(string value) => _host.Settings.GuiUrl = value.Trim();
+    partial void OnGuiUrlChanged(string value)
+    {
+        _host.Settings.GuiUrl = value.Trim();
+        OnPropertyChanged(nameof(BridgeGuiMissing));
+    }
 
-    partial void OnGuiTokenChanged(string value) => _host.Settings.GuiToken = value;
+    partial void OnGuiTokenChanged(string value)
+    {
+        _host.Settings.GuiToken = value;
+        OnPropertyChanged(nameof(BridgeGuiMissing));
+    }
+
+    // ---- the browser extension bridge (PLAN 4a.7): the same HTTP endpoint, extensions' Origins, snippets
+
+    /// <summary>The allowed Origins as the user types them; valid ones are kept and act at once.</summary>
+    [ObservableProperty]
+    private string _bridgeOriginsText;
+
+    [ObservableProperty]
+    private string _bridgeOriginsError = "";
+
+    /// <summary>The snippets show the real token only when asked.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BridgeProxyHttpSnippet), nameof(BridgeDirectSnippet))]
+    private bool _bridgeRevealToken;
+
+    public bool BridgeOriginsEmpty => _host.Settings.McpBridgeOrigins.Count == 0;
+
+    /// <summary>router_proxy is on but there is no zapret-gui to relay.</summary>
+    public bool BridgeGuiMissing => PermRouterProxy && !_host.Router.Configured;
+
+    partial void OnBridgeOriginsTextChanged(string value)
+    {
+        var (valid, invalid) = ZapretAutoTuner.Mcp.BridgeOrigins.Parse(value);
+        _host.Settings.McpBridgeOrigins = valid;
+        _mcp.BridgeOrigins = valid;
+        BridgeOriginsError = invalid.Count == 0 ? "" : L.F("mcp.bridge_origins_invalid", string.Join(", ", invalid));
+        OnPropertyChanged(nameof(BridgeOriginsEmpty));
+    }
+
+    private Uri? BridgeEndpoint => _mcp.HttpEndpoint ?? (_host.Settings.McpPort > 0 ? new Uri($"http://127.0.0.1:{_host.Settings.McpPort}{ZapretAutoTuner.Mcp.McpHttpServer.Path}") : null);
+
+    private string SnippetToken => BridgeRevealToken ? McpToken : L["mcp.bridge_token_hidden"];
+
+    /// <summary>For a local proxy's mcpConfig: <c>ZapretAutoTuner mcp</c>, which relays to this window.</summary>
+    public string BridgeProxyStdioSnippet => ZapretAutoTuner.Mcp.McpClientConfig.ProxyStdio(Environment.ProcessPath ?? "ZapretAutoTuner");
+
+    public string BridgeProxyHttpSnippet => BridgeEndpoint is { } e ? ZapretAutoTuner.Mcp.McpClientConfig.ProxyHttp(e, SnippetToken) : L["mcp.bridge_no_http"];
+
+    public string BridgeDirectSnippet => BridgeEndpoint is { } e
+        ? ZapretAutoTuner.Mcp.McpClientConfig.Direct(e, new Uri($"http://127.0.0.1:{e.Port}{ZapretAutoTuner.Mcp.McpHttpServer.SsePath}"), SnippetToken)
+        : L["mcp.bridge_no_http"];
+
+    private void RefreshBridge()
+    {
+        OnPropertyChanged(nameof(BridgeProxyHttpSnippet));
+        OnPropertyChanged(nameof(BridgeDirectSnippet));
+    }
 
     /// <summary>The wizard edits the same zapret-gui address and token: the settings are the source.</summary>
     public override void OnShown()

@@ -28,6 +28,9 @@ public sealed class RouterService(AppHost host) : IAsyncDisposable
     /// <summary>The experiments over the current link; null when the address or the token is missing or the address is wrong.</summary>
     public ZapretGuiExperiments? Experiments() => Current()?.Experiments;
 
+    /// <summary>The MCP link itself, for relaying zapret-gui's own tools (router_proxy); null like <see cref="Experiments"/>.</summary>
+    public ZapretGuiMcp? Mcp() => Current()?.Mcp;
+
     /// <summary>The targets whose feedback is read now; empty when none.</summary>
     public IReadOnlyList<string> Watched
     {

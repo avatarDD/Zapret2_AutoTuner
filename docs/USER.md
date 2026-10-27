@@ -41,6 +41,50 @@
 firewall; окно программы работает без них. При выходе агент снимает все свои
 правила.
 
+## Чат claude.ai через расширение браузера (мост MCP)
+
+claude.ai не может сам достучаться до программ на вашем ПК и до роутера за
+NAT. Мостом служит стороннее расширение браузера, которое умеет подключать
+MCP-серверы к веб-чату, а AutoTuner — MCP-сервер, к которому оно
+подключается. Цепочка: claude.ai → расширение → AutoTuner (127.0.0.1) →
+zapret-gui на роутере (например, 192.168.2.1).
+
+1. **Настройки → MCP-сервер:** включите сервер и «Streamable HTTP на
+   127.0.0.1». Отметьте нужные разрешения (чтение доступно всегда).
+2. **Раздел «Мост для расширения браузера»:**
+   - `router_proxy` — чтобы в чате были инструменты zapret-gui роутера (с
+     префиксом `gui_`). Нужны адрес и MCP-токен zapret-gui выше; модель их не
+     видит. Всё, что zapret-gui не помечает как «только чтение», перед
+     выполнением спросит вас в окне AutoTuner с именем инструмента и
+     аргументами. Пока AutoTuner сам ставит эксперимент на роутере, такие
+     инструменты ждут.
+   - Если расширение подключается к AutoTuner напрямую, впишите его Origin
+     (`chrome-extension://<id>` — id виден на странице `chrome://extensions`,
+     `moz-extension://<uuid>` в Firefox). Остальные сайты и расширения
+     получают отказ (403). Токен нужен всегда.
+   - Скопируйте готовый фрагмент настройки: URL и заголовок
+     `Authorization: Bearer <токен>` (галочка «Показать токен» подставит его).
+3. **MCP-SuperAssistant** (расширение с открытым кодом) обычно работает
+   через свой локальный прокси `npx @srbhptl39/mcp-superassistant-proxy
+   --config mcpconfig.json` (по умолчанию `http://localhost:3006/sse`; в
+   расширении укажите адрес прокси). В `mcpconfig.json` добавьте один из
+   фрагментов из настроек: через stdio (`ZapretAutoTuner mcp` — подключится
+   к уже открытому окну) или через HTTP с заголовком `Authorization`. Прокси
+   ходит без Origin, поэтому список разрешённых расширений ему не нужен.
+   Внимание: в README проекта (на момент написания) claude.ai нет в списке
+   поддерживаемых сайтов — проверьте актуальную версию или используйте форк,
+   который его поддерживает.
+4. **Другие расширения-мосты** (например, форки «MCP Bridge for Claude.ai»,
+   «Claude MCP Client / Injector») подключаются так же: тот же URL
+   (Streamable HTTP `/mcp` или legacy SSE `/mcp/sse`) и тот же заголовок.
+   Расширение должно уметь отправлять заголовок `Authorization`. Совместимость
+   с конкретными расширениями мы не проверяли.
+
+Безопасность: стороннее расширение видит весь обмен, а ответы роутера уходят
+в чат claude.ai (адреса в них замаскированы). Подключайте только то
+расширение, которому доверяете. Каждый вызов записывается в журнал MCP и
+попадает в «Собрать отчёт»; кнопка «Остановить» на баннере обрывает и мост.
+
 ## Частые вопросы
 
 **Антивирус ругается на WinDivert / winws2.** WinDivert — драйвер перехвата
@@ -95,6 +139,47 @@ official bol-van/zapret2 build.
 
 Only the agent runs with administrator rights; it removes its firewall rules
 on exit.
+
+## The claude.ai chat through a browser extension (MCP bridge)
+
+claude.ai cannot reach programs on your PC or a router behind NAT. A
+third-party browser extension that connects MCP servers to the web chat is the
+bridge, and AutoTuner is the MCP server it connects to: claude.ai → extension
+→ AutoTuner (127.0.0.1) → zapret-gui on the router (e.g. 192.168.2.1).
+
+1. **Settings → MCP server:** turn the server and "Streamable HTTP on
+   127.0.0.1" on and pick the permissions (reading is always allowed).
+2. **"Browser extension bridge":**
+   - `router_proxy` puts the router's zapret-gui tools (prefix `gui_`) in the
+     chat. It needs zapret-gui's address and MCP token above; the model never
+     sees them. Anything zapret-gui does not mark read-only asks you in the
+     AutoTuner window first, with the tool's name and arguments, and waits
+     while AutoTuner runs its own experiment on the router.
+   - If the extension connects to AutoTuner itself, add its Origin
+     (`chrome-extension://<id>`, the id is on `chrome://extensions`;
+     `moz-extension://<uuid>` in Firefox). Other sites and extensions get 403.
+     The token is always required.
+   - Copy the ready snippet: the URL and the `Authorization: Bearer <token>`
+     header ("Show the token" fills it in).
+3. **MCP-SuperAssistant** (open source) usually goes through its local proxy
+   `npx @srbhptl39/mcp-superassistant-proxy --config mcpconfig.json` (default
+   `http://localhost:3006/sse`; point the extension at the proxy). Add one of
+   the snippets from Settings to `mcpconfig.json`: stdio (`ZapretAutoTuner
+   mcp`, which joins the open window) or HTTP with the `Authorization`
+   header. The proxy sends no Origin, so it needs no allowed-extension entry.
+   Note: at the time of writing, the project's README does not list claude.ai
+   among the supported sites; check the current version or use a fork that
+   supports it.
+4. **Other bridge extensions** (e.g. forks of "MCP Bridge for Claude.ai" or
+   "Claude MCP Client / Injector") connect the same way: the same URL
+   (Streamable HTTP `/mcp` or legacy SSE `/mcp/sse`) and the same header. The
+   extension must be able to send the `Authorization` header. We have not
+   tested specific extensions.
+
+Security: the third-party extension sees all traffic, and the router's answers
+go to the claude.ai chat (with addresses masked). Connect only an extension you
+trust. Every call is logged in the MCP audit and goes into "Collect report";
+Stop on the banner cuts the bridge too.
 
 ## FAQ
 

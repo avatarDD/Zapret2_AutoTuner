@@ -1,9 +1,9 @@
 ---
 name: nfqws2-lua
-description: Строгий справочник Lua-библиотеки zapret2 1.0.5.2 (zapret-lib, zapret-antidpi, zapret-auto, zapret-obfs, zapret-pcap) — все функции --lua-desync, их аргументы и умолчания, стандартные блоки fooling/ipid/ipfrag/rawsend/reconstruct, маркеры позиций, tls_mod, блобы, оркестраторы, написание своих функций. Читать перед генерацией, мутацией или проверкой любой стратегии.
+description: Строгий справочник Lua-библиотеки zapret2 1.0.6 (zapret-lib, zapret-antidpi, zapret-auto, zapret-obfs, zapret-pcap) — все функции --lua-desync, их аргументы и умолчания, стандартные блоки fooling/ipid/ipfrag/rawsend/reconstruct, маркеры позиций, tls_mod, блобы, оркестраторы, написание своих функций. Читать перед генерацией, мутацией или проверкой любой стратегии.
 ---
 
-# Lua-библиотека zapret2 (compat 6, v1.0.5.2)
+# Lua-библиотека zapret2 (compat 6, v1.0.6)
 
 Источник истины: `lua/zapret-antidpi.lua` (комментарии `-- arg :` над каждой
 функцией), `lua/zapret-auto.lua`, `docs/manual.en.md` (главы «zapret-antidpi»,
@@ -58,7 +58,7 @@ description: Строгий справочник Lua-библиотеки zapret
 | `tcp_seq=±N` | Сдвиг seq («badseq»), например `tcp_seq=-10000` |
 | `tcp_ack=±N` | Сдвиг ack («badack»). Linux-сервер отбрасывает такой сегмент стабильно, только если timestamp-опция идёт первой, поэтому ставится вместе с `tcp_ts_up` |
 | `tcp_ts=±N` | Сдвиг TS value. Работает, только если клиент шлёт TCP timestamps. Windows по умолчанию их **не шлёт** (проверять `cond_tcp_has_ts`) |
-| `tcp_md5[=hex16]` | MD5-опция. Linux-серверы отбрасывают такие сегменты, многие другие тоже |
+| `tcp_md5[=hex16]` | MD5-опция, без значения 16 случайных байт (`brandom(16)`). Linux-серверы отбрасывают такие сегменты, многие другие тоже |
 | `tcp_flags_set=список`, `tcp_flags_unset=список` | Флаги: FIN,SYN,RST,PSH,ACK,URG,ECE,CWR |
 | `tcp_ts_up` | Поднять TS-опцию первой |
 | `tcp_nop_del` | Удалить NOP, чтобы освободить место |
@@ -87,6 +87,11 @@ description: Строгий справочник Lua-библиотеки zapret
 - Относительные маркеры работают только на известных пейлоадах
   (`http_req`, `tls_client_hello`, …). Маркер, который не разрешился,
   пропускается. Позиции нормализуются и дедуплицируются.
+- `seqovl=` у `multidisorder`, `multidisorder_legacy` и `fakeddisorder` —
+  один маркер (`resolve_pos`), величина перекрытия равна разрешённой позиции
+  и должна быть меньше первой позиции split (справка v1.0.6 пишет
+  `seqovl=<posmarker>`; код тот же, что в 1.0.5.2). Не разрешился — seqovl
+  отменяется. У `multisplit`, `fakedsplit`, `tcpseg` `seqovl` — число.
 
 ## 4. zapret-antidpi.lua — функции
 
@@ -190,6 +195,9 @@ DPI без отслеживания seq её принимает. Fooling не н
 - `fails` (3) — порог неудач, `time` (60 с) — окно сброса.
 - Состояние хранится per-host: ключ из `standard_hostkey` (`nld=N` режет до
   N-уровня, `reqhost` требует hostname, без hostname IP не используется).
+- `key=строка` — имя таблицы внутри `autostate[hostkey]` (по умолчанию имя
+  инстанса `func_instance`). Одинаковый `key` у нескольких оркестраторов даёт
+  им общее хранилище хоста (в справке описан с v1.0.6, в коде есть и в 1.0.5.2).
 - Детекторам нужны входящие (`--in-range=-s5556`, Windows: `--wf-tcp-in`).
 - `standard_failure_detector`: `maxseq` (32768), `retrans` (3), `reset`,
   `inseq` (4096), `no_rst`, `no_http_redirect`, `udp_out` (4), `udp_in` (1).

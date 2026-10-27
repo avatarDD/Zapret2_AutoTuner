@@ -1,4 +1,4 @@
-Zapret2_AutoTuner 0.1.0, zapret2 1.0.5.2, 2026-10-17
+Zapret2_AutoTuner 0.1.0, zapret2 1.0.6, 2026-10-17
 Цели / targets: discord.com, youtube.com, googlevideo.com
 
 Экспорт для zapret-gui. Ничего не применяется само: стратегию сохраняете и включаете вы.

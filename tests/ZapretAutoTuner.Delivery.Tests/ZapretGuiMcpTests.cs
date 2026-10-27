@@ -201,7 +201,7 @@ public sealed class ZapretGuiExperimentsTests
               "success_rate": 1.0, "score": 87.5, "avg_latency_ms": 255.2,
               "delta_vs_baseline": {"fixed": ["rutracker.org"], "broken": [], "unchanged": ["example.com"], "net": 1, "baseline_open": ["example.com"]},
               "hints": [], "elapsed_sec": 14.2,
-              "nfqws_log": ["nfqws2 1.0.5.2 starting", "profile 1 (autotuner) : lua-desync fake"], "log_truncated": false
+              "nfqws_log": ["nfqws2 1.0.6 starting", "profile 1 (autotuner) : lua-desync fake"], "log_truncated": false
             },
             {
               "label": "zt0", "source": "profiles",

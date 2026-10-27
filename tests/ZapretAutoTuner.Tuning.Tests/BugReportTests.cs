@@ -35,7 +35,7 @@ public sealed class BugReportTests
         var ru = BugReport.Build(Refused());
         foreach (var head in new[] { "## Что произошло", "## Что делал", "## Что ожидал", "## Что получилось", "## Версии", "## Куда подаётся", "## Отладочная информация" })
             Assert.Contains(head, ru.Body, StringComparison.Ordinal);
-        Assert.Contains("zapret2: 1.0.5.2", ru.Body, StringComparison.Ordinal);
+        Assert.Contains("zapret2: 1.0.6", ru.Body, StringComparison.Ordinal);
         Assert.Contains("zapret-gui: 2.4.0", ru.Body, StringComparison.Ordinal);
         Assert.Contains("**argv:**", ru.Body, StringComparison.Ordinal);
         Assert.Contains("SniBlock", ru.Body, StringComparison.Ordinal);

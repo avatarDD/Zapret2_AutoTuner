@@ -22,7 +22,7 @@ public sealed class ExportTests
         var s = new Solution();
         s.Meta.Created = new DateTimeOffset(2026, 10, 17, 12, 0, 0, TimeSpan.Zero);
         s.Meta.AutotunerVersion = "0.1.0";
-        s.Meta.Zapret2Version = "1.0.5.2";
+        s.Meta.Zapret2Version = "1.0.6";
         s.Meta.Targets = ["discord.com", "youtube.com", "googlevideo.com"];
         s.Hostlists["tcp1"] = ["discord.com"];
         s.Hostlists["tcp2"] = ["youtube.com", "googlevideo.com"];

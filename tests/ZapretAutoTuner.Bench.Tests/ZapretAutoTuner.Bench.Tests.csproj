@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZapretAutoTuner.Bench\ZapretAutoTuner.Bench.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- the scripted provider of the advisor tests -->
+    <Compile Include="..\ZapretAutoTuner.Mcp.Tests\FakeLlm.cs" Link="FakeLlm.cs" />
+  </ItemGroup>
+</Project>

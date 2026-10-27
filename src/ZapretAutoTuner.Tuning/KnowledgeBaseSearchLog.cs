@@ -8,8 +8,11 @@ namespace ZapretAutoTuner.Tuning;
 /// <summary>
 /// Writes what the search learns into the knowledge base (PLAN 3.2): every attempt, every refinement step and the
 /// checkpoint, so an interrupted search continues where it stopped and the next one starts from what worked here.
+/// <paramref name="source"/> overrides the candidates' own source (the router's trials are stored as
+/// <see cref="CandidateSource.Router"/>), <paramref name="clientProfile"/> is where they were measured.
 /// </summary>
-public sealed class KnowledgeBaseSearchLog(KnowledgeBase kb, long sessionId, TrialTarget target, long? networkId = null, string? blockLabel = null) : ISearchLog
+public sealed class KnowledgeBaseSearchLog(KnowledgeBase kb, long sessionId, TrialTarget target, long? networkId = null, string? blockLabel = null,
+    string? source = null, string clientProfile = "default") : ISearchLog
 {
     public long SessionId => sessionId;
 
@@ -28,6 +31,8 @@ public sealed class KnowledgeBaseSearchLog(KnowledgeBase kb, long sessionId, Tri
             SessionId = sessionId,
             NetworkId = networkId,
             BlockLabel = blockLabel,
+            Source = source ?? candidate.Source,
+            ClientProfile = clientProfile,
         });
 
     public void Tuning(Strategy parent, Mutation child, Efficiency efficiency, bool accepted) =>
@@ -46,7 +51,7 @@ public static class TuningSession
     public static SearchOptions Prepare(KnowledgeBase kb, SearchOptions options, long sessionId, int? asn, L4Kind l4 = L4Kind.Tcp)
     {
         var priors = kb.WorkedOnNetwork(asn, l4 == L4Kind.Udp ? "udp" : "tcp")
-            .Select(p => new StrategyCandidate(p.Strategy, p.Family ?? "prior", 0, ["prior"], l4))
+            .Select(p => new StrategyCandidate(p.Strategy, p.Family ?? "prior", 0, ["prior"], l4) { Source = CandidateSource.Prior })
             .ToList();
         return options with
         {
@@ -55,13 +60,24 @@ public static class TuningSession
         };
     }
 
+    /// <summary>
+    /// The learned search order (PLAN 4a.1) from this base's trials of the last year; the decay makes older ones
+    /// count for next to nothing anyway.
+    /// </summary>
+    public static SearchLearning Learning(KnowledgeBase kb, LearningContext context, DateTimeOffset? now = null) => new()
+    {
+        History = kb.LearningHistory((now ?? DateTimeOffset.UtcNow) - TimeSpan.FromDays(365)),
+        Context = context,
+        Now = now,
+    };
+
     /// <summary>Stores the ranking of the found strategies and closes the session.</summary>
-    public static void Finish(KnowledgeBase kb, long sessionId, string host, SearchResult result, long? networkId = null)
+    public static void Finish(KnowledgeBase kb, long sessionId, string host, SearchResult result, long? networkId = null, string clientProfile = "default")
     {
         foreach (var f in result.Working)
-            kb.SetScore(f.Candidate.Strategy, host, f.Score.Total, networkId);
+            kb.SetScore(f.Candidate.Strategy, host, f.Score.Total, networkId, clientProfile);
         if (result.BestPartial is { } p)
-            kb.SetScore(p.Candidate.Strategy, host, p.Score.Total, networkId);
+            kb.SetScore(p.Candidate.Strategy, host, p.Score.Total, networkId, clientProfile);
         kb.UpdateSession(sessionId, result.Reason switch
         {
             SearchStopReason.Cancelled => "paused",

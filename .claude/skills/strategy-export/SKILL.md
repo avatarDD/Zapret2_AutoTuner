@@ -20,7 +20,7 @@ Solution
   hostlists{name: [domains]}
   ipsets{name: [cidr]}
   blobs{name: bytes}       # только НЕ встроенные; имя = идентификатор Lua
-  lua_files[]              # штатные + (редко) zapret-autotuner.lua
+  lua_files{file: text}    # только свои: zt-<имя>.lua (подтверждённые скрипты)
   meta: {created, autotuner_version, zapret2_version, tested_profiles[], report_ref}
 ```
 
@@ -185,8 +185,9 @@ $NFQWS_ARGS $NFQWS_EXTRA_ARGS
   `tls_clienthello_www_google_com.bin` / `quic_initial_www_google_com.bin`) —
   используем эти имена, если подходит.
 - Встроенные `fake_default_*` доступны и без объявления.
-- Lua: штатные файлы уже в `/opt/etc/nfqws2/lua/`. Свои — только при
-  необходимости, `lua/zapret-autotuner.lua` + строка в `NFQWS_BASE_ARGS`.
+- Lua: штатные файлы уже в `/opt/etc/nfqws2/lua/`. Свои — `lua/zt-<имя>.lua`
+  + `--lua-init=@/opt/etc/nfqws2/lua/zt-<имя>.lua` в `NFQWS_BASE_ARGS` после
+  штатных. «Отправить на роутер» пишет и `lua/` (см. §6).
 - Версию lua пакета сверяем по `NFQWS2_COMPAT_VER_REQUIRED` (сейчас 6).
 
 - Штатный `NFQWS_ARGS_UDP` пакета 1.3.1 содержит `fake:repeats=6:strategy=1`
@@ -320,6 +321,19 @@ zapret2 в `/opt/zapret2` (lua `lua/`, блобы `files/fake/`, hostlist
 - Ещё есть MCP-сервер `POST /api/mcp` (Bearer-токен) с инструментами
   стратегий, списков и блобов. Его можно использовать вместо REST, если
   токен выдан.
+- Эксперименты на роутере (`core/mcp/tools/experiments.py`, разрешение
+  `experiments`, действует только с `control` и `probes`):
+  `strategy_experiment_start` — до 20 вариантов, до 10 целей, вариант
+  задаётся `profiles` (до 8, `args` профиля ≤ 2000 символов, без `--new`),
+  `baseline` меряет цели без обхода, `ttl_sec` — дедмен-свитч, `keep_best`
+  оставляет лучший вариант применённым до срока. `strategy_experiment_commit`
+  подтверждает только вариант, оставленный `keep_best` (авто-откат
+  отменяется); `save_as` + `make_active` сохраняют его пользовательской
+  стратегией и требуют `strategies_write` (иначе ответ `ok: false`,
+  `permission: strategies_write`). `strategy_get` без `id` отдаёт
+  применённую стратегию (профили с `enabled`), без выбранной — `ok: true,
+  available: false`. AutoTuner вызывает `commit` только после
+  подтверждения пользователя.
 
 ### 3.3 Бэкап zapret-gui (файл, без сети)
 
@@ -356,7 +370,7 @@ zapret-gui читает каталоги `catalogs/*.txt` (INI-секции ст
     "hostlists": [{"name": "zt-youtube", "domains": [...]}],
     "ipsets": [{"name": "zt-ipset", "cidrs": [...]}],
     "blobs": [{"name": "zt_tls_wl", "base64": "…"}],
-    "lua": [{"name": "zapret-autotuner.lua", "text": "…"}],
+    "lua": [{"name": "zt-<имя>.lua", "text": "…"}],
     "report": {"tested_at": "…", "targets": [...], "client_profiles": [...]}}
    ```
    Эндпоинт `POST /api/strategies/import-bundle` и вкладка UI. Валидация
@@ -404,6 +418,61 @@ Ipset агрегируется (слияние соседних префиксо
 
 Рядом всегда пишется предупреждение: адреса CDN меняются, закрепление надо
 периодически проверять (AutoTuner делает это в режиме мониторинга).
+
+## 6. Свои ресурсы: хостлисты, ipset, блобы, Lua (PLAN 4a.5)
+
+Ресурс — именованный объект программы (`ResourceStore`, таблицы `resources`,
+`resource_versions`, `resource_refs` схемы v4), не путь. Имя
+`[a-z0-9_-]{1,48}`; у блоба ещё и идентификатор Lua без `-`, не встроенный
+(`fake_default_*`) и не блоб пакета (`tls_clienthello`, `quic_initial`).
+В `Solution` ресурсы попадают по имени: `Hostlists`, `Ipsets`, `Blobs`,
+`LuaFiles["zt-<имя>.lua"]` (только подтверждённая версия скрипта).
+
+Куда экспортёры кладут свой Lua-файл и как подключают:
+
+| Цель | Файл в пакете | Подключение |
+|---|---|---|
+| zapret2 | `lua/zt-x.lua` → `/opt/zapret2/lua/` | `--lua-init=@/opt/zapret2/lua/zt-x.lua` в начале `NFQWS2_OPT` (штатные добавляет init) |
+| winws2 | `lua/zt-x.lua` | `--lua-init=@lua/zt-x.lua` после штатных в @config |
+| строка argv | `lua/zt-x.lua` + предупреждение | `--lua-init=@<luaDir>/zt-x.lua` |
+| keenetic | `lua/zt-x.lua` | в `NFQWS_BASE_ARGS` после штатных |
+| zapret-gui текст | `lua/zt-x.lua` | `--lua-init=@/opt/zapret2/lua/zt-x.lua` → `convert` даёт `@lua/zt-x.lua` |
+| zapret-gui JSON | — | `--lua-init=@lua/zt-x.lua` в начале args первого профиля |
+| бандл | `lua: [{name, text}]` | — |
+| бэкап zapret-gui | Lua нет (предупреждение) | — |
+
+Имя Lua-файла в `LuaFiles` проверяется (`ExportCommon`): `[A-Za-z0-9_][A-Za-z0-9_.-]*\.lua`,
+не штатный файл zapret2. Импортёры читают `--lua-init` не-штатных файлов
+обратно в `LuaFiles` (round-trip тесты с `zt-twice.lua`).
+
+zapret-gui REST (`api/lua_scripts.py`, `api/blobs.py`, `api/hostlists.py`,
+`api/ipsets.py`), каждая запись — только с `confirmedByUser`:
+- Lua: `POST /api/lua/create {"name","content"}` (имя без `.lua`,
+  `[a-zA-Z0-9_.-]{1,128}`; 400 «уже существует») → `PUT /api/lua/<name>
+  {"content"}`; `DELETE /api/lua/<name>`; `POST /api/lua/check {"content"}`
+  — проверка синтаксиса без записи (`valid`, `errors`). Лимит GUI — 1 МиБ.
+- Блоб: `POST /api/blobs {"name","hex"}` (409 — есть) → `PUT /api/blobs/<name>
+  {"hex"}`; `DELETE /api/blobs/<name>`.
+- Списки: `POST /api/hostlists/create` + `PUT /api/hostlists/<name>
+  {"domains"}`, `POST /api/ipsets/create` + `PUT /api/ipsets/<name>
+  {"entries"}`; `DELETE` по имени.
+- AutoTuner удаляет свой ресурс из GUI, только если ни одна стратегия GUI
+  на него не ссылается (`lists/zt-x.txt`, `blob=x`, `@lua/zt-x.lua`).
+
+nfqws2-keenetic: удаление своего файла (`KeeneticDeployer.DeleteResourceAsync`)
+отказывает, если `nfqws2.conf` на него ссылается, и переименовывает файл в
+`.bak` (обратимо).
+
+Один ресурс на роутер (`Delivery.RouterResources`, страница «Ресурсы» и MCP
+`router_resource_push`/`router_resource_delete`): операция готовится заранее
+(шаги + что именно запишется) и выполняется только после «Да» пользователя.
+zapret-gui: перед записью Lua — `POST /api/lua/check`, удаление отказывает,
+если ресурс используют стратегии GUI. keenetic: файл пишется по
+`KeeneticDeployer.ResourceFile`, прежний сохраняется как `.bak`, nfqws2 не
+перезапускается. Уходит только `ResourceStore.ForDelivery` (Lua — лишь
+подтверждённая версия). Экспорт и доставка решения из мастера сначала
+вызывают `ResourceStore.AttachTo`, так что свои хостлисты, блобы и
+подтверждённые скрипты уходят вместе со стратегией.
 
 ## 5. Регулярки и лимиты целевых платформ (сводка)
 

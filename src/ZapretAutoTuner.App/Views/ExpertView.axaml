@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.ExpertView"
+             x:DataType="vm:ExpertViewModel">
+  <TabControl>
+    <TabItem Header="{l:T expert.import}">
+      <Grid RowDefinitions="Auto,*,Auto,Auto,*" Margin="0,8,0,0">
+        <TextBlock Classes="muted" Text="{l:T expert.import_hint}" />
+        <TextBox Grid.Row="1" Text="{Binding ImportText}" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" FontSize="12" Margin="0,6" />
+        <WrapPanel Grid.Row="2">
+          <Button Content="{l:T expert.open}" Command="{Binding OpenCommand}" Margin="0,0,8,8" />
+          <Button Classes="accent" Content="{l:T expert.parse}" Command="{Binding ImportCommand}" Margin="0,0,8,8" />
+          <Button Content="{l:T expert.use}" Command="{Binding UseCommand}" IsEnabled="{Binding CanUse}" Margin="0,0,8,8" />
+          <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Classes="muted" />
+        </WrapPanel>
+        <TextBlock Grid.Row="3" Text="{Binding ImportKind}" FontWeight="SemiBold" />
+        <ScrollViewer Grid.Row="4">
+          <StackPanel Spacing="4">
+            <ItemsControl ItemsSource="{Binding Profiles}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <SelectableTextBlock Text="{Binding}" TextWrapping="Wrap" FontFamily="monospace" FontSize="12" Margin="0,2" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <ItemsControl ItemsSource="{Binding Issues}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </TabItem>
+    <TabItem Header="{l:T expert.strategy}">
+      <StackPanel Spacing="8" Margin="0,8,0,0">
+        <TextBlock Classes="muted" Text="{l:T expert.strategy_hint}" />
+        <TextBox Text="{Binding StrategyText}" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" Height="100"
+                 Watermark="--lua-desync=fake:blob=fake_default_tls:tcp_md5 --lua-desync=multisplit:pos=1,midsld" />
+        <Button Classes="accent" Content="{l:T expert.check}" Command="{Binding CheckStrategyCommand}" />
+        <SelectableTextBlock Text="{Binding StrategyResult}" TextWrapping="Wrap" />
+      </StackPanel>
+    </TabItem>
+  </TabControl>
+</UserControl>

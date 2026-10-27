@@ -68,6 +68,12 @@ public sealed record TrialRecord
     public long? NetworkId { get; init; }
 
     public string? BlockLabel { get; init; }
+
+    /// <summary>Where the candidate came from (<see cref="CandidateSource"/>).</summary>
+    public string Source { get; init; } = CandidateSource.Generator;
+
+    /// <summary>When the attempt happened; now when not set.</summary>
+    public DateTimeOffset? At { get; init; }
 }
 
 /// <summary>
@@ -75,7 +81,7 @@ public sealed record TrialRecord
 /// search sessions (resume after a restart), refinement history and checker runs. One file in the data dir; nothing
 /// leaves the machine (no telemetry, AGENTS.md rule 7).
 /// </summary>
-public sealed class KnowledgeBase : IDisposable
+public sealed partial class KnowledgeBase : IDisposable
 {
     private readonly SqliteConnection _db;
     private readonly Lock _gate = new();
@@ -225,11 +231,12 @@ public sealed class KnowledgeBase : IDisposable
             long tid = TargetId(t.Host, t.Port, t.L4);
             using var tx = _db.BeginTransaction();
             Exec("""
-                INSERT INTO trials(uid,session_id,strategy_id,target_id,network_id,client_profile,level,ok,error,bytes_in,duration_ms,created_at)
-                VALUES($u,$s,$st,$tg,$n,$c,$lv,$ok,$e,$b,$d,$t)
+                INSERT INTO trials(uid,session_id,strategy_id,target_id,network_id,client_profile,level,ok,error,bytes_in,duration_ms,created_at,block_label,source)
+                VALUES($u,$s,$st,$tg,$n,$c,$lv,$ok,$e,$b,$d,$t,$bl,$src)
                 """, tx,
                 ("$u", Guid.NewGuid().ToString("N")), ("$s", t.SessionId), ("$st", sid), ("$tg", tid), ("$n", t.NetworkId), ("$c", t.ClientProfile),
-                ("$lv", t.Level), ("$ok", t.Ok ? 1 : 0), ("$e", t.Error), ("$b", t.BytesIn), ("$d", (long)t.Duration.TotalMilliseconds), ("$t", Now()));
+                ("$lv", t.Level), ("$ok", t.Ok ? 1 : 0), ("$e", t.Error), ("$b", t.BytesIn), ("$d", (long)t.Duration.TotalMilliseconds),
+                ("$t", t.At is { } at ? Iso(at) : Now()), ("$bl", t.BlockLabel), ("$src", t.Source));
             Exec("""
                 INSERT INTO results(uid,strategy_id,target_id,network_id,client_profile,successes,attempts,status,block_label,updated_at)
                 VALUES($u,$st,$tg,$n,$c,$ok,1,'failed',$bl,$t)
@@ -297,6 +304,28 @@ public sealed class KnowledgeBase : IDisposable
                     list.Add((s, (string?)r[1], (int)(long)r[2]!));
             }
             return list;
+        }
+    }
+
+    /// <summary>
+    /// Every trial since <paramref name="since"/>, counted per strategy, provider, block label, client profile, source
+    /// and day: what the learned search order (PLAN 4a.1) is built from.
+    /// </summary>
+    public List<ArmStat> LearningHistory(DateTimeOffset since)
+    {
+        lock (_gate)
+        {
+            var sql = """
+                SELECT s.args, s.family, tr.source, nw.asn, tr.block_label, tr.client_profile, substr(tr.created_at, 1, 10) AS day, SUM(tr.ok), COUNT(*)
+                FROM trials tr JOIN strategies s ON s.id=tr.strategy_id LEFT JOIN networks nw ON nw.id=tr.network_id
+                WHERE tr.created_at >= $since
+                GROUP BY s.id, tr.source, nw.asn, tr.block_label, tr.client_profile, day
+                """;
+            return Rows(sql, null, ("$since", Iso(since)))
+                .Select(r => new ArmStat((string)r[0]!, (string?)r[1], (string)r[2]!, r[3] is long a ? (int)a : null, (string?)r[4], (string)r[5]!,
+                    DateTimeOffset.ParseExact((string)r[6]!, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal),
+                    (int)(long)r[7]!, (int)(long)r[8]!))
+                .ToList();
         }
     }
 
@@ -395,6 +424,60 @@ public sealed class KnowledgeBase : IDisposable
         }
     }
 
+    // ---- live monitor ----
+
+    public void AddMonitorWindow(string domain, DateTimeOffset start, int sessions, int ok, int reset, int stalled16k, int stalled, int noReply, int retransmissions)
+    {
+        lock (_gate)
+        {
+            Exec("""
+                INSERT INTO monitor_windows(domain,started_at,sessions,ok,reset,stalled16k,stalled,no_reply,retransmissions)
+                VALUES($d,$s,$n,$ok,$r,$s16,$st,$nr,$rt)
+                ON CONFLICT(domain,started_at) DO UPDATE SET sessions=$n, ok=$ok, reset=$r, stalled16k=$s16, stalled=$st, no_reply=$nr, retransmissions=$rt
+                """,
+                ("$d", domain), ("$s", start.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)), ("$n", sessions), ("$ok", ok), ("$r", reset),
+                ("$s16", stalled16k), ("$st", stalled), ("$nr", noReply), ("$rt", retransmissions));
+        }
+    }
+
+    /// <summary>Windows since <paramref name="since"/>, oldest first: (domain, start, sessions, ok).</summary>
+    public List<(string Domain, DateTimeOffset Start, int Sessions, int Ok)> MonitorWindows(DateTimeOffset since, string? domain = null)
+    {
+        lock (_gate)
+        {
+            return Rows("SELECT domain, started_at, sessions, ok FROM monitor_windows WHERE started_at >= $s AND ($d IS NULL OR domain = $d) ORDER BY started_at",
+                    null, ("$s", since.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)), ("$d", domain))
+                .Select(r => ((string)r[0]!, Time(r[1]), (int)(long)r[2]!, (int)(long)r[3]!))
+                .ToList();
+        }
+    }
+
+    /// <summary>Drops windows older than <paramref name="before"/>: the monitor keeps a rolling history, not an archive.</summary>
+    public void PruneMonitorWindows(DateTimeOffset before)
+    {
+        lock (_gate)
+            Exec("DELETE FROM monitor_windows WHERE started_at < $s", ("$s", before.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)));
+    }
+
+    public void AddChange(string domain, string kind, string reason, string? oldArgs = null, string? newArgs = null, bool applied = false)
+    {
+        lock (_gate)
+        {
+            Exec("INSERT INTO change_journal(uid,created_at,domain,kind,old_args,new_args,reason,applied) VALUES($u,$t,$d,$k,$o,$n,$r,$a)",
+                ("$u", Guid.NewGuid().ToString("N")), ("$t", Now()), ("$d", domain), ("$k", kind), ("$o", oldArgs), ("$n", newArgs), ("$r", reason), ("$a", applied ? 1 : 0));
+        }
+    }
+
+    public List<(DateTimeOffset Time, string Domain, string Kind, string? OldArgs, string? NewArgs, string Reason, bool Applied)> Changes(int limit = 100)
+    {
+        lock (_gate)
+        {
+            return Rows("SELECT created_at, domain, kind, old_args, new_args, reason, applied FROM change_journal ORDER BY created_at DESC, id DESC LIMIT $l", null, ("$l", limit))
+                .Select(r => (Time(r[0]), (string)r[1]!, (string)r[2]!, (string?)r[3], (string?)r[4], (string)r[5]!, (long)r[6]! != 0))
+                .ToList();
+        }
+    }
+
     // ---- plumbing ----
 
     private static StoredResult ToResult(object?[] r) => new()
@@ -425,7 +508,9 @@ public sealed class KnowledgeBase : IDisposable
         }
     }
 
-    private static string Now() => DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+    private static string Now() => Iso(DateTimeOffset.UtcNow);
+
+    private static string Iso(DateTimeOffset t) => t.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
     private static DateTimeOffset Time(object? v) => DateTimeOffset.Parse((string)v!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 

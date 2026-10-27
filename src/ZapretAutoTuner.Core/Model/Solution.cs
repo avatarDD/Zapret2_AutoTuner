@@ -35,7 +35,7 @@ public sealed class Solution
     /// <summary>Custom blobs only (built-in ones are never stored). Key is a Lua identifier.</summary>
     public SortedDictionary<string, byte[]> Blobs { get; set; } = new(StringComparer.Ordinal);
 
-    /// <summary>Lua files beyond the standard ones (rare: zapret-autotuner.lua).</summary>
+    /// <summary>The user's own Lua files beyond the standard ones: <c>zt-&lt;name&gt;.lua</c> → text (approved scripts only).</summary>
     public SortedDictionary<string, string> LuaFiles { get; set; } = new(StringComparer.Ordinal);
 
     public List<HostPin> HostPins { get; set; } = [];

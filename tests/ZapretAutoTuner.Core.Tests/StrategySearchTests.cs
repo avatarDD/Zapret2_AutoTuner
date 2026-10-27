@@ -342,6 +342,32 @@ public sealed class StrategySearchTests
     }
 
     [Fact]
+    public void Udp_children_get_udp_mutations_only()
+    {
+        // udp_fake for STUN has no quic_initial: the transport comes from the candidate
+        var stun = Strategy.Parse("--payload=stun --lua-desync=fake:blob=0x00000000000000000000000000000000:repeats=2 --lua-desync=udplen:increment=2");
+        var m = StrategyMutator.Mutate(stun, l4: L4Kind.Udp);
+        Assert.NotEmpty(m);
+        var texts = m.Select(x => x.Strategy.ToString()).ToList();
+        Assert.DoesNotContain(texts, t => t.Contains("tcp_", StringComparison.Ordinal) || t.Contains("tls_mod", StringComparison.Ordinal)
+            || t.Contains("multisplit", StringComparison.Ordinal) || t.Contains("fake_default_tls", StringComparison.Ordinal));
+        Assert.Contains(texts, t => t.Contains("repeats=6", StringComparison.Ordinal));
+        Assert.Contains(texts, t => t.Contains("udplen:increment=8", StringComparison.Ordinal));
+        Assert.Contains(texts, t => t.Contains("blob=fake_default_quic", StringComparison.Ordinal));
+
+        // inferred from a UDP payload type when not passed
+        Assert.Equal(texts, StrategyMutator.Mutate(stun).Select(x => x.Strategy.ToString()).ToList());
+
+        // the unknown payload filter survives into the children
+        var unknown = Strategy.Parse("--payload=unknown --out-range=-d2 --lua-desync=udplen:payload=unknown:increment=2");
+        Assert.All(StrategyMutator.Mutate(unknown, l4: L4Kind.Udp), x => Assert.All(x.Strategy.Calls, c => Assert.Equal("unknown", c["payload"])));
+        var tcp = Strategy.Parse("--payload=unknown --out-range=-d2 --lua-desync=multisplit:pos=1:payload=unknown");
+        var tm = StrategyMutator.Mutate(tcp, l4: L4Kind.Tcp);
+        Assert.Contains(tm, x => x.What == "+fake");
+        Assert.All(tm, x => Assert.All(x.Strategy.Calls, c => Assert.Equal("unknown", c["payload"])));
+    }
+
+    [Fact]
     public void Score_prefers_simple_portable_strategies()
     {
         var full = new Efficiency(5, 5);

@@ -1,0 +1,27 @@
+{
+  "id": "zt_discord_com_2026_10_17",
+  "name": "AutoTuner: discord.com, youtube.com, googlevideo.com",
+  "description": "Подобрано Zapret2_AutoTuner 0.1.0 2026-10-17, zapret2 1.0.6",
+  "version": 1,
+  "type": "combined",
+  "profiles": [
+    {
+      "id": "p1",
+      "name": "TLS tcp1",
+      "enabled": true,
+      "args": "--lua-init=@lua/zt-twice.lua --filter-tcp=443 --filter-l7=tls --hostlist=lists/zt-tcp1.txt --payload=tls_client_hello --lua-desync=fake:blob=tls_wl:tcp_md5 --lua-desync=zt_twice:count=2 --lua-desync=multidisorder:pos=1,midsld"
+    },
+    {
+      "id": "p2",
+      "name": "HTTP+TLS tcp2",
+      "enabled": true,
+      "args": "--filter-tcp=80,443 --filter-l7=http,tls --hostlist=lists/zt-tcp2.txt --payload=tls_client_hello --lua-desync=multisplit:pos=1:seqovl=5:seqovl_pattern=0x1603030000 --payload=http_req --lua-desync=multisplit:pos=method+2"
+    },
+    {
+      "id": "p3",
+      "name": "QUIC quic1",
+      "enabled": true,
+      "args": "--filter-udp=443 --filter-l7=quic --hostlist=lists/zt-quic1.txt --payload=quic_initial --lua-desync=fake:blob=fake_default_quic:repeats=6"
+    }
+  ]
+}

@@ -22,7 +22,7 @@ public sealed class ExportTests
         var s = new Solution();
         s.Meta.Created = new DateTimeOffset(2026, 10, 17, 12, 0, 0, TimeSpan.Zero);
         s.Meta.AutotunerVersion = "0.1.0";
-        s.Meta.Zapret2Version = "1.0.5.2";
+        s.Meta.Zapret2Version = "1.0.6";
         s.Meta.Targets = ["discord.com", "youtube.com", "googlevideo.com"];
         s.Hostlists["tcp1"] = ["discord.com"];
         s.Hostlists["tcp2"] = ["youtube.com", "googlevideo.com"];
@@ -47,9 +47,9 @@ public sealed class ExportTests
         return s;
     }
 
-    private static void Golden(ExportPackage pkg)
+    private static void Golden(ExportPackage pkg, string? name = null)
     {
-        var dir = RepoPaths.Testdata("export", pkg.Format);
+        var dir = RepoPaths.Testdata("export", name ?? pkg.Format);
         bool update = Environment.GetEnvironmentVariable("ZT_UPDATE_GOLDEN") == "1";
         if (update)
         {
@@ -219,6 +219,97 @@ public sealed class ExportTests
         var backup = JsonNode.Parse(pkg.TextOf("zapret-gui-backup.json"))!;
         Assert.Equal(1792238400, (long)backup["created_at"]!);
         Assert.Null(backup["settings"]);
+    }
+
+    private const string UserLua = """
+        -- zt_twice: the payload goes out twice
+        function zt_twice(ctx, desync)
+            return VERDICT_PASS
+        end
+        """;
+
+    /// <summary>The sample with a user Lua script (PLAN 4a.5) whose function the narrow profile calls.</summary>
+    private static Solution WithLua()
+    {
+        var s = Sample();
+        s.LuaFiles["zt-twice.lua"] = UserLua;
+        s.Profiles[0].Strategy = Strategy.Parse("--payload=tls_client_hello --lua-desync=fake:blob=tls_wl:tcp_md5 --lua-desync=zt_twice:count=2 --lua-desync=multidisorder:pos=1,midsld");
+        return s;
+    }
+
+    private static readonly ValidationContext LuaContext = new ValidationContext { Platform = EnginePlatform.Linux }
+        .WithUserLua(new Dictionary<string, string> { ["zt_twice"] = "zt-twice.lua" }, new Dictionary<string, string>());
+
+    [Fact]
+    public void Lua_files_golden_and_round_trip_in_every_format()
+    {
+        var s = WithLua();
+
+        var z2 = Zapret2Exporter.Build(s);
+        Golden(z2, "zapret2-lua");
+        Assert.Contains("--lua-init=@/opt/zapret2/lua/zt-twice.lua\n--blob=", z2.Text, StringComparison.Ordinal);
+        Assert.Equal(UserLua, z2.TextOf("lua/zt-twice.lua"));
+        var back = StrategyImporter.Import(z2.Text, z2.Files).Solution;
+        Assert.Equal(Shape(s), Shape(back));
+        Assert.Equal(s.LuaFiles, back.LuaFiles);
+
+        var win = WinwsExporter.Build(s);
+        Golden(win, "winws2-lua");
+        Assert.Contains("--lua-init=@lua/zapret-auto.lua --lua-init=@lua/zt-twice.lua\n", win.TextOf("zt-config.txt"), StringComparison.Ordinal);
+        back = StrategyImporter.Import(win.TextOf("zt-start.cmd"), win.Files).Solution;
+        Assert.Equal(Shape(s), Shape(back));
+        Assert.Equal(s.LuaFiles, back.LuaFiles);
+
+        var keen = KeeneticExporter.Build(s);
+        Golden(keen, "keenetic-lua");
+        var vars = KeeneticExporter.ParseVars(keen.TextOf("nfqws2.conf"));
+        Assert.Contains("--lua-init=@/opt/etc/nfqws2/lua/zapret-auto.lua\n--lua-init=@/opt/etc/nfqws2/lua/zt-twice.lua", vars["NFQWS_BASE_ARGS"], StringComparison.Ordinal);
+        back = StrategyImporter.Import(keen.Text, keen.Files).Solution;
+        Assert.Equal(Shape(s).Order(StringComparer.Ordinal), Shape(back).Order(StringComparer.Ordinal));
+        Assert.Equal(s.LuaFiles, back.LuaFiles);
+        var keenArgv = StrategyImporter.KeeneticArgv(new Dictionary<string, string>(vars) { ["NFQWS_ARGS_UDP"] = "" });
+        keenArgv.Remove("--fastpath-workaround=auto");
+        var v = new StrategyValidator(LuaContext).ValidateArgv(keenArgv);
+        Assert.True(v.Ok, string.Join("\n", v.Errors));
+
+        var gui = ZapretGuiExporter.Build(s);
+        Golden(gui, "zapret-gui-lua");
+        var strategy = JsonNode.Parse(gui.TextOf("strategy.json"))!.AsObject();
+        var args = strategy["profiles"]!.AsArray().Select(p => (string)p!["args"]!).ToList();
+        Assert.StartsWith("--lua-init=@lua/zt-twice.lua --filter-tcp=443", args[0], StringComparison.Ordinal);
+        Assert.Contains(gui.Warnings, w => w.Contains("Lua", StringComparison.Ordinal));
+        // the GUI's import of the text maps the path to its @lua/ placeholder, the same as the JSON
+        var converted = ZapretGuiConvert.Convert(gui.Text);
+        Assert.True(converted.Ok);
+        Assert.Contains("--lua-init=@lua/zt-twice.lua", converted.Profiles[0].Args, StringComparison.Ordinal);
+        foreach (var file in new[] { "strategy.json", "zapret-autotuner-bundle.json" })
+        {
+            back = StrategyImporter.Import(gui.TextOf(file), gui.Files).Solution;
+            Assert.Equal(Shape(s), Shape(back));
+            Assert.Equal(s.LuaFiles, back.LuaFiles);
+        }
+        // the bundle carries the script without any files next to it
+        Assert.Equal(s.LuaFiles, StrategyImporter.Import(gui.TextOf("zapret-autotuner-bundle.json")).Solution.LuaFiles);
+
+        var line = ArgvExporter.Build(s);
+        Assert.Contains("--lua-init=@/opt/zapret2/lua/zt-twice.lua", line.Text, StringComparison.Ordinal);
+        Assert.Contains(line.Warnings, w => w.Contains("lua/", StringComparison.Ordinal));
+        v = new StrategyValidator(LuaContext).ValidateArgv(ArgTokenizer.Split(line.Text));
+        Assert.True(v.Ok, string.Join("\n", v.Errors));
+        back = StrategyImporter.Import(line.Text, line.Files).Solution;
+        Assert.Equal(s.LuaFiles, back.LuaFiles);
+    }
+
+    [Theory]
+    [InlineData("zapret-lib.lua")]
+    [InlineData("../evil.lua")]
+    [InlineData("noext")]
+    public void Exporters_refuse_bad_lua_file_names(string file)
+    {
+        var s = Sample();
+        s.LuaFiles[file] = "x = 1";
+        Assert.Throws<ExportException>(() => Zapret2Exporter.Build(s));
+        Assert.Throws<ExportException>(() => KeeneticExporter.Build(s));
     }
 
     [Fact]

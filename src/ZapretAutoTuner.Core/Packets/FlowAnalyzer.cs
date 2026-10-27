@@ -65,6 +65,21 @@ public sealed class Flow
     /// <summary>Time of the last incoming payload byte.</summary>
     public DateTime? LastDataIn { get; set; }
 
+    /// <summary>
+    /// The client's payloads before the server sends any data: what a replay sends. UDP: the first
+    /// <see cref="FlowAnalyzer.MaxInitialDatagrams"/> datagrams, whole. TCP: the distinct segments (retransmissions
+    /// left out), whole (a WinDivert capture sees pre-LSO segments up to 64 KB), up to
+    /// <see cref="FlowAnalyzer.MaxInitialBytes"/> in all.
+    /// </summary>
+    public List<byte[]> InitialPayloadsOut { get; } = [];
+
+    /// <summary>The client sent more before the server answered than <see cref="InitialPayloadsOut"/> holds: a replay
+    /// of it would not be what the program sent, so it is not replayed.</summary>
+    public bool InitialPayloadsTruncated { get; set; }
+
+    /// <summary>What the first client payload speaks.</summary>
+    public AppProtocol AppProtocol { get; set; }
+
     public TimeSpan? HandshakeRtt => SynTime is { } s && SynAckTime is { } a ? a - s : null;
 
     public override string ToString() => $"{Protocol} {Client} > {Server} out={BytesOut} in={BytesIn} sni={ClientHello?.Sni}";
@@ -79,6 +94,12 @@ public static class FlowAnalyzer
 {
     /// <summary>A RST whose TTL differs from the SYN,ACK by at least this much is treated as injected.</summary>
     public const int TtlTolerance = 2;
+
+    /// <summary>UDP datagrams kept for a replay.</summary>
+    public const int MaxInitialDatagrams = 4;
+
+    /// <summary>Client bytes kept for a replay (TCP).</summary>
+    public const int MaxInitialBytes = 64 * 1024;
 
     public static List<Flow> Analyze(IEnumerable<CapturedPacket> packets)
     {
@@ -104,11 +125,11 @@ public static class FlowAnalyzer
             }
             else
             {
-                // the client is whoever sent the SYN (or the first datagram); a flow seen from the middle is
-                // oriented by the lower port being the server
+                // the client is whoever sent the SYN; a TCP flow seen from the middle is oriented by the lower port
+                // being the server; UDP has no handshake (the server may speak first or the capture start late)
                 bool srcIsClient = ip.IsTcp
                     ? ip.Has(TcpFlags.Syn) ? !ip.Has(TcpFlags.Ack) : ip.SourcePort > ip.DestinationPort
-                    : true;
+                    : UdpSourceIsClient(src, dst);
                 var client = srcIsClient ? src : dst;
                 var server = srcIsClient ? dst : src;
                 st = new FlowState(new Flow { Protocol = proto, Client = client, Server = server, FirstSeen = cp.TimestampUtc });
@@ -119,6 +140,40 @@ public static class FlowAnalyzer
             st.Add(cp, ip, outgoing);
         }
         return order.Select(s => s.Flow).ToList();
+    }
+
+    /// <summary>
+    /// Which end of a UDP conversation is the client: the local (private, loopback, link-local) end when only one is,
+    /// else the end without a well-known port (below 1024), else the end with an ephemeral port (49152 and up, the
+    /// IANA range Windows uses), else whoever sent the first datagram.
+    /// </summary>
+    public static bool UdpSourceIsClient(IPEndPoint src, IPEndPoint dst)
+    {
+        bool srcLocal = !Programs.ProgramEndpoints.IsInternet(src.Address), dstLocal = !Programs.ProgramEndpoints.IsInternet(dst.Address);
+        // multicast and broadcast are never a client
+        if (IsGroup(dst.Address) != IsGroup(src.Address))
+            return IsGroup(dst.Address);
+        if (srcLocal != dstLocal)
+            return srcLocal;
+        bool srcWellKnown = src.Port < 1024, dstWellKnown = dst.Port < 1024;
+        if (srcWellKnown != dstWellKnown)
+            return dstWellKnown;
+        bool srcEphemeral = src.Port >= 49152, dstEphemeral = dst.Port >= 49152;
+        if (srcEphemeral != dstEphemeral)
+            return srcEphemeral;
+        return true;
+    }
+
+    private static bool IsGroup(IPAddress a)
+    {
+        if (a.IsIPv4MappedToIPv6)
+            a = a.MapToIPv4();
+        if (a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            var b = a.GetAddressBytes();
+            return b[0] >= 224 || (b[0] == 255 && b[3] == 255);
+        }
+        return a.IsIPv6Multicast;
     }
 
     private sealed class FlowState
@@ -145,6 +200,10 @@ public static class FlowAnalyzer
             var f = Flow;
             f.LastSeen = cp.TimestampUtc;
             int len = ip.Payload.Length;
+            // a retransmission repeats the bytes; a desync fake reuses the sequence number with other bytes
+            bool retransmission = ip.IsTcp && outgoing && len > 0 && !_seenOut.Add((ip.Seq, len, ContentHash(ip.Payload.Span)));
+            if (outgoing && len > 0 && f.BytesIn == 0 && !retransmission)
+                AddInitial(ip);
             if (outgoing)
             {
                 f.PacketsOut++;
@@ -181,15 +240,10 @@ public static class FlowAnalyzer
                     f.SynTime ??= cp.TimestampUtc;
                     _clientIsn = ip.Seq;
                 }
-                if (len > 0)
-                {
-                    // a retransmission repeats the bytes; a desync fake reuses the sequence number with other bytes
-                    var key = (ip.Seq, len, ContentHash(ip.Payload.Span));
-                    if (!_seenOut.Add(key))
-                        f.Retransmissions++;
-                    else if (!_chDone)
-                        AddClientData(cp, ip);
-                }
+                if (retransmission)
+                    f.Retransmissions++;
+                else if (len > 0 && !_chDone)
+                    AddClientData(cp, ip);
             }
             else
             {
@@ -206,6 +260,30 @@ public static class FlowAnalyzer
             }
             if (outgoing && ip.Has(TcpFlags.Rst))
                 f.Rsts.Add(new RstInfo(cp.TimestampUtc, ip.Ttl, ip.IpId, false, RstOrigin.Unknown, ["RST от клиента"]));
+        }
+
+        private int _initialBytes;
+
+        /// <summary>What the client sends before the server's first data, for a replay; the protocol from the first of it.</summary>
+        private void AddInitial(IpPacket ip)
+        {
+            var f = Flow;
+            if (f.InitialPayloadsTruncated)
+                return;
+            if (f.InitialPayloadsOut.Count == 0)
+                f.AppProtocol = ip.IsUdp ? ProtocolDetector.DetectUdp(ip.Payload.Span) : ProtocolDetector.DetectTcp(ip.Payload.Span);
+            bool full = ip.IsUdp
+                ? f.InitialPayloadsOut.Count >= MaxInitialDatagrams
+                : _initialBytes + ip.Payload.Length > MaxInitialBytes;
+            if (full)
+            {
+                // UDP: later datagrams are not needed to reach the server; TCP: a partial stream is not what was sent
+                if (ip.IsTcp)
+                    f.InitialPayloadsTruncated = true;
+                return;
+            }
+            f.InitialPayloadsOut.Add(ip.Payload.ToArray());
+            _initialBytes += ip.Payload.Length;
         }
 
         private void AddClientData(CapturedPacket cp, IpPacket ip)

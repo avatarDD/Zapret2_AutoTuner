@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.MonitorView"
+             x:DataType="vm:MonitorViewModel">
+  <Grid RowDefinitions="Auto,Auto,*,Auto,160">
+    <StackPanel Spacing="6">
+      <TextBlock Classes="h1" Text="{l:T monitor.title}" />
+      <TextBlock Classes="muted" Text="{l:T monitor.subtitle}" />
+      <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,6">
+        <Button Classes="accent" Padding="20,10" Command="{Binding ToggleCommand}">
+          <Panel>
+            <TextBlock Text="{l:T monitor.start}" IsVisible="{Binding !Active}" />
+            <TextBlock Text="{l:T monitor.stop}" IsVisible="{Binding Active}" />
+          </Panel>
+        </Button>
+        <CheckBox Content="{l:T monitor.auto_apply}" IsChecked="{Binding AutoApply}" />
+      </StackPanel>
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+      <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" IsVisible="{Binding HasProblem}" />
+    </StackPanel>
+
+    <ItemsControl Grid.Row="1" ItemsSource="{Binding Pending}" Margin="0,8,0,0">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:PendingRepair">
+          <Border Classes="card" Margin="0,0,0,6" BorderBrush="#D9A21B">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+              <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" FontFamily="monospace" />
+              <Button Grid.Column="1" Classes="accent" Content="{l:T monitor.apply}" Margin="8,0,0,0"
+                      Command="{Binding $parent[ItemsControl].((vm:MonitorViewModel)DataContext).ApplyCommand}" CommandParameter="{Binding}" />
+              <Button Grid.Column="2" Content="{l:T monitor.dismiss}" Margin="8,0,0,0"
+                      Command="{Binding $parent[ItemsControl].((vm:MonitorViewModel)DataContext).DismissCommand}" CommandParameter="{Binding}" />
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <ScrollViewer Grid.Row="2" Margin="0,8,0,0">
+      <ItemsControl ItemsSource="{Binding Domains}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DomainHealthViewModel">
+            <Border Classes="card" Margin="0,0,0,6">
+              <Grid ColumnDefinitions="Auto,240,160,*,Auto">
+                <Ellipse Width="12" Height="12" Fill="{Binding Brush}" Margin="0,0,10,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Domain}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{Binding State}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3" Text="{Binding Window}" Classes="muted" VerticalAlignment="Center" />
+                <Button Grid.Column="4" Content="{l:T monitor.broken}"
+                        Command="{Binding $parent[ItemsControl].((vm:MonitorViewModel)DataContext).ReportBrokenCommand}" CommandParameter="{Binding}" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <TextBlock Grid.Row="3" Classes="h2" Text="{l:T monitor.journal}" Margin="0,8,0,4" />
+    <ListBox Grid.Row="4" ItemsSource="{Binding Journal}" FontSize="12" />
+  </Grid>
+</UserControl>

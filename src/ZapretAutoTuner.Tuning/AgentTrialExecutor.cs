@@ -39,6 +39,12 @@ public sealed record AgentTrialOptions
     /// <summary>Blobs the candidates use (<see cref="GeneratedSet.Blobs"/>): name → 0x… or a file.</summary>
     public IReadOnlyDictionary<string, string> Blobs { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>
+    /// Functions of the user's approved Lua scripts → the script file (ResourceStore.ApprovedLuaPaths, PLAN 4a.5);
+    /// a launch adds <c>--lua-init=@file</c> for the ones its strategy calls.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> UserLua { get; init; } = new Dictionary<string, string>();
+
     public EnginePlatform Platform { get; init; } = OperatingSystem.IsWindows() ? EnginePlatform.Windows : EnginePlatform.Linux;
 
     /// <summary>Linux: the NFQUEUE number of the trial instance.</summary>
@@ -63,6 +69,9 @@ public sealed record AgentTrialOptions
 /// </summary>
 public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target, AgentTrialOptions options) : ITrialExecutor
 {
+    /// <summary>The L2 probe; null is the native <see cref="HttpProbe"/> (the MCP host passes its own, the benchmark a simulated DPI).</summary>
+    public Func<HttpProbeOptions, CancellationToken, Task<ProbeResult>>? Probe { get; init; }
+
     public async Task<IReadOnlyList<TrialOutcome>> RunAsync(StrategyCandidate candidate, int attempts, Func<IReadOnlyList<TrialOutcome>, bool> stopEarly, CancellationToken ct)
     {
         try
@@ -107,7 +116,8 @@ public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target
             if (i > 0)
                 await Task.Delay(options.Pause, ct).ConfigureAwait(false);
             var address = target.Addresses[i % target.Addresses.Count];
-            var r = await HttpProbe.RunAsync(ProbeOptions(address), ct).ConfigureAwait(false);
+            var o = ProbeOptions(address);
+            var r = await (Probe is { } probe ? probe(o, ct) : HttpProbe.RunAsync(o, ct)).ConfigureAwait(false);
             outcomes.Add(ToOutcome(r, target.MinBytes));
             if (stopEarly(outcomes))
                 break;
@@ -165,6 +175,7 @@ public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target
             Platform = options.Platform,
             LuaDir = options.LuaDir,
             Blobs = UsedBlobs(candidate.Strategy),
+            ExtraLuaPaths = Core.Resources.ResourceRefs.LuaPathsFor([candidate.Strategy], options.UserLua),
             Profiles = [profile],
             QueueNum = options.QueueNum,
             TargetAddresses = target.Addresses,

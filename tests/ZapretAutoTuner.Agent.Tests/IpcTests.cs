@@ -134,18 +134,25 @@ public class IpcTests
         await using var conn = await AgentConnection.LaunchAsync(Options(dir));
         var req = new CheckEngineArgsRequest();
         req.Argv.AddRange(["--filter-tcp=443", "--dpi-desync=fake"]);
-        var r = await conn.Client.CheckEngineArgsAsync(req);
+        var r = await conn.Client.CheckEngineArgsAsync(req.WithLuaFiles());
         Assert.False(r.Ok);
         Assert.Equal("validator", r.Stage);
 
         var req2 = new CheckEngineArgsRequest();
         req2.Argv.AddRange(TestEnv.SampleArgv().Prepend("--user=root"));
-        var r2 = await conn.Client.CheckEngineArgsAsync(req2);
+        var r2 = await conn.Client.CheckEngineArgsAsync(req2.WithLuaFiles());
         Assert.Equal("policy", r2.Stage);
+
+        // user Lua is never loaded from where the UI keeps it: without its content the Agent refuses (review H1); the
+        // UI could not read the file, which is no fault of the strategy (review 2: stage "engine")
+        var req3 = new CheckEngineArgsRequest();
+        req3.Argv.AddRange(["--lua-init=@" + Path.Combine(dir, "zt-mine.lua"), "--filter-tcp=443", "--lua-desync=multisplit"]);
+        var r3 = await conn.Client.CheckEngineArgsAsync(req3);
+        Assert.Equal("engine", r3.Stage);
 
         var start = new StartEngineRequest();
         start.Argv.AddRange(["--filter-tcp=443", "--lua-desync=nosuchfunc"]);
-        var e = await Assert.ThrowsAsync<RpcException>(async () => await conn.Client.StartEngineAsync(start));
+        var e = await Assert.ThrowsAsync<RpcException>(async () => await conn.Client.StartEngineAsync(start.WithLuaFiles()));
         Assert.Equal(StatusCode.FailedPrecondition, e.StatusCode);
     }
 
@@ -165,7 +172,7 @@ public class IpcTests
         {
             var check = new CheckEngineArgsRequest();
             check.Argv.AddRange(TestEnv.SampleArgv());
-            var cr = await conn.Client.CheckEngineArgsAsync(check);
+            var cr = await conn.Client.CheckEngineArgsAsync(check.WithLuaFiles());
             Assert.True(cr.Ok, cr.Stage + ": " + string.Join("\n", cr.Output));
 
             var start = new StartEngineRequest
@@ -174,7 +181,7 @@ public class IpcTests
                 Queue = new QueueRule { QueueNum = 377, TcpPorts = "443", Targets = { "198.51.100.77" } },
             };
             start.Argv.AddRange(TestEnv.SampleArgv());
-            var sr = await conn.Client.StartEngineAsync(start);
+            var sr = await conn.Client.StartEngineAsync(start.WithLuaFiles());
             var hb = await conn.Client.HeartbeatAsync(new HeartbeatRequest());
             Assert.Contains(sr.EngineId, hb.Engines);
             Assert.Contains("377", FirewallDump(hb.FirewallBackend), StringComparison.Ordinal);
@@ -199,7 +206,7 @@ public class IpcTests
 
             // again, then kill the Agent hard: the engine must die with it
             File.Delete(Path.Combine(dir, "engine.pid"));
-            await conn.Client.StartEngineAsync(start);
+            await conn.Client.StartEngineAsync(start.WithLuaFiles());
             Assert.True(await TestEnv.WaitUntil(() => File.Exists(Path.Combine(dir, "engine.pid")), TimeSpan.FromSeconds(5)));
             int enginePid = int.Parse(File.ReadAllText(Path.Combine(dir, "engine.pid")).Trim(), System.Globalization.CultureInfo.InvariantCulture);
             using var agent = Process.GetProcessById(hb.AgentPid);

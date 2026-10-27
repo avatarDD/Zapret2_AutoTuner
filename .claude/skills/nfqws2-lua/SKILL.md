@@ -1,9 +1,9 @@
 ---
 name: nfqws2-lua
-description: Строгий справочник Lua-библиотеки zapret2 1.0.5.2 (zapret-lib, zapret-antidpi, zapret-auto, zapret-obfs, zapret-pcap) — все функции --lua-desync, их аргументы и умолчания, стандартные блоки fooling/ipid/ipfrag/rawsend/reconstruct, маркеры позиций, tls_mod, блобы, оркестраторы, написание своих функций. Читать перед генерацией, мутацией или проверкой любой стратегии.
+description: Строгий справочник Lua-библиотеки zapret2 1.0.6 (zapret-lib, zapret-antidpi, zapret-auto, zapret-obfs, zapret-pcap) — все функции --lua-desync, их аргументы и умолчания, стандартные блоки fooling/ipid/ipfrag/rawsend/reconstruct, маркеры позиций, tls_mod, блобы, оркестраторы, написание своих функций. Читать перед генерацией, мутацией или проверкой любой стратегии.
 ---
 
-# Lua-библиотека zapret2 (compat 6, v1.0.5.2)
+# Lua-библиотека zapret2 (compat 6, v1.0.6)
 
 Источник истины: `lua/zapret-antidpi.lua` (комментарии `-- arg :` над каждой
 функцией), `lua/zapret-auto.lua`, `docs/manual.en.md` (главы «zapret-antidpi»,
@@ -42,6 +42,10 @@ description: Строгий справочник Lua-библиотеки zapret
 
 **payload:** `payload=type1,type2` — дополнительный фильтр внутри функции.
 `~` в начале инвертирует список. По умолчанию `known` (не empty и не unknown).
+Поэтому для нераспознанного протокола (`--payload=unknown`) функции без
+`payload=unknown` (или `all`) на каждом инстансе ничего не делают
+(`payload_check` в zapret-lib.lua). Генератор ставит его сам (слот
+`{lpayload}` в families.yaml).
 
 **fooling** (портит фейк так, чтобы сервер его отбросил, а DPI принял):
 
@@ -54,7 +58,7 @@ description: Строгий справочник Lua-библиотеки zapret
 | `tcp_seq=±N` | Сдвиг seq («badseq»), например `tcp_seq=-10000` |
 | `tcp_ack=±N` | Сдвиг ack («badack»). Linux-сервер отбрасывает такой сегмент стабильно, только если timestamp-опция идёт первой, поэтому ставится вместе с `tcp_ts_up` |
 | `tcp_ts=±N` | Сдвиг TS value. Работает, только если клиент шлёт TCP timestamps. Windows по умолчанию их **не шлёт** (проверять `cond_tcp_has_ts`) |
-| `tcp_md5[=hex16]` | MD5-опция. Linux-серверы отбрасывают такие сегменты, многие другие тоже |
+| `tcp_md5[=hex16]` | MD5-опция, без значения 16 случайных байт (`brandom(16)`). Linux-серверы отбрасывают такие сегменты, многие другие тоже |
 | `tcp_flags_set=список`, `tcp_flags_unset=список` | Флаги: FIN,SYN,RST,PSH,ACK,URG,ECE,CWR |
 | `tcp_ts_up` | Поднять TS-опцию первой |
 | `tcp_nop_del` | Удалить NOP, чтобы освободить место |
@@ -83,6 +87,11 @@ description: Строгий справочник Lua-библиотеки zapret
 - Относительные маркеры работают только на известных пейлоадах
   (`http_req`, `tls_client_hello`, …). Маркер, который не разрешился,
   пропускается. Позиции нормализуются и дедуплицируются.
+- `seqovl=` у `multidisorder`, `multidisorder_legacy` и `fakeddisorder` —
+  один маркер (`resolve_pos`), величина перекрытия равна разрешённой позиции
+  и должна быть меньше первой позиции split (справка v1.0.6 пишет
+  `seqovl=<posmarker>`; код тот же, что в 1.0.5.2). Не разрешился — seqovl
+  отменяется. У `multisplit`, `fakedsplit`, `tcpseg` `seqovl` — число.
 
 ## 4. zapret-antidpi.lua — функции
 
@@ -186,6 +195,9 @@ DPI без отслеживания seq её принимает. Fooling не н
 - `fails` (3) — порог неудач, `time` (60 с) — окно сброса.
 - Состояние хранится per-host: ключ из `standard_hostkey` (`nld=N` режет до
   N-уровня, `reqhost` требует hostname, без hostname IP не используется).
+- `key=строка` — имя таблицы внутри `autostate[hostkey]` (по умолчанию имя
+  инстанса `func_instance`). Одинаковый `key` у нескольких оркестраторов даёт
+  им общее хранилище хоста (в справке описан с v1.0.6, в коде есть и в 1.0.5.2).
 - Детекторам нужны входящие (`--in-range=-s5556`, Windows: `--wf-tcp-in`).
 - `standard_failure_detector`: `maxseq` (32768), `retrans` (3), `reset`,
   `inseq` (4096), `no_rst`, `no_http_redirect`, `udp_out` (4), `udp_in` (1).
@@ -242,8 +254,20 @@ end
 ```
 
 Правила:
-- Префикс имён наших функций — `zt_`, файл — `zapret-autotuner.lua`.
-  Грузится после штатных.
+- Префикс имён наших функций — `zt_`. Пользовательские скрипты (PLAN 4a.5)
+  хранятся в базе как ресурс `LuaScript` и выгружаются файлом
+  `zt-<имя>.lua`. Грузится после штатных (`--lua-init=@…/zt-<имя>.lua`).
+- Имя своей функции не может совпадать с функцией каталога (включая
+  iff-функции): `ResourceRules`/`LuaScriptCheck` отказывают. Две свои
+  функции с одним именем в разных скриптах тоже запрещены.
+- Validator принимает вызов своей функции только из **подтверждённого**
+  пользователем скрипта (`ValidationContext.UserFunctions`); вызов функции
+  из черновика — ошибка `func.unapproved`. Имена аргументов своей функции
+  каталогом не проверяются, но `strategy`/`final`/`cond`, `dir`, `payload`,
+  блобы (`blob`, `pattern`, `seqovl_pattern`, `fallback`) и подстановки
+  `%x`/`#x` проверяются как у штатных. В argv файл скрипта обязан быть в
+  `--lua-init`, иначе `func.user_notloaded`. Agent узнаёт функции
+  загружаемого файла сам (`ValidateArgv(…, luaFunctions)`).
 - Песочница: нет `os.execute`, `io.popen`, `package.loadlib`, `debug`, FFI.
   Нет `sleep`: всё асинхронное делается через `timer_set`. `error` в таймере
   удаляет таймер.

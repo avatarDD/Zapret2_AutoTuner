@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using ZapretAutoTuner.Core.Export;
+using ZapretAutoTuner.Core.Resources;
 
 namespace ZapretAutoTuner.Delivery;
 
@@ -21,7 +22,7 @@ public static partial class KeeneticDeployer
     public const string Service = "/opt/etc/init.d/S51nfqws2";
     public const string UserList = "lists/user.list";
 
-    [GeneratedRegex("^(lists/[A-Za-z0-9_.-]+\\.list|blobs/[A-Za-z0-9_]+\\.bin)$")]
+    [GeneratedRegex("^(lists/[A-Za-z0-9_.-]+\\.list|blobs/[A-Za-z0-9_]+\\.bin|lua/zt-[a-z0-9_-]+\\.lua)$")]
     private static partial Regex SafeFile();
 
     /// <summary>What <see cref="DeployAsync"/> will do, for the confirmation dialog.</summary>
@@ -50,7 +51,7 @@ public static partial class KeeneticDeployer
     }
 
     private static List<string> Files(ExportPackage pkg) =>
-        [.. pkg.Files.Keys.Where(k => k.StartsWith("lists/", StringComparison.Ordinal) || k.StartsWith("blobs/", StringComparison.Ordinal))];
+        [.. pkg.Files.Keys.Where(k => k.StartsWith("lists/", StringComparison.Ordinal) || k.StartsWith("blobs/", StringComparison.Ordinal) || k.StartsWith("lua/", StringComparison.Ordinal))];
 
     /// <param name="confirmedByUser">Set by the confirmation dialog only; without it nothing is touched.</param>
     public static async Task<DeliveryResult> DeployAsync(IRemoteShell sh, ExportPackage pkg, bool confirmedByUser, CancellationToken ct = default)
@@ -89,7 +90,7 @@ public static partial class KeeneticDeployer
         try
         {
             var merged = Merge(Encoding.UTF8.GetString(current), pkg.Text);
-            await sh.RunAsync($"mkdir -p {KeeneticExporter.Root}/lists {KeeneticExporter.Root}/blobs", ct).ConfigureAwait(false);
+            await sh.RunAsync($"mkdir -p {KeeneticExporter.Root}/lists {KeeneticExporter.Root}/blobs {KeeneticExporter.Root}/lua", ct).ConfigureAwait(false);
             foreach (var f in files)
             {
                 var data = pkg.Files[f];
@@ -111,6 +112,62 @@ public static partial class KeeneticDeployer
             // whatever broke the delivery, the router must not stay with half of it
             return await RollbackAsync(sh, backups, log, e.Message).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>The router file of one of our resources: <c>lists/zt-x.list</c>, <c>lists/zt-x-ipset.list</c>, <c>blobs/x.bin</c>, <c>lua/zt-x.lua</c>.</summary>
+    public static string ResourceFile(ResourceKind kind, string name)
+    {
+        if (!ResourceNames.IsValid(name))
+            throw new ArgumentException("resource name must be [a-z0-9_-]{1,48}", nameof(name));
+        return kind switch
+        {
+            ResourceKind.Hostlist => KeeneticExporter.ListFile(name),
+            ResourceKind.Ipset => KeeneticExporter.IpsetFile(name),
+            ResourceKind.Blob => KeeneticExporter.BlobFile(name),
+            _ => "lua/" + ResourceNames.LuaFile(name),
+        };
+    }
+
+    /// <summary>What <see cref="DeleteResourceAsync"/> will do, for the confirmation dialog.</summary>
+    public static List<DeliveryStep> PlanDelete(ResourceKind kind, string name)
+    {
+        var file = ResourceFile(kind, name);
+        return
+        [
+            new($"Проверить, что {Conf} не ссылается на {file}", $"Check that {Conf} does not refer to {file}"),
+            new($"Переименовать {KeeneticExporter.Root}/{file} в {file}.bak (вернуть можно обратным переименованием)", $"Rename {KeeneticExporter.Root}/{file} to {file}.bak (rename it back to undo)"),
+        ];
+    }
+
+    /// <summary>
+    /// Removes one of our resource files from the router: refused while nfqws2.conf refers to it (the file path, or
+    /// <c>blob=name</c>/<c>--blob=name:</c> for a blob); the file is kept as <c>.bak</c>, so the step can be undone.
+    /// </summary>
+    /// <param name="confirmedByUser">Set by the confirmation dialog only; without it nothing is touched.</param>
+    public static async Task<DeliveryResult> DeleteResourceAsync(IRemoteShell sh, ResourceKind kind, string name, bool confirmedByUser, CancellationToken ct = default)
+    {
+        if (!confirmedByUser)
+            throw new InvalidOperationException("удаление на роутере без подтверждения пользователя запрещено / deleting on the router needs the user's confirmation");
+        var file = ResourceFile(kind, name);
+        var path = $"{KeeneticExporter.Root}/{file}";
+        var log = new List<string>();
+        var conf = await sh.ReadAsync(Conf, ct).ConfigureAwait(false);
+        if (conf is null)
+            return new DeliveryResult(false, false, log, $"{Conf} не найден: установлен ли nfqws2-keenetic? / not found: is nfqws2-keenetic installed?");
+        var text = Encoding.UTF8.GetString(conf);
+        bool used = text.Contains(path, StringComparison.Ordinal)
+            || (kind == ResourceKind.Blob && Regex.IsMatch(text, $"(?:--blob=|blob=|[%#]){Regex.Escape(name)}(?![A-Za-z0-9_])"));
+        if (used)
+            return new DeliveryResult(false, false, log, $"{file} используется в nfqws2.conf: сначала уберите его из стратегии / {file} is used in nfqws2.conf: remove it from the strategy first");
+        var q = SshRemoteShell.Quote(path);
+        var (exists, _) = await sh.RunAsync($"test -f {q}", ct).ConfigureAwait(false);
+        if (exists != 0)
+            return new DeliveryResult(false, false, log, $"{file} на роутере нет / {file} is not on the router");
+        var (code, output) = await sh.RunAsync($"mv {q} {SshRemoteShell.Quote(path + ".bak")}", ct).ConfigureAwait(false);
+        if (code != 0)
+            return new DeliveryResult(false, false, log, $"{file}: {output.Trim()}");
+        log.Add($"moved {file} to {file}.bak");
+        return new DeliveryResult(true, false, log, null);
     }
 
     /// <summary>The user's list with our domains appended (theirs first, no duplicates).</summary>

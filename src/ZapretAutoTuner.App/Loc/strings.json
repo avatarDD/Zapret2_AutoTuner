@@ -1,0 +1,1266 @@
+{
+ "advisor.data": [
+  "Выбранному провайдеру отправляются: ваш текст задания, ответы инструментов AutoTuner (вердикты, результаты проб, стратегии) и справочники по zapret2. Ваши адреса маскируются так же, как в отчёте (локальные — lan-N, внешние — до /24); имена целей отправляются как есть. Содержимое страниц и пакеты не отправляются. Сессия ограничена: 12 ходов, 30 вызовов инструментов, 400 000 токенов.",
+  "Sent to the chosen provider: your task text, the answers of AutoTuner's tools (verdicts, probe results, strategies) and the zapret2 references. Your addresses are masked as in the report (local ones become lan-N, public ones keep their /24); target names are sent as they are. Page content and packets are never sent. A session is bounded: 12 turns, 30 tool calls, 400,000 tokens."
+ ],
+ "advisor.done_failed": [
+  "Ошибка запроса к модели (подробности в журнале ниже): ходов {0}, вызовов {1}, токенов {2}.",
+  "The request to the model failed (details below): {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_finished": [
+  "Готово: ходов {0}, вызовов инструментов {1}, токенов {2}.",
+  "Done: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_refused": [
+  "Модель отказалась отвечать: ходов {0}, вызовов {1}, токенов {2}.",
+  "The model declined: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_stopped": [
+  "Остановлено: ходов {0}, вызовов инструментов {1}, токенов {2}.",
+  "Stopped: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_tokenlimit": [
+  "Достигнут лимит токенов: ходов {0}, вызовов {1}, токенов {2}.",
+  "Token limit reached: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_toolcalllimit": [
+  "Достигнут лимит вызовов инструментов: ходов {0}, вызовов {1}, токенов {2}.",
+  "Tool-call limit reached: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.done_turnlimit": [
+  "Достигнут лимит ходов: ходов {0}, вызовов {1}, токенов {2}.",
+  "Turn limit reached: {0} turns, {1} tool calls, {2} tokens."
+ ],
+ "advisor.enabled": [
+  "Включить советника",
+  "Enable the advisor"
+ ],
+ "advisor.error": [
+  "Ошибка",
+  "Error"
+ ],
+ "advisor.key": [
+  "API-ключ (для локального сервера — если он его требует)",
+  "API key (for a local server: only if it needs one)"
+ ],
+ "advisor.key_session": [
+  "Ключ хранится только в памяти до закрытия программы.",
+  "The key is kept in memory only, until the program closes."
+ ],
+ "advisor.missing_endpoint": [
+  "Укажите адрес OpenAI-совместимого сервера (http:// или https://) в Настройках → «Советник».",
+  "Enter the OpenAI-compatible server address (http:// or https://) in Settings → Advisor."
+ ],
+ "advisor.missing_key": [
+  "Введите API-ключ Claude в Настройках → «Советник».",
+  "Enter the Claude API key in Settings → Advisor."
+ ],
+ "advisor.missing_model": [
+  "Укажите модель в Настройках → «Советник».",
+  "Enter the model in Settings → Advisor."
+ ],
+ "advisor.model": [
+  "Модель",
+  "Model"
+ ],
+ "advisor.off": [
+  "Советник выключен. Включите его в Настройках → «Советник».",
+  "The advisor is off. Turn it on in Settings → Advisor."
+ ],
+ "advisor.provider_claude": [
+  "Claude (API Anthropic, ваш ключ)",
+  "Claude (Anthropic API, your key)"
+ ],
+ "advisor.provider_local": [
+  "Локальная модель (OpenAI-совместимый сервер)",
+  "Local model (OpenAI-compatible server)"
+ ],
+ "advisor.running": [
+  "Советник работает… «Остановить» прерывает его сразу.",
+  "The advisor is working… Stop interrupts it at once."
+ ],
+ "advisor.says": [
+  "Советник",
+  "Advisor"
+ ],
+ "advisor.settings_hint": [
+  "Встроенный советник: Claude по вашему API-ключу или локальная модель через OpenAI-совместимый сервер. Выключен по умолчанию; запросы уходят, только когда вы нажимаете «Начать» на странице «Советник». Он пользуется разрешениями MCP: пока MCP выключен — только чтение.",
+  "The built-in advisor: Claude with your API key, or a local model through an OpenAI-compatible server. Off by default; requests go out only when you press Start on the Advisor page. It uses the MCP permissions: while MCP is off, reading only."
+ ],
+ "advisor.start": [
+  "Начать",
+  "Start"
+ ],
+ "advisor.subtitle": [
+  "Модель разбирается в блокировке через инструменты AutoTuner — те же, что у MCP, с теми же разрешениями. Всё, что что-то меняет, ждёт вашего «Да». Каждый вызов попадает в журнал MCP и в отчёт.",
+  "The model works on the block through AutoTuner's tools — the same as over MCP, with the same permissions. Anything that changes something waits for your Yes. Every call goes to the MCP log and into the report."
+ ],
+ "advisor.task": [
+  "Что сделать (необязательно). Пусто — найти причину и стратегию для заблокированных целей.",
+  "What to do (optional). Empty: find the cause and a strategy for the blocked targets."
+ ],
+ "advisor.title": [
+  "Советник (языковая модель)",
+  "Advisor (language model)"
+ ],
+ "agent.lost": [
+  "Агент остановился: {0}. Он запустится снова при следующем действии.",
+  "The agent stopped: {0}. It starts again on the next action."
+ ],
+ "bugreport.archive_saved": [
+  "Архив {0} сохранён и упомянут в тексте: приложите его к заявке.",
+  "The archive {0} is saved and named in the text: attach it to the issue."
+ ],
+ "bugreport.archive_saved_edited": [
+  "Архив {0} сохранён; текст вы правили, поэтому он не пересобран — приложите архив к заявке.",
+  "The archive {0} is saved; you edited the text, so it was not rebuilt — attach the archive to the issue."
+ ],
+ "bugreport.button": [
+  "Сообщить о проблеме",
+  "Report a problem"
+ ],
+ "bugreport.close": [
+  "Закрыть",
+  "Close"
+ ],
+ "bugreport.copy": [
+  "Копировать текст",
+  "Copy text"
+ ],
+ "bugreport.issue_title": [
+  "Заголовок заявки",
+  "Issue title"
+ ],
+ "bugreport.open": [
+  "Открыть на GitHub",
+  "Open on GitHub"
+ ],
+ "bugreport.opened": [
+  "Страница новой заявки открыта в браузере: проверьте поля и отправьте.",
+  "The new issue page is open in the browser: check the fields and submit."
+ ],
+ "bugreport.opened_paste": [
+  "Текст не поместился в ссылку: он скопирован — вставьте его в заявку на открытой странице.",
+  "The text did not fit into the link: it is copied — paste it into the issue on the opened page."
+ ],
+ "bugreport.paste_here": [
+  "(Вставьте сюда полный текст из AutoTuner: он скопирован в буфер обмена.)",
+  "(Paste the full text from AutoTuner here: it is on the clipboard.)"
+ ],
+ "bugreport.save_archive": [
+  "Сохранить архив",
+  "Save archive"
+ ],
+ "bugreport.subtitle": [
+  "Черновик заявки с версиями и отладочными данными. IP-адреса скрыты всегда, домены — по выбору. Ничего не отправляется само: проверьте и поправьте текст, затем откройте страницу GitHub и отправьте заявку сами.",
+  "A draft issue with versions and debug data. IP addresses are always masked, domains on request. Nothing is sent by itself: check and edit the text, then open the GitHub page and submit it yourself."
+ ],
+ "bugreport.target_autotuner": [
+  "AutoTuner",
+  "AutoTuner"
+ ],
+ "bugreport.target_gui": [
+  "zapret-gui",
+  "zapret-gui"
+ ],
+ "bugreport.target_zapret2": [
+  "zapret2 (движок)",
+  "zapret2 (the engine)"
+ ],
+ "bugreport.title": [
+  "Сообщить о проблеме",
+  "Report a problem"
+ ],
+ "bugreport.where": [
+  "Куда:",
+  "Where:"
+ ],
+ "common.back": [
+  "Назад",
+  "Back"
+ ],
+ "common.next": [
+  "Далее",
+  "Next"
+ ],
+ "common.no": [
+  "Нет",
+  "No"
+ ],
+ "common.stop": [
+  "Остановить",
+  "Stop"
+ ],
+ "common.stopped": [
+  "Остановлено",
+  "Stopped"
+ ],
+ "common.yes": [
+  "Да",
+  "Yes"
+ ],
+ "expert.check": [
+  "Проверить",
+  "Check"
+ ],
+ "expert.import": [
+  "Импорт",
+  "Import"
+ ],
+ "expert.import_hint": [
+  "Вставьте config zapret2, nfqws2.conf, .cmd winws2, строку аргументов или JSON zapret-gui, либо откройте файл или архив экспорта.",
+  "Paste a zapret2 config, nfqws2.conf, a winws2 .cmd, an argument line or zapret-gui JSON, or open a file or export archive."
+ ],
+ "expert.kind": [
+  "Формат: {0}, профилей: {1}",
+  "Format: {0}, profiles: {1}"
+ ],
+ "expert.open": [
+  "Открыть файл",
+  "Open a file"
+ ],
+ "expert.parse": [
+  "Разобрать",
+  "Parse"
+ ],
+ "expert.strategy": [
+  "Стратегия",
+  "Strategy"
+ ],
+ "expert.strategy_hint": [
+  "Одна стратегия (--lua-desync=…), проверка Validator'ом.",
+  "One strategy (--lua-desync=…), checked by the Validator."
+ ],
+ "expert.use": [
+  "Использовать",
+  "Use"
+ ],
+ "expert.used": [
+  "Стратегия выбрана: её можно экспортировать или включить в мониторе.",
+  "The strategy is selected: export it or turn it on in the monitor."
+ ],
+ "expert.valid": [
+  "Ошибок нет",
+  "No problems"
+ ],
+ "export.argv": [
+  "Строка аргументов",
+  "Argument line"
+ ],
+ "export.argv_hint": [
+  "Скопировать одну строку для nfqws2/winws2",
+  "Copy one line for nfqws2/winws2"
+ ],
+ "export.bad_url": [
+  "Адрес zapret-gui не распознан: «{0}». Пример: 192.168.1.1:8080",
+  "Not a zapret-gui address: '{0}'. Example: 192.168.1.1:8080"
+ ],
+ "export.copied": [
+  "Скопировано",
+  "Copied"
+ ],
+ "export.delivered": [
+  "Установлено на роутер, nfqws2 перезапущен",
+  "Installed on the router, nfqws2 restarted"
+ ],
+ "export.failed": [
+  "Не удалось: {0}",
+  "Failed: {0}"
+ ],
+ "export.gui": [
+  "zapret-gui",
+  "zapret-gui"
+ ],
+ "export.gui_applied": [
+  "Стратегия {0} применена в zapret-gui",
+  "Strategy {0} applied in zapret-gui"
+ ],
+ "export.gui_apply": [
+  "Применить стратегию сейчас?",
+  "Apply the strategy now?"
+ ],
+ "export.gui_apply_text": [
+  "zapret-gui перезапустит nfqws2 со стратегией {0}.",
+  "zapret-gui restarts nfqws2 with strategy {0}."
+ ],
+ "export.gui_confirm": [
+  "Сохранить стратегию в zapret-gui?",
+  "Save the strategy in zapret-gui?"
+ ],
+ "export.gui_hint": [
+  "Сохранить и, отдельно, применить в zapret-gui",
+  "Save and, separately, apply in zapret-gui"
+ ],
+ "export.gui_password": [
+  "Пароль zapret-gui",
+  "zapret-gui password"
+ ],
+ "export.gui_saved": [
+  "Сохранено в zapret-gui как {0} (не применено)",
+  "Saved in zapret-gui as {0} (not applied)"
+ ],
+ "export.gui_url": [
+  "Адрес zapret-gui",
+  "zapret-gui address"
+ ],
+ "export.hostkey_first": [
+  "Первое подключение к {0}. Отпечаток ключа SSH: {1}\nСверьте его с роутером: после «Да» он будет запомнен, и другой ключ будет отвергнут.",
+  "First connection to {0}. SSH key fingerprint: {1}\nCompare it with the router: after Yes it is remembered and any other key is refused."
+ ],
+ "export.hostkey_known": [
+  "Ключ SSH совпадает с запомненным: {0}",
+  "The SSH key matches the remembered one: {0}"
+ ],
+ "export.hostkey_mismatch": [
+  "Ключ SSH роутера {0} изменился: был {1}, сейчас {2}. Подключение отменено — это может быть другое устройство или перехват. Если ключ сменился из-за сброса или прошивки, нажмите «Забыть ключи SSH роутеров» в настройках.",
+  "The SSH key of router {0} changed: it was {1}, now {2}. Connection refused: this may be another device or an interception. If the key changed after a reset or a firmware update, press 'Forget routers' SSH keys' in the settings."
+ ],
+ "export.keenetic": [
+  "Keenetic (nfqws2-keenetic)",
+  "Keenetic (nfqws2-keenetic)"
+ ],
+ "export.keenetic_confirm": [
+  "Установить стратегию на роутер?",
+  "Install the strategy on the router?"
+ ],
+ "export.keenetic_hint": [
+  "Архив или установка по SSH после подтверждения",
+  "An archive, or install over SSH after confirmation"
+ ],
+ "export.pc": [
+  "Этот компьютер",
+  "This PC"
+ ],
+ "export.pc_hint": [
+  "Архив для winws2 / zapret2 на ПК",
+  "An archive for winws2 / zapret2 on the PC"
+ ],
+ "export.rolled_back": [
+  "прежние файлы восстановлены",
+  "the previous files were restored"
+ ],
+ "export.router_host": [
+  "Адрес роутера (SSH)",
+  "Router address (SSH)"
+ ],
+ "export.router_password": [
+  "Пароль SSH",
+  "SSH password"
+ ],
+ "export.saved": [
+  "Сохранено",
+  "Saved"
+ ],
+ "export.targets_hint": [
+  "Без адреса роутера или zapret-gui будет сохранён файл. Ничего не устанавливается без вашего подтверждения.",
+  "Without a router or zapret-gui address a file is saved. Nothing is installed without your confirmation."
+ ],
+ "export.timeout": [
+  "Нет ответа вовремя: {0}",
+  "No answer in time: {0}"
+ ],
+ "export.zapret2": [
+  "zapret2 (Linux, OpenWrt)",
+  "zapret2 (Linux, OpenWrt)"
+ ],
+ "export.zapret2_hint": [
+  "config с NFQWS2_OPT, списки и блобы",
+  "config with NFQWS2_OPT, lists and blobs"
+ ],
+ "home.check": [
+  "Проверить блокировки",
+  "Check for blocks"
+ ],
+ "home.checking": [
+  "Проверяю…",
+  "Checking…"
+ ],
+ "home.done": [
+  "Готово: заблокировано {0}, проверка заняла {1} с",
+  "Done: {0} blocked, the check took {1} s"
+ ],
+ "home.network_problem": [
+  "Похоже, нет интернета или не работает DNS: проверка не показательна.",
+  "No internet or DNS seems broken: the check is not meaningful."
+ ],
+ "home.subtitle": [
+  "Проверим популярные сайты и сервисы и покажем, что заблокировано и как именно.",
+  "We check popular sites and services and show what is blocked and how."
+ ],
+ "home.title": [
+  "Проверка блокировок",
+  "Block check"
+ ],
+ "home.tune": [
+  "Подобрать стратегию",
+  "Find a strategy"
+ ],
+ "home.tune_blocked": [
+  "Подобрать для заблокированных",
+  "Tune the blocked ones"
+ ],
+ "home.tune_one": [
+  "Подобрать",
+  "Tune"
+ ],
+ "journal.applied": [
+  "применено",
+  "applied"
+ ],
+ "journal.block_lifted": [
+  "блокировка снята",
+  "block lifted"
+ ],
+ "journal.degraded": [
+  "ухудшение",
+  "degraded"
+ ],
+ "journal.dismissed": [
+  "отклонено",
+  "dismissed"
+ ],
+ "journal.not_found": [
+  "исправление не найдено",
+  "no fix found"
+ ],
+ "journal.recovered": [
+  "восстановилось",
+  "recovered"
+ ],
+ "journal.removed": [
+  "убрано из стратегии",
+  "removed from the strategy"
+ ],
+ "journal.repaired": [
+  "найдено исправление",
+  "fix found"
+ ],
+ "journal.router_applied": [
+  "закреплено на роутере",
+  "kept on the router"
+ ],
+ "journal.router_failing": [
+  "не работает на роутере",
+  "failing on the router"
+ ],
+ "journal.router_new_host": [
+  "новый хост с роутера",
+  "new host from the router"
+ ],
+ "journal.router_recovered": [
+  "снова работает на роутере",
+  "works on the router again"
+ ],
+ "journal.site_down": [
+  "сайт недоступен",
+  "site down"
+ ],
+ "mcp.banner": [
+  "Подбором управляет внешний агент",
+  "An external agent is driving the search"
+ ],
+ "mcp.bridge_direct": [
+  "Для расширения, которое подключается само (URL и заголовок):",
+  "For an extension that connects by itself (URL and header):"
+ ],
+ "mcp.bridge_gui_missing": [
+  "Для router_proxy задайте адрес и MCP-токен zapret-gui выше.",
+  "For router_proxy, set zapret-gui's address and MCP token above."
+ ],
+ "mcp.bridge_hint": [
+  "Стороннее расширение-мост MCP в браузере подключается к HTTP-серверу AutoTuner выше: через него чату доступны инструменты AutoTuner (с разрешениями выше) и, если разрешено, инструменты zapret-gui роутера. Нужен включённый Streamable HTTP. Токен обязателен всегда; слушаем только 127.0.0.1.",
+  "A third-party MCP bridge extension in the browser connects to AutoTuner's HTTP server above: through it the chat gets AutoTuner's tools (with the permissions above) and, if allowed, the router's zapret-gui tools. Streamable HTTP must be on. The token is always required; it listens on 127.0.0.1 only."
+ ],
+ "mcp.bridge_no_http": [
+  "Включите Streamable HTTP выше, чтобы получить адрес.",
+  "Turn Streamable HTTP on above to get the address."
+ ],
+ "mcp.bridge_origins": [
+  "Разрешённые расширения (Origin, по одному в строке): chrome-extension://<id>, moz-extension://<id>",
+  "Allowed extensions (Origin, one per line): chrome-extension://<id>, moz-extension://<id>"
+ ],
+ "mcp.bridge_origins_invalid": [
+  "Не принято (только Origin расширений): {0}",
+  "Not accepted (extension Origins only): {0}"
+ ],
+ "mcp.bridge_origins_none": [
+  "Список пуст: расширения с Origin отклоняются (403). Локальный прокси без Origin (например, mcp-superassistant-proxy) работает и так, с токеном.",
+  "The list is empty: extensions sending an Origin are refused (403). A local proxy without an Origin (such as mcp-superassistant-proxy) works anyway, with the token."
+ ],
+ "mcp.bridge_proxy_http": [
+  "Тот же прокси через HTTP с токеном:",
+  "The same proxy over HTTP with the token:"
+ ],
+ "mcp.bridge_proxy_stdio": [
+  "Локальный прокси (mcpconfig.json, например для mcp-superassistant-proxy), через stdio:",
+  "Local proxy (mcpconfig.json, e.g. for mcp-superassistant-proxy), over stdio:"
+ ],
+ "mcp.bridge_title": [
+  "Мост для расширения браузера (claude.ai и другие чаты)",
+  "Browser extension bridge (claude.ai and other chats)"
+ ],
+ "mcp.bridge_token_hidden": [
+  "<токен скрыт: «Показать токен»>",
+  "<token hidden: «Show the token»>"
+ ],
+ "mcp.bridge_warning": [
+  "Внимание: стороннее расширение видит весь обмен, а ответы роутера (замаскированные: адреса заменены) уходят в чат claude.ai. Подключайте только расширение, которому доверяете.",
+  "Warning: the third-party extension sees all traffic, and the router's answers (masked: addresses replaced) go to the claude.ai chat. Connect only an extension you trust."
+ ],
+ "mcp.confirm_from_agent": [
+  "Запрос внешнего агента ({0}). Агент не может ответить за вас.",
+  "A request from the external agent ({0}). The agent cannot answer for you."
+ ],
+ "mcp.enabled": [
+  "Включить MCP-сервер",
+  "Enable the MCP server"
+ ],
+ "mcp.hint": [
+  "Позволяет LLM-агенту (Claude Desktop и др.) вести подбор через типизированные инструменты. Никаких путей, команд и произвольных опций: только цели из списка, проверенные стратегии и ваше подтверждение в этом окне. Телеметрии нет.",
+  "Lets an LLM agent (Claude Desktop and others) drive the search through typed tools. No paths, commands or arbitrary options: only the listed targets, validated strategies and your confirmation in this window. No telemetry."
+ ],
+ "mcp.http": [
+  "Streamable HTTP на 127.0.0.1 (с токеном)",
+  "Streamable HTTP on 127.0.0.1 (with a token)"
+ ],
+ "mcp.http_failed": [
+  "HTTP не запустился: {0}",
+  "HTTP did not start: {0}"
+ ],
+ "mcp.http_running": [
+  "HTTP: {0}",
+  "HTTP: {0}"
+ ],
+ "mcp.new_token": [
+  "Новый токен",
+  "New token"
+ ],
+ "mcp.perm_control": [
+  "Управление: пробы стратегий и перебор",
+  "Control: strategy trials and the search"
+ ],
+ "mcp.perm_experiments": [
+  "Эксперименты на живом трафике (нужны «Пробы» и «Управление»)",
+  "Live-traffic experiments (needs Probes and Control)"
+ ],
+ "mcp.perm_export": [
+  "Экспорт: предпросмотр и сохранение пакета",
+  "Export: preview and save a package"
+ ],
+ "mcp.perm_hint": [
+  "Добавление цели, запуск эксперимента, применение и сохранение экспорта всегда спрашивают вас здесь. Число проб ограничено в минуту и за сессию.",
+  "Adding a target, starting an experiment, committing and saving an export always ask you here. Trials are limited per minute and per session."
+ ],
+ "mcp.perm_probes": [
+  "Пробы: классификация и проверки целей из списка",
+  "Probes: classify and check the listed targets"
+ ],
+ "mcp.perm_resources": [
+  "Ресурсы: хостлисты, ipset'ы, блобы и черновики Lua (подтвердить скрипт можно только здесь; отправка на роутер — ещё и с «Экспортом»)",
+  "Resources: hostlists, ipsets, blobs and Lua drafts (only you can approve a script, here; sending to the router also needs Export)"
+ ],
+ "mcp.perm_router": [
+  "router — эксперименты на роутере через zapret-gui (нужны control и probes)",
+  "router — experiments on the router through zapret-gui (needs control and probes)"
+ ],
+ "mcp.perm_router_proxy": [
+  "router_proxy — инструменты zapret-gui роутера через AutoTuner (gui_*); всё, что не только читает, спросит вас здесь",
+  "router_proxy — the router's zapret-gui tools through AutoTuner (gui_*); anything that does more than read asks you here"
+ ],
+ "mcp.permissions": [
+  "Разрешения (чтение доступно всегда):",
+  "Permissions (reading is always allowed):"
+ ],
+ "mcp.show_token": [
+  "Показать токен",
+  "Show the token"
+ ],
+ "mcp.stdio": [
+  "Для Claude Desktop (claude_desktop_config.json):",
+  "For Claude Desktop (claude_desktop_config.json):"
+ ],
+ "mcp.stop": [
+  "Остановить",
+  "Stop"
+ ],
+ "mcp.title": [
+  "MCP-сервер (внешний агент)",
+  "MCP server (external agent)"
+ ],
+ "monitor.active": [
+  "Защита активна, сайтов под наблюдением: {0}",
+  "Protection is on, {0} sites watched"
+ ],
+ "monitor.apply": [
+  "Применить",
+  "Apply"
+ ],
+ "monitor.auto_apply": [
+  "Применять исправления без вопроса",
+  "Apply fixes without asking"
+ ],
+ "monitor.broken": [
+  "Не работает сейчас",
+  "Broken now"
+ ],
+ "monitor.capture_failed": [
+  "Наблюдение прервалось ({0}), повтор после паузы (сбой подряд: {1})",
+  "Watching broke off ({0}); retrying after a pause (failures in a row: {1})"
+ ],
+ "monitor.dismiss": [
+  "Отклонить",
+  "Dismiss"
+ ],
+ "monitor.journal": [
+  "Журнал изменений",
+  "Change journal"
+ ],
+ "monitor.no_solution": [
+  "Сначала подберите или импортируйте стратегию.",
+  "First tune or import a strategy."
+ ],
+ "monitor.repair_failed": [
+  "Восстановление {0} не удалось: {1}. Домен остался под прежней стратегией.",
+  "Repairing {0} failed: {1}. The domain stays under its old strategy."
+ ],
+ "monitor.start": [
+  "Включить защиту",
+  "Turn protection on"
+ ],
+ "monitor.state_broken": [
+  "не удалось починить",
+  "could not repair"
+ ],
+ "monitor.state_ok": [
+  "работает",
+  "working"
+ ],
+ "monitor.state_repairing": [
+  "чиню…",
+  "repairing…"
+ ],
+ "monitor.stop": [
+  "Выключить защиту",
+  "Turn protection off"
+ ],
+ "monitor.stopped": [
+  "Защита выключена",
+  "Protection is off"
+ ],
+ "monitor.subtitle": [
+  "Защита держит итоговую стратегию запущенной и следит за её сайтами. Если сайт перестал открываться, стратегия чинится сама.",
+  "Protection keeps the final strategy running and watches its sites. If a site stops opening, the strategy is repaired."
+ ],
+ "monitor.title": [
+  "Монитор",
+  "Monitor"
+ ],
+ "monitor.window": [
+  "успешно {0} из {1}, чаще всего: {2}",
+  "{0} of {1} ok, mostly: {2}"
+ ],
+ "nav.advisor": [
+  "Советник",
+  "Advisor"
+ ],
+ "nav.expert": [
+  "Эксперт",
+  "Expert"
+ ],
+ "nav.home": [
+  "Главная",
+  "Home"
+ ],
+ "nav.monitor": [
+  "Монитор",
+  "Monitor"
+ ],
+ "nav.reports": [
+  "Отчёты",
+  "Reports"
+ ],
+ "nav.resources": [
+  "Ресурсы",
+  "Resources"
+ ],
+ "nav.settings": [
+  "Настройки",
+  "Settings"
+ ],
+ "nav.wizard": [
+  "Подбор",
+  "Tuning"
+ ],
+ "outcome.noreply": [
+  "нет ответа",
+  "no reply"
+ ],
+ "outcome.ok": [
+  "норма",
+  "ok"
+ ],
+ "outcome.reset": [
+  "сброс",
+  "reset"
+ ],
+ "outcome.stalled": [
+  "зависание",
+  "stall"
+ ],
+ "outcome.stalled16k": [
+  "обрыв на 16 КБ",
+  "16 KB cut-off"
+ ],
+ "outcome.unknown": [
+  "неясно",
+  "unclear"
+ ],
+ "reports.copy": [
+  "Копировать текст",
+  "Copy the text"
+ ],
+ "reports.copy_prompt": [
+  "Копировать с промтом",
+  "Copy with the prompt"
+ ],
+ "reports.empty": [
+  "Подбора ещё не было.",
+  "No run yet."
+ ],
+ "reports.environment": [
+  "Окружение: виртуалка, антивирус, DoH… (необязательно)",
+  "Environment: VM, antivirus, DoH… (optional)"
+ ],
+ "reports.mask_domains": [
+  "Скрыть домены",
+  "Mask the domains"
+ ],
+ "reports.refresh": [
+  "Обновить",
+  "Refresh"
+ ],
+ "reports.save": [
+  "Собрать отчёт",
+  "Build the report"
+ ],
+ "reports.subtitle": [
+  "Всё о последнем подборе в одном архиве и в тексте для чата, с готовым промтом для Claude. Ваши адреса скрыты. Ничего не отправляется само.",
+  "Everything about the last run in one archive and as text for a chat, with a ready prompt for Claude. Your addresses are masked. Nothing is sent anywhere."
+ ],
+ "reports.title": [
+  "Отчёт для разбора",
+  "Report for analysis"
+ ],
+ "resources.approve": [
+  "Подтвердить…",
+  "Approve…"
+ ],
+ "resources.approve_diff": [
+  "Разница с действующей версией",
+  "Diff with the version in effect"
+ ],
+ "resources.approve_first": [
+  "Скрипт ещё ни разу не подтверждался",
+  "The script was never approved before"
+ ],
+ "resources.approve_from": [
+  "Сейчас действует версия {0}",
+  "Version {0} is in effect now"
+ ],
+ "resources.approve_full": [
+  "Весь текст",
+  "Whole text"
+ ],
+ "resources.approve_no": [
+  "Отмена",
+  "Cancel"
+ ],
+ "resources.approve_text": [
+  "Версия {0} будет запускаться движком с его правами и сможет уйти на роутер. {1}. Изменения: +{2} −{3} строк. Прочитайте весь текст.",
+  "Version {0} will run in the engine with its rights and may go to the router. {1}. Changes: +{2} −{3} lines. Read the whole text."
+ ],
+ "resources.approve_title": [
+  "Подтвердить Lua-скрипт «{0}»",
+  "Approve the Lua script '{0}'"
+ ],
+ "resources.approve_yes": [
+  "Подтвердить",
+  "Approve"
+ ],
+ "resources.approved": [
+  "подтверждён",
+  "approved"
+ ],
+ "resources.approved_done": [
+  "«{0}»: версия {1} подтверждена.",
+  "'{0}': version {1} approved."
+ ],
+ "resources.approved_new_draft": [
+  "подтверждена прежняя версия, новая ждёт подтверждения",
+  "an older version is approved, the new one waits for approval"
+ ],
+ "resources.bytes": [
+  "{0} байт",
+  "{0} bytes"
+ ],
+ "resources.check_failed": [
+  "Скрипт не прошёл проверку: исправьте ошибки и сохраните.",
+  "The script failed the check: fix the errors and save."
+ ],
+ "resources.delete": [
+  "Удалить",
+  "Delete"
+ ],
+ "resources.delete_text": [
+  "Удалить {0} «{1}» со всеми версиями ({2})? Это нельзя отменить.",
+  "Delete the {0} '{1}' with all its versions ({2})? This cannot be undone."
+ ],
+ "resources.delete_title": [
+  "Удалить ресурс?",
+  "Delete the resource?"
+ ],
+ "resources.deleted": [
+  "«{0}» удалён.",
+  "'{0}' deleted."
+ ],
+ "resources.draft": [
+  "черновик, не подтверждён",
+  "draft, not approved"
+ ],
+ "resources.encoding": [
+  "Формат:",
+  "Format:"
+ ],
+ "resources.hint_blob": [
+  "Байты в hex (пробелы и : можно) или base64, от 1 до 16384 байт. Имя — идентификатор Lua: буквы, цифры и _.",
+  "Bytes in hex (spaces and : allowed) or base64, 1 to 16384 bytes. The name is a Lua identifier: letters, digits and _."
+ ],
+ "resources.hint_hostlist": [
+  "Один домен в строке: example.com (поддомены входят сами), ^example.com — без поддоменов. Адреса сайтов и *. приводятся к доменам.",
+  "One domain per line: example.com (subdomains are included), ^example.com without subdomains. URLs and *. are turned into domains."
+ ],
+ "resources.hint_ipset": [
+  "Один адрес или подсеть в строке: 203.0.113.7, 198.51.100.0/24, 2001:db8::/32.",
+  "One address or subnet per line: 203.0.113.7, 198.51.100.0/24, 2001:db8::/32."
+ ],
+ "resources.hint_lua": [
+  "Функция десинхронизации: function имя(ctx, desync) … end. Имена функций zapret2 занимать нельзя. Сохранение создаёт черновик; в работу его включает «Подтвердить».",
+  "A desync function: function name(ctx, desync) … end. zapret2's function names are taken. Saving makes a draft; Approve puts it to work."
+ ],
+ "resources.items": [
+  "{0} строк",
+  "{0} entries"
+ ],
+ "resources.kind_blob": [
+  "Блобы",
+  "Blobs"
+ ],
+ "resources.kind_hostlist": [
+  "Хостлисты",
+  "Hostlists"
+ ],
+ "resources.kind_ipset": [
+  "IP-списки (ipset)",
+  "IP lists (ipset)"
+ ],
+ "resources.kind_lua": [
+  "Lua-скрипты",
+  "Lua scripts"
+ ],
+ "resources.name": [
+  "Имя (a-z, 0-9, _ и -)",
+  "Name (a-z, 0-9, _ and -)"
+ ],
+ "resources.new": [
+  "Новый",
+  "New"
+ ],
+ "resources.no_router": [
+  "Роутер не настроен: укажите адрес zapret-gui или роутера nfqws2-keenetic в настройках или в мастере.",
+  "No router is configured: set the zapret-gui address or the nfqws2-keenetic router in the settings or the wizard."
+ ],
+ "resources.push": [
+  "На роутер…",
+  "To the router…"
+ ],
+ "resources.push_title": [
+  "Отправить {0} «{1}» на роутер ({2})?",
+  "Send the {0} '{1}' to the router ({2})?"
+ ],
+ "resources.reload": [
+  "Обновить",
+  "Refresh"
+ ],
+ "resources.router": [
+  "Роутер: {0}",
+  "Router: {0}"
+ ],
+ "resources.router_delete": [
+  "Удалить с роутера…",
+  "Delete from the router…"
+ ],
+ "resources.router_delete_title": [
+  "Удалить {0} «{1}» с роутера ({2})?",
+  "Delete the {0} '{1}' from the router ({2})?"
+ ],
+ "resources.router_done": [
+  "Готово: {0}.",
+  "Done: {0}."
+ ],
+ "resources.router_failed": [
+  "Роутер: ошибка — {0}",
+  "Router: failed — {0}"
+ ],
+ "resources.router_password": [
+  "Пароль (только на этот сеанс)",
+  "Password (this session only)"
+ ],
+ "resources.router_preparing": [
+  "Готовлю план для роутера…",
+  "Preparing the plan for the router…"
+ ],
+ "resources.save": [
+  "Сохранить",
+  "Save"
+ ],
+ "resources.save_first": [
+  "Сначала сохраните изменения: подтверждается сохранённая версия.",
+  "Save your changes first: the saved version is what gets approved."
+ ],
+ "resources.saved": [
+  "Сохранено.",
+  "Saved."
+ ],
+ "resources.saved_draft": [
+  "Сохранено как черновик: скрипт не запустится, пока вы его не подтвердите.",
+  "Saved as a draft: the script does not run until you approve it."
+ ],
+ "resources.subtitle": [
+  "Хостлисты, ipset'ы, блобы и свои Lua-скрипты. Ресурс, который использует стратегия, удалить нельзя. Lua-скрипт работает с правами движка: он запускается и уходит на роутер только после вашего подтверждения.",
+  "Hostlists, ipsets, blobs and your own Lua scripts. A resource a strategy uses cannot be deleted. A Lua script runs with the engine's rights: it runs and goes to the router only after you approve it."
+ ],
+ "resources.title": [
+  "Ресурсы стратегий",
+  "Strategy resources"
+ ],
+ "resources.unchanged": [
+  "Содержимое не изменилось.",
+  "The content did not change."
+ ],
+ "resources.used_by": [
+  "используется: {0}",
+  "used by {0}"
+ ],
+ "resources.version": [
+  "версия {0}",
+  "version {0}"
+ ],
+ "settings.auto_apply_hint": [
+  "По умолчанию найденное исправление ждёт вашего «Применить».",
+  "By default a found fix waits for your Apply."
+ ],
+ "settings.forget_ssh": [
+  "Забыть ключи SSH роутеров",
+  "Forget routers' SSH keys"
+ ],
+ "settings.gui_token": [
+  "MCP-токен zapret-gui",
+  "zapret-gui MCP token"
+ ],
+ "settings.large_font": [
+  "Крупный шрифт",
+  "Large font"
+ ],
+ "settings.learning": [
+  "Учиться на своих результатах: сначала пробовать то, что срабатывало",
+  "Learn from my results: try what worked before first"
+ ],
+ "settings.learning_hint": [
+  "Порядок перебора подстраивается под вашего провайдера и тип блокировки. Всё хранится локально, ничего не отправляется.",
+  "The search order adapts to your provider and block type. Everything stays on this computer; nothing is sent."
+ ],
+ "settings.mode": [
+  "Глубина подбора",
+  "Search depth"
+ ],
+ "settings.mode_full": [
+  "Полностью",
+  "Full"
+ ],
+ "settings.mode_quick": [
+  "Быстро",
+  "Quick"
+ ],
+ "settings.mode_standard": [
+  "Стандартно",
+  "Standard"
+ ],
+ "settings.privacy": [
+  "Телеметрии нет. Данные хранятся только локально:",
+  "No telemetry. Data stays on this computer only:"
+ ],
+ "settings.provider_asn": [
+  "ASN провайдера, например AS12389 (необязательно)",
+  "Provider ASN, e.g. AS12389 (optional)"
+ ],
+ "settings.router": [
+  "Роутер",
+  "Router"
+ ],
+ "settings.ssh_forgotten": [
+  "Ключи забыты: при следующем подключении отпечаток покажут снова",
+  "Keys forgotten: the fingerprint is shown again on the next connection"
+ ],
+ "settings.theme": [
+  "Тема",
+  "Theme"
+ ],
+ "settings.theme_dark": [
+  "Тёмная",
+  "Dark"
+ ],
+ "settings.theme_light": [
+  "Светлая",
+  "Light"
+ ],
+ "settings.theme_system": [
+  "Как в системе",
+  "System"
+ ],
+ "settings.title": [
+  "Настройки",
+  "Settings"
+ ],
+ "settings.token_session": [
+  "Токен хранится только до закрытия программы",
+  "The token is kept only until the app closes"
+ ],
+ "stage.classify": [
+  "диагностика",
+  "diagnostics"
+ ],
+ "stage.done": [
+  "готово",
+  "done"
+ ],
+ "stage.failed": [
+  "не удалось",
+  "failed"
+ ],
+ "stage.finalcheck": [
+  "проверка",
+  "check"
+ ],
+ "stage.refine": [
+  "уточнение",
+  "refining"
+ ],
+ "stage.search": [
+  "подбор",
+  "search"
+ ],
+ "stage.skipped": [
+  "не нужно",
+  "not needed"
+ ],
+ "stage.unify": [
+  "объединение",
+  "merging"
+ ],
+ "stage.waiting": [
+  "ожидает",
+  "waiting"
+ ],
+ "wizard.agent_start": [
+  "Запускаю агент (может появиться запрос прав)…",
+  "Starting the agent (a permission prompt may appear)…"
+ ],
+ "wizard.all_major": [
+  "Отметить крупные",
+  "Check the major ones"
+ ],
+ "wizard.found_all": [
+  "Все найденные варианты",
+  "Everything found"
+ ],
+ "wizard.input_hint": [
+  "Сайты, адреса или ссылки, по одному в строке. Можно добавить готовый набор.",
+  "Sites, addresses or links, one per line. You can add a ready set."
+ ],
+ "wizard.log": [
+  "Журнал событий",
+  "Event log"
+ ],
+ "wizard.no_solution": [
+  "Готовой стратегии нет. Соберите отчёт на странице «Отчёты».",
+  "No strategy yet. Build a report on the Reports page."
+ ],
+ "wizard.not_found": [
+  "Рабочая стратегия не найдена",
+  "No working strategy found"
+ ],
+ "wizard.nothing": [
+  "Введите хотя бы один сайт или выберите провайдера.",
+  "Enter at least one site or pick a provider."
+ ],
+ "wizard.open_pages": [
+  "Проверять найденное в браузере (дольше, но надёжнее)",
+  "Check what is found in a browser (slower but surer)"
+ ],
+ "wizard.provider_no_targets": [
+  "Не нашёл в диапазонах провайдера адресов, которые отвечают.",
+  "Found no answering addresses in the provider's ranges."
+ ],
+ "wizard.provider_ranges": [
+  "Загружаю диапазоны провайдера…",
+  "Loading the provider's ranges…"
+ ],
+ "wizard.providers": [
+  "Провайдеры облаков и CDN",
+  "Cloud and CDN providers"
+ ],
+ "wizard.providers_hint": [
+  "Для блокировок целых диапазонов: стратегия подбирается на адресах провайдера и ограничивается его ipset.",
+  "For blocks of whole ranges: the strategy is tuned on the provider's addresses and limited by its ipset."
+ ],
+ "wizard.result_ok": [
+  "{0}: работает {1}/{2} · {3}",
+  "{0}: works {1}/{2} · {3}"
+ ],
+ "wizard.mcp_busy": [
+  "Сейчас подбором управляет внешний агент (MCP). Дождитесь конца или нажмите «Стоп» на баннере.",
+  "An external agent (MCP) is tuning right now. Wait until it finishes or press Stop on the banner."
+ ],
+ "wizard.router_too_many": [
+  "В zapret-gui на роутере помещается не больше {0} профилей, а вместе с текущей стратегией их {1}. Не войдут: {2}. Уменьшите число профилей или выберите в zapret-gui стратегию покороче.",
+  "zapret-gui on the router takes at most {0} profiles, and together with the current strategy there are {1}. These would be dropped: {2}. Use fewer profiles or pick a shorter strategy in zapret-gui."
+ ],
+ "wizard.router_cannot": [
+  "Эту стратегию нельзя перенести в эксперимент zapret-gui:\n{0}\nСохраните её через экспорт (шаг 5).",
+  "This strategy cannot be carried into a zapret-gui experiment:\n{0}\nSave it through the export (step 5)."
+ ],
+ "wizard.router_commit": [
+  "Закрепить на роутере…",
+  "Keep on the router…"
+ ],
+ "wizard.router_commit_text": [
+  "Проверка с роутера:\n{0}\n\nСтратегия будет сохранена в zapret-gui как пользовательская {1} и станет активной. Если отказаться, роутер сразу вернёт прежнее состояние.\n\n{2}",
+  "Probes from the router:\n{0}\n\nThe strategy is saved in zapret-gui as the user strategy {1} and made active. If you decline, the router restores its previous state at once.\n\n{2}"
+ ],
+ "wizard.router_commit_title": [
+  "Закрепить стратегию на роутере?",
+  "Keep the strategy on the router?"
+ ],
+ "wizard.router_committed": [
+  "Закреплено на роутере. Обратная связь с роутера пишется в журнал мониторинга.",
+  "Kept on the router. The router's feedback goes to the monitor's journal."
+ ],
+ "wizard.router_connected": [
+  "Подключено к zapret-gui {0}, профилей текущей стратегии: {1}",
+  "Connected to zapret-gui {0}, current strategy profiles: {1}"
+ ],
+ "wizard.router_domains_only": [
+  "Для роутера укажите сайты (домены).",
+  "For the router, enter sites (domains)."
+ ],
+ "wizard.router_failed": [
+  "Ошибка zapret-gui: {0}",
+  "zapret-gui error: {0}"
+ ],
+ "wizard.router_found": [
+  "Стратегия найдена на роутере. Её можно закрепить: роутер применит её, проверит сайты, и только после вашего подтверждения она сохранится.",
+  "A strategy was found on the router. You can keep it: the router applies it, probes the sites, and it is saved only after you confirm."
+ ],
+ "wizard.router_hint": [
+  "Стратегии испытываются прямо на роутере: zapret-gui по очереди применяет варианты, проверяет сайты с самого роутера и сам возвращает прежнее состояние. Нужны адрес zapret-gui и MCP-токен с разрешением experiments (с ним control и probes). Права администратора на ПК не нужны. Провайдеры подбираются только на ПК.",
+  "Strategies are tried on the router itself: zapret-gui applies the variants in turn, probes the sites from the router and restores its previous state by itself. You need zapret-gui's address and an MCP token with the experiments permission (with control and probes). No administrator rights on this PC. Providers are tuned on the PC only."
+ ],
+ "wizard.router_keeping": [
+  "Роутер применяет стратегию и проверяет сайты…",
+  "The router applies the strategy and probes the sites…"
+ ],
+ "wizard.router_missing_tools": [
+  "Токену zapret-gui не хватает инструментов: {0}. Включите разрешение experiments (вместе с control и probes) в настройках MCP zapret-gui.",
+  "The zapret-gui token lacks these tools: {0}. Enable the experiments permission (with control and probes) in zapret-gui's MCP settings."
+ ],
+ "wizard.router_not_kept": [
+  "Роутер не оставил стратегию: {0}",
+  "The router did not keep the strategy: {0}"
+ ],
+ "wizard.router_not_set": [
+  "Укажите адрес zapret-gui и MCP-токен.",
+  "Enter zapret-gui's address and MCP token."
+ ],
+ "wizard.router_rolled_back": [
+  "Роутер вернул прежнее состояние.",
+  "The router restored its previous state."
+ ],
+ "wizard.router_saved": [
+  "Закреплено на роутере и сохранено как {0}. Обратная связь с роутера пишется в журнал мониторинга.",
+  "Kept on the router and saved as {0}. The router's feedback goes to the monitor's journal."
+ ],
+ "wizard.router_session_text": [
+  "zapret-gui: {0}\nСайты: {1}\nТекущая стратегия роутера: {2} (профилей: {3}), её профили остаются после испытуемого.\n\nСначала роутер проверит сайты без обхода, затем по очереди применит варианты и проверит каждый. После каждого эксперимента роутер сам вернёт прежнее состояние (и при обрыве связи тоже). Навсегда ничего не сохраняется без отдельного подтверждения.",
+  "zapret-gui: {0}\nSites: {1}\nThe router's current strategy: {2} ({3} profiles); its profiles stay after the one on trial.\n\nThe router first probes the sites without bypass, then applies the variants in turn and probes each. After every experiment the router restores its previous state by itself (also if the connection drops). Nothing is kept without a separate confirmation."
+ ],
+ "wizard.router_session_title": [
+  "Начать испытания на роутере?",
+  "Start trials on the router?"
+ ],
+ "wizard.solution": [
+  "Готово: профилей в итоговой стратегии {0}. Дальше — экспорт.",
+  "Done: {0} profiles in the final strategy. Next is export."
+ ],
+ "wizard.start": [
+  "Начать",
+  "Start"
+ ],
+ "wizard.step1": [
+  "Что не работает?",
+  "What does not work?"
+ ],
+ "wizard.step2": [
+  "Диагностика и подбор",
+  "Diagnostics and search"
+ ],
+ "wizard.step4": [
+  "Результат проверки",
+  "Check result"
+ ],
+ "wizard.step5": [
+  "Куда установить",
+  "Where to install"
+ ],
+ "wizard.steps": [
+  "1 Что не работает · 2 Диагностика · 3 Подбор · 4 Проверка · 5 Экспорт",
+  "1 What fails · 2 Diagnostics · 3 Search · 4 Check · 5 Export"
+ ],
+ "wizard.title": [
+  "Подбор стратегии",
+  "Strategy tuning"
+ ],
+ "wizard.trial_fail": [
+  "{0}: неудача ({1}) {2}",
+  "{0}: failed ({1}) {2}"
+ ],
+ "wizard.trial_ok": [
+  "{0}: загружено {1} КБ",
+  "{0}: loaded {1} KB"
+ ],
+ "wizard.trying": [
+  "{0}: пробую [{1}] {2}",
+  "{0}: trying [{1}] {2}"
+ ],
+ "wizard.where": [
+  "Где подбирать:",
+  "Where to tune:"
+ ],
+ "wizard.where_pc": [
+  "Этот ПК",
+  "This PC"
+ ],
+ "wizard.where_router": [
+  "Роутер через zapret-gui",
+  "Router through zapret-gui"
+ ]
+}

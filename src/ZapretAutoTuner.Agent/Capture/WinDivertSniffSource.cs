@@ -32,7 +32,11 @@ internal sealed partial class WinDivertSniffSource : ICaptureSource
     {
         if (!name.StartsWith("WinDivert", StringComparison.OrdinalIgnoreCase))
             return 0;
-        var bundled = Path.Combine(Tools.Zapret2Bundle.Locate().Root, "WinDivert.dll");
+        // the Agent's verified copy when the bundle is writable by others (final review 9); none when it did not verify
+        var root = Engine.EngineManager.CaptureBundleRoot is { } prepared ? prepared() : Tools.Zapret2Bundle.Locate().Root;
+        if (root is null)
+            return 0;
+        var bundled = Path.Combine(root, "WinDivert.dll");
         return File.Exists(bundled) && NativeLibrary.TryLoad(bundled, out var h) ? h : 0;
     }
 

@@ -41,7 +41,7 @@ internal static class TestEnv
             dir=$(dirname "$0")
             for a in "$@"; do
               case "$a" in
-                --version) echo "github version v1.0.5.2 (fake) lua_compat_ver 6"; exit 0;;
+                --version) echo "github version v1.0.6 (fake) lua_compat_ver 6"; exit 0;;
                 --dry-run) echo "parameters ok"; exit 0;;
                 --intercept=0) echo "no intercept quit"; exit 0;;
               esac

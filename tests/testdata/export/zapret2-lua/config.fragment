@@ -1,0 +1,11 @@
+NFQWS2_ENABLE=1
+NFQWS2_PORTS_TCP=80,443
+NFQWS2_PORTS_UDP=443
+MODE_FILTER=hostlist
+NFQWS2_OPT="
+--lua-init=@/opt/zapret2/lua/zt-twice.lua
+--blob=tls_wl:@/opt/zapret2/files/fake/zt_tls_wl.bin
+--name=tcp1 --filter-tcp=443 --filter-l7=tls --hostlist=/opt/zapret2/ipset/zt-tcp1.txt --payload=tls_client_hello --lua-desync=fake:blob=tls_wl:tcp_md5 --lua-desync=zt_twice:count=2 --lua-desync=multidisorder:pos=1,midsld --new
+--name=tcp2 --filter-tcp=80,443 --filter-l7=http,tls --hostlist=/opt/zapret2/ipset/zt-tcp2.txt --payload=tls_client_hello --lua-desync=multisplit:pos=1:seqovl=5:seqovl_pattern=0x1603030000 --payload=http_req --lua-desync=multisplit:pos=method+2 --new
+--name=quic1 --filter-udp=443 --filter-l7=quic --hostlist=/opt/zapret2/ipset/zt-quic1.txt --payload=quic_initial --lua-desync=fake:blob=fake_default_quic:repeats=6
+"

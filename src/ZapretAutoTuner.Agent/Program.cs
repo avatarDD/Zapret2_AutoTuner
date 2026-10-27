@@ -20,6 +20,9 @@ catch (ArgumentException e)
     return 2;
 }
 
+if (options.Ignored.Count > 0)
+    Console.Error.WriteLine($"ztuner-agent: started through pkexec, ignoring {string.Join(", ", options.Ignored)}");
+
 await using var host = new AgentHost(options);
 host.RecoverLeftovers();
 if (options.CleanupOnly)

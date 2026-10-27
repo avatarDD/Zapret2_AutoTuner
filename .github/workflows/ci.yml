@@ -12,6 +12,7 @@ permissions:
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
+  AVALONIA_TELEMETRY_OPTOUT: 1
 
 jobs:
   skills:
@@ -32,8 +33,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 10.0.x
       - name: Restore
@@ -44,11 +45,14 @@ jobs:
         run: dotnet test ZapretAutoTuner.slnx -c Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        # diagnostics only: a full artifact quota must not fail the tests
+        continue-on-error: true
         with:
           name: test-results-${{ matrix.os }}
           path: TestResults
           if-no-files-found: ignore
+          retention-days: 3
 
   # PLAN 1.2: the real engine through the Agent. Linux: nfqws2 + nft in a network namespace (root).
   # Windows: winws2 + WinDivert sniff capture (runners are Administrator).
@@ -65,11 +69,11 @@ jobs:
           - rid: win-x64
             os: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 10.0.x
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
       - name: Bundle zapret2
@@ -120,11 +124,11 @@ jobs:
             os: ubuntu-latest
             run_engine: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 10.0.x
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
       - name: Bundle zapret2
@@ -148,8 +152,10 @@ jobs:
           "$eng" --version | tee engine-version.txt
           grep -q "lua_compat_ver 6" engine-version.txt
           if [ "${{ runner.os }}" = "Windows" ]; then "$out/ztuner-agent.exe" --version; else "$out/ztuner-agent" --version; fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        continue-on-error: true
         with:
           name: ZapretAutoTuner-${{ matrix.rid }}
           path: artifacts/publish/${{ matrix.rid }}
           if-no-files-found: error
+          retention-days: 3

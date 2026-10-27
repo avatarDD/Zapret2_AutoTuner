@@ -1,0 +1,170 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.WizardView"
+             x:DataType="vm:WizardViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Spacing="4">
+      <TextBlock Classes="h1" Text="{l:T wizard.title}" />
+      <TextBlock Classes="muted" Text="{l:T wizard.steps}" />
+      <TextBlock Classes="error" Text="{Binding Error}" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    </StackPanel>
+
+    <!-- navigation -->
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0" HorizontalAlignment="Right">
+      <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" IsVisible="{Binding HasProblem}" />
+      <Button Content="{l:T common.back}" Command="{Binding BackCommand}" IsVisible="{Binding !IsStep1}" IsEnabled="{Binding !Running}" />
+      <Button Content="{l:T common.next}" Command="{Binding NextCommand}" IsVisible="{Binding IsStep4}" />
+    </StackPanel>
+
+    <Panel Margin="0,12,0,0">
+      <!-- step 1: what does not work -->
+      <ScrollViewer IsVisible="{Binding IsStep1}">
+        <StackPanel Spacing="10">
+          <TextBlock Classes="h2" Text="{l:T wizard.step1}" />
+          <!-- where to tune: this PC or the router through zapret-gui (PLAN 4a.4) -->
+          <StackPanel Orientation="Horizontal" Spacing="16">
+            <TextBlock Text="{l:T wizard.where}" VerticalAlignment="Center" />
+            <RadioButton GroupName="where" Content="{l:T wizard.where_pc}" IsChecked="{Binding OnPc}" />
+            <RadioButton GroupName="where" Content="{l:T wizard.where_router}" IsChecked="{Binding OnRouter}" />
+          </StackPanel>
+          <Border Classes="card" IsVisible="{Binding OnRouter}">
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
+              <TextBlock Grid.ColumnSpan="2" Classes="muted" Text="{l:T wizard.router_hint}" TextWrapping="Wrap" Margin="0,0,0,6" />
+              <TextBlock Grid.Row="1" Text="{l:T export.gui_url}" VerticalAlignment="Center" Margin="0,0,8,6" />
+              <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding GuiUrl}" Watermark="http://192.168.1.1:8080" Margin="0,0,0,6" />
+              <TextBlock Grid.Row="2" Text="{l:T settings.gui_token}" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding GuiToken}" PasswordChar="•" />
+            </Grid>
+          </Border>
+          <TextBlock Classes="muted" Text="{l:T wizard.input_hint}" />
+          <ItemsControl ItemsSource="{Binding PresetNames}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <Button Content="{Binding}" Margin="0,0,6,6"
+                        Command="{Binding $parent[ItemsControl].((vm:WizardViewModel)DataContext).AddPresetCommand}" CommandParameter="{Binding}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBox Text="{Binding InputText}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="140" MaxHeight="260" Watermark="youtube.com&#10;discord.com&#10;https://example.org/page" />
+          <Expander Header="{l:T wizard.providers}">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="muted" Text="{l:T wizard.providers_hint}" />
+              <Button Content="{l:T wizard.all_major}" Command="{Binding AllMajorCommand}" />
+              <ItemsControl ItemsSource="{Binding Providers}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ProviderItem">
+                    <CheckBox Content="{Binding Name}" IsChecked="{Binding Checked}" Margin="0,0,12,0" MinWidth="160" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Expander>
+          <CheckBox Content="{l:T wizard.open_pages}" IsChecked="{Binding OpenPages}" />
+          <Button Classes="accent" Padding="24,10" Content="{l:T wizard.start}" Command="{Binding StartCommand}" />
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- steps 2-3: diagnostics and search -->
+      <DockPanel IsVisible="{Binding IsStep2}">
+        <StackPanel DockPanel.Dock="Top" Spacing="6">
+          <TextBlock Classes="h2" Text="{l:T wizard.step2}" />
+          <Grid ColumnDefinitions="*,Auto">
+            <ProgressBar Value="{Binding Percent}" Maximum="100" Height="10" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" Margin="12,0,0,0">
+              <TextBlock Text="{Binding Percent, StringFormat={}{0:0}%}" />
+              <TextBlock Text="{Binding ElapsedText}" />
+              <TextBlock Text="{Binding RemainingText}" Classes="muted" />
+              <Button Content="{l:T common.stop}" Command="{Binding StopCommand}" IsVisible="{Binding Running}" />
+            </StackPanel>
+          </Grid>
+          <TextBlock Text="{Binding CurrentLine}" Classes="muted" TextTrimming="CharacterEllipsis" FontFamily="monospace" />
+        </StackPanel>
+        <Grid RowDefinitions="*,Auto,140" Margin="0,8,0,0">
+          <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Targets}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:TargetRowViewModel">
+                  <Border Classes="card" Margin="0,0,0,6">
+                    <Grid ColumnDefinitions="220,140,*,Auto">
+                      <TextBlock Text="{Binding Host}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="1" Text="{Binding StageText}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="2" Text="{Binding Message}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="3" Text="{Binding Found, StringFormat='✓ {0}'}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+          <TextBlock Grid.Row="1" Classes="h2" Text="{l:T wizard.log}" Margin="0,8,0,4" />
+          <ListBox Grid.Row="2" ItemsSource="{Binding Log}" FontFamily="monospace" FontSize="12" />
+        </Grid>
+      </DockPanel>
+
+      <!-- step 4: check results -->
+      <ScrollViewer IsVisible="{Binding IsStep4}">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="h2" Text="{l:T wizard.step4}" />
+          <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+          <StackPanel Spacing="6" IsVisible="{Binding OnRouter}">
+            <Button Classes="accent" Content="{l:T wizard.router_commit}" Command="{Binding CommitRouterCommand}" IsVisible="{Binding CanCommitRouter}" IsEnabled="{Binding !Running}" />
+            <SelectableTextBlock Text="{Binding RouterStatus}" TextWrapping="Wrap" />
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding Results}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <SelectableTextBlock Text="{Binding}" TextWrapping="Wrap" FontFamily="monospace" Margin="0,2" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Expander Header="{l:T wizard.found_all}">
+            <ItemsControl ItemsSource="{Binding FoundList}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <SelectableTextBlock Text="{Binding}" TextWrapping="Wrap" FontFamily="monospace" FontSize="12" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- step 5: export -->
+      <ScrollViewer IsVisible="{Binding IsStep5}">
+        <StackPanel Spacing="10">
+          <TextBlock Classes="h2" Text="{l:T wizard.step5}" />
+          <ItemsControl ItemsSource="{Binding Tiles}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ExportTile">
+                <Button Width="230" Height="110" Margin="0,0,8,8" HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
+                        Command="{Binding $parent[ItemsControl].((vm:WizardViewModel)DataContext).ExportCommand}" CommandParameter="{Binding Key}">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="15" />
+                    <TextBlock Text="{Binding Hint}" Classes="muted" FontSize="12" />
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4">
+            <TextBlock Text="{l:T export.router_host}" VerticalAlignment="Center" Margin="0,0,8,6" />
+            <TextBox Grid.Column="1" Text="{Binding RouterHost}" Watermark="192.168.1.1" Margin="0,0,0,6" />
+            <TextBlock Grid.Row="1" Text="{l:T export.router_password}" VerticalAlignment="Center" Margin="0,0,8,6" />
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding RouterPassword}" PasswordChar="•" Margin="0,0,0,6" />
+            <TextBlock Grid.Row="2" Text="{l:T export.gui_url}" VerticalAlignment="Center" Margin="0,0,8,6" />
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding GuiUrl}" Watermark="http://192.168.1.1:8080" Margin="0,0,0,6" />
+            <TextBlock Grid.Row="3" Text="{l:T export.gui_password}" VerticalAlignment="Center" Margin="0,0,8,6" />
+            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding GuiPassword}" PasswordChar="•" Margin="0,0,0,6" />
+          </Grid>
+          <TextBlock Classes="muted" Text="{l:T export.targets_hint}" />
+          <SelectableTextBlock Text="{Binding ExportStatus}" TextWrapping="Wrap" />
+        </StackPanel>
+      </ScrollViewer>
+    </Panel>
+  </DockPanel>
+</UserControl>

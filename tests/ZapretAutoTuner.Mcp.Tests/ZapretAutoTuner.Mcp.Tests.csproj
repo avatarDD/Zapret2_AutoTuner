@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZapretAutoTuner.Mcp\ZapretAutoTuner.Mcp.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="golden\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- zapret-gui's MCP experiments in memory, shared with the Tuning tests -->
+    <Compile Include="..\ZapretAutoTuner.Tuning.Tests\RouterGui.cs" Link="RouterGui.cs" />
+  </ItemGroup>
+</Project>

@@ -1,9 +1,33 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+        xmlns:l="using:ZapretAutoTuner.App.Loc"
         x:Class="ZapretAutoTuner.App.MainWindow"
-        Title="Zapret2 AutoTuner" Width="900" Height="600">
-  <StackPanel Margin="24" Spacing="12">
-    <TextBlock Text="Zapret2 AutoTuner" FontSize="28" FontWeight="SemiBold" />
-    <TextBlock x:Name="VersionText" />
-  </StackPanel>
+        x:DataType="vm:MainViewModel"
+        Title="Zapret2 AutoTuner" Width="1100" Height="740" MinWidth="760" MinHeight="520">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="#D9A21B" Padding="12,6" IsVisible="{Binding Mcp.BannerVisible}">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="{l:T mcp.stop}" Command="{Binding Mcp.StopCommand}" />
+        <TextBlock Text="{Binding Mcp.BannerText}" Foreground="Black" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
+      </DockPanel>
+    </Border>
+    <Border DockPanel.Dock="Left" Width="200" Padding="8" Background="{DynamicResource LayerFillColorDefaultBrush}">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="4,8">
+          <TextBlock Text="{Binding AgentStatus}" Classes="error" FontSize="12" IsVisible="{Binding AgentStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <TextBlock Text="{Binding Version}" Classes="muted" FontSize="11" />
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Top" Text="AutoTuner" FontSize="20" FontWeight="SemiBold" Margin="8,4,8,12" />
+        <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding Current}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:PageViewModel">
+              <TextBlock Text="{Binding Title}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+    <ContentControl Content="{Binding Current}" Margin="20,16" />
+  </DockPanel>
 </Window>

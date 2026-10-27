@@ -37,7 +37,14 @@ public static class StrategyMutator
         "ip_ttl", "ip6_ttl", "ip_autottl", "ip6_autottl", "tcp_seq", "tcp_ack", "tcp_ts", "tcp_md5", "tcp_flags_set", "tcp_flags_unset", "badsum",
     };
 
-    public static List<Mutation> Mutate(Strategy parent, GeneratorOptions? options = null, IReadOnlyDictionary<string, string>? blobs = null)
+    /// <summary>Fakes for UDP: the QUIC fake and zeros (a TLS hello means nothing to a UDP DPI).</summary>
+    private static readonly string[] UdpFakeBlobs = ["0x00000000000000000000000000000000", "fake_default_quic"];
+
+    private static readonly int[] UdplenIncrements = [2, 4, 8, 16, -2];
+
+    /// <param name="l4">The candidate's transport (<see cref="StrategyCandidate.L4"/>). When null it is inferred from the
+    /// payload filter (UDP payload types), which misses families without a filter, so callers pass it.</param>
+    public static List<Mutation> Mutate(Strategy parent, GeneratorOptions? options = null, IReadOnlyDictionary<string, string>? blobs = null, L4Kind? l4 = null)
     {
         options ??= new GeneratorOptions();
         blobs ??= new Dictionary<string, string> { [StrategyGenerator.WhiteBlob] = StrategyGenerator.WhiteHelloHex(options.WhiteSni) };
@@ -46,7 +53,7 @@ public static class StrategyMutator
             Platform = options.Platform,
             DeclaredBlobs = blobs.ToDictionary(kv => kv.Key, kv => (long?)((kv.Value.Length - 2) / 2)),
         });
-        var l4 = parent.Actions.OfType<PayloadFilter>().Any(p => p.Types.Contains("quic_initial")) ? L4Kind.Udp : L4Kind.Tcp;
+        var kind = l4 ?? InferL4(parent);
 
         var raw = new List<Mutation>();
         var actions = parent.Actions;
@@ -55,6 +62,14 @@ public static class StrategyMutator
             if (actions[i] is not LuaDesync { Call: var call })
                 continue;
             Mutation With(LuaCall c, string what) => new(Replace(parent, i, c), $"{call.Function}: {what}");
+            // an instance-level payload filter (payload=unknown for unrecognised protocols) goes to new calls too
+            LuaCall Inherit(LuaCall c) => call["payload"] is { } pl && !c.Has("payload") ? c.With("payload", pl) : c;
+
+            if (kind == L4Kind.Udp)
+            {
+                MutateUdp(call, With, raw);
+                continue;
+            }
 
             // repeats 1 → 2 → 6 → 11
             if (call.Function is "fake" or "rst" or "send")
@@ -94,7 +109,7 @@ public static class StrategyMutator
             {
                 foreach (var b in FakeBlobs.Where(b => b != call["blob"] && (b.StartsWith("0x", StringComparison.Ordinal) || blobs.ContainsKey(b) || b.StartsWith("fake_default", StringComparison.Ordinal))))
                     raw.Add(With(call.With("blob", b), $"blob={b}"));
-                if (!call.Has("tls_mod") && l4 == L4Kind.Tcp)
+                if (!call.Has("tls_mod") && call["payload"] is null)
                 {
                     raw.Add(With(call.With("tls_mod", "rnd,dupsid"), "tls_mod=rnd,dupsid"));
                     raw.Add(With(call.With("tls_mod", $"rnd,dupsid,sni={options.WhiteSni}"), $"tls_mod=…,sni={options.WhiteSni}"));
@@ -142,16 +157,22 @@ public static class StrategyMutator
                     raw.Add(With(c, $"{call.Function} → {sister}"));
                 }
                 if (call.Function == "multisplit" && FirstPos(pos) is { } first && !parent.Calls.Any(x => x.Function == "fake"))
-                    raw.Add(With(new LuaCall("fakedsplit", [new LuaArg("pos", first), new LuaArg("tcp_md5")]), "multisplit → fakedsplit"));
+                    raw.Add(With(Inherit(new LuaCall("fakedsplit", [new LuaArg("pos", first), new LuaArg("tcp_md5")])), "multisplit → fakedsplit"));
             }
         }
 
         // a fake in front of a split-only strategy, or a second fake with another blob
         var fakes = parent.Calls.Where(c => c.Function == "fake").ToList();
         int firstDesync = actions.Select((a, i) => (a, i)).First(x => x.a is LuaDesync).i;
-        if (l4 == L4Kind.Tcp && parent.Calls.Any(c => SplitFunctions.Contains(c.Function)) && fakes.Count == 0)
-            raw.Add(new Mutation(Insert(parent, firstDesync, LuaCall.Parse("fake:blob=fake_default_tls:tcp_md5")), "+fake"));
-        else if (l4 == L4Kind.Tcp && fakes.Count == 1)
+        var splitCall = parent.Calls.FirstOrDefault(c => SplitFunctions.Contains(c.Function));
+        if (kind == L4Kind.Tcp && splitCall is not null && fakes.Count == 0)
+        {
+            var fake = LuaCall.Parse("fake:blob=fake_default_tls:tcp_md5");
+            if (splitCall["payload"] is { } pl)
+                fake = fake.With("payload", pl);
+            raw.Add(new Mutation(Insert(parent, firstDesync, fake), "+fake"));
+        }
+        else if (kind == L4Kind.Tcp && fakes.Count == 1)
         {
             var other = FakeBlobs.First(b => b != fakes[0]["blob"] && (b != StrategyGenerator.WhiteBlob || blobs.ContainsKey(b)));
             var second = fakes[0].With("blob", other).Without("tls_mod");
@@ -164,10 +185,41 @@ public static class StrategyMutator
         {
             if (!options.TcpTimestamps && m.Strategy.ToString().Contains("tcp_ts=", StringComparison.Ordinal))
                 continue;
-            if (seen.Add(m.Strategy.ToString()) && validator.ValidateStrategy(m.Strategy, l4).Ok)
+            if (seen.Add(m.Strategy.ToString()) && validator.ValidateStrategy(m.Strategy, kind).Ok)
                 result.Add(m);
         }
         return result;
+    }
+
+    /// <summary>UDP payload types: a strategy filtered by one of them runs on UDP.</summary>
+    private static readonly HashSet<string> UdpPayloads = new(StringComparer.Ordinal)
+    {
+        "quic_initial", "stun", "wireguard_initiation", "wireguard_response", "wireguard_cookie", "wireguard_keepalive", "wireguard_data",
+        "discord_ip_discovery", "dtls_client_hello", "dtls_server_hello", "dht",
+    };
+
+    internal static L4Kind InferL4(Strategy s) =>
+        s.Actions.OfType<PayloadFilter>().Any(p => p.Types.Any(UdpPayloads.Contains)) || s.Calls.Any(c => c.Function == "udplen") ? L4Kind.Udp : L4Kind.Tcp;
+
+    /// <summary>UDP children: repeats, the fake's blob, a TTL on the fake, udplen increments. No TCP fooling or tls_mod.</summary>
+    private static void MutateUdp(LuaCall call, Func<LuaCall, string, Mutation> with, List<Mutation> raw)
+    {
+        if (call.Function == "fake")
+        {
+            int rep = int.TryParse(call["repeats"], CultureInfo.InvariantCulture, out var r) ? r : 1;
+            foreach (var next in RepeatsLadder.Where(x => x > rep).Take(2))
+                raw.Add(with(call.With("repeats", next.ToString(CultureInfo.InvariantCulture)), $"repeats={next}"));
+            foreach (var b in UdpFakeBlobs.Where(b => b != call["blob"]))
+                raw.Add(with(call.With("blob", b), $"blob={b}"));
+            if (!call.Args.Any(a => FoolingKeys.Contains(a.Name)))
+                raw.Add(with(call.With("ip_autottl", "-2,3-20"), "ip_autottl=-2"));
+        }
+        if (call.Function == "udplen")
+        {
+            int inc = int.TryParse(call["increment"], CultureInfo.InvariantCulture, out var v) ? v : 2;
+            foreach (var n in UdplenIncrements.Where(n => n != inc))
+                raw.Add(with(call.With("increment", n.ToString(CultureInfo.InvariantCulture)), $"increment={n}"));
+        }
     }
 
     /// <summary>Positions next to the current ones: each marker ±1, and the usual alternatives.</summary>

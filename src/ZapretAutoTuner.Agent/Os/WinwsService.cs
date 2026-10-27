@@ -241,7 +241,7 @@ internal static partial class WinwsService
 
     /// <summary>A directory with inheritance cut: Administrators and SYSTEM full control, Users read.</summary>
     [SupportedOSPlatform("windows")]
-    private static void CreateProtected(string dir)
+    internal static void CreateProtected(string dir)
     {
         var sec = new DirectorySecurity();
         sec.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
@@ -257,6 +257,6 @@ internal static partial class WinwsService
         var actual = info.GetAccessControl();
         var owner = actual.GetOwner(typeof(SecurityIdentifier));
         if (!actual.AreAccessRulesProtected || (owner != admins && owner != new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null)))
-            throw new UnauthorizedAccessException($"{dir}: каталог создан не Agent'ом, служба не установлена");
+            throw new UnauthorizedAccessException($"{dir}: каталог создан не Agent'ом (его могли подменить), использовать его нельзя");
     }
 }

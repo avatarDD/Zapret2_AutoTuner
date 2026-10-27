@@ -37,8 +37,9 @@ public sealed class SearchController(McpSession session)
     {
         get
         {
+            // "starting": the Agent may still be coming up (UAC/pkexec); the wizard must not start its own tuning then
             lock (_lock)
-                return _state is "running" or "paused";
+                return _state is "running" or "paused" or "starting";
         }
     }
 
@@ -53,6 +54,8 @@ public sealed class SearchController(McpSession session)
             return localBusy;
         lock (_lock)
         {
+            if (_state == "starting")
+                return McpErrors.Error("a search is starting; poll search_status / поиск запускается");
             if (_state is "running" or "paused")
             {
                 if (_state == "paused" && string.Equals(_target, target, StringComparison.OrdinalIgnoreCase))
@@ -72,6 +75,13 @@ public sealed class SearchController(McpSession session)
                 _state = "idle";
             throw;
         }
+        // the wizard may have started its own tuning (or the user «Защита») while the Agent came up
+        if (session.LocalWorkRefusal() is { } busyNow)
+        {
+            lock (_lock)
+                _state = "idle";
+            return busyNow;
+        }
         var trialTarget = new TrialTarget
         {
             Host = target,
@@ -88,7 +98,8 @@ public sealed class SearchController(McpSession session)
         var options = TuningSession.Prepare(kb, new SearchOptions
         {
             Generator = new GeneratorOptions { Mode = searchMode, Labels = verdict.Labels },
-            Priors = queued,
+            // the tool promises they go first: in front of the learned order too, not one more arm of it
+            First = queued,
             Learning = session.Host.SearchLearning(verdict.Primary.ToString()),
         }, sessionId, null);
         var cts = CancellationTokenSource.CreateLinkedTokenSource(session.StopToken);
@@ -229,7 +240,7 @@ public sealed class SearchController(McpSession session)
     public JsonObject Enqueue(IReadOnlyList<CheckedStrategy> strategies)
     {
         foreach (var s in strategies)
-            _queue.Enqueue(new StrategyCandidate(s.Strategy!, "llm", 0, ["llm"], s.L4));
+            _queue.Enqueue(new StrategyCandidate(s.Strategy!, "llm", 0, ["llm"], s.L4) { Source = CandidateSource.Llm });
         bool running = Running;
         return new JsonObject
         {

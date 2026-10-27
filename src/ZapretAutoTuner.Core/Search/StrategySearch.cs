@@ -149,6 +149,12 @@ public sealed record SearchOptions
     /// </summary>
     public IReadOnlyList<StrategyCandidate> Priors { get; init; } = [];
 
+    /// <summary>
+    /// Candidates someone explicitly put in front of the search (MCP <c>search_enqueue</c>): tried before everything
+    /// else in this order, with or without <see cref="Learning"/>; the bandit only arranges the rest.
+    /// </summary>
+    public IReadOnlyList<StrategyCandidate> First { get; init; } = [];
+
     /// <summary>The learned search order (PLAN 4a.1); null keeps the static order.</summary>
     public SearchLearning? Learning { get; init; }
 
@@ -182,8 +188,10 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
         Report(SearchStage.Preparing, null, 0, "Готовлю список стратегий", "Preparing the strategy list");
         var set = StrategyGenerator.Generate(options.Generator);
         var external = options.Priors.Select(c => c.Source == CandidateSource.Generator ? c with { Source = CandidateSource.Prior } : c).ToList();
+        var first = options.First.Select(c => c.Source == CandidateSource.Generator ? c with { Source = CandidateSource.Prior } : c).ToList();
         List<StrategyCandidate> plan = options.Learning is { } learning ? new ThompsonOrder(learning).Arrange(external, set.Candidates) : [.. external, .. set.Candidates];
-        var fromOutside = external.ToHashSet(ReferenceEqualityComparer.Instance);
+        plan.InsertRange(0, first);
+        var fromOutside = first.Concat(external).ToHashSet(ReferenceEqualityComparer.Instance);
         var catalog = FamilyCatalog.Default;
         var reason = SearchStopReason.Exhausted;
         _nextAsk = options.StopAfterFound;

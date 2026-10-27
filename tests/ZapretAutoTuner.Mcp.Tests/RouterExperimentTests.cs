@@ -153,6 +153,8 @@ public sealed class RouterExperimentTests
         rig.Confirm.Answer(true);
         await Rig.Until(async () => await State(rig) is "finished" or "failed");
         Assert.True((bool)(await rig.Call("router_experiment_status")).Data["awaiting_commit"]!);
+        // the kept variant still holds the router: the wizard must not start its own router trials over it
+        Assert.True(rig.Session.RouterBusy);
 
         await rig.Call("router_experiment_commit", """{"label":"B"}""");
         rig.Confirm.Answer(false);
@@ -162,6 +164,7 @@ public sealed class RouterExperimentTests
         await rig.Call("router_experiment_commit", """{"label":"B"}""");
         rig.Confirm.Answer(true);
         await Rig.Until(async () => await State(rig) == "committed");
+        Assert.False(rig.Session.RouterBusy);
         Assert.Single(gui.StartArgs);
         var c = gui.Calls.Single(x => x.Tool == "strategy_experiment_commit").Args;
         Assert.Equal("B", (string)c["label"]!);

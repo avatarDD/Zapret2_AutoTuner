@@ -17,6 +17,7 @@ public sealed partial class MainViewModel : ObservableObject
         Mcp = new McpService(host, Monitor, Wizard);
         // the wizard and the model never tune at the same time (review M6)
         Wizard.McpBusy = () => Mcp.Session.Busy;
+        Wizard.McpRouterBusy = () => Mcp.Session.RouterBusy;
         Reports.McpAudit = Mcp.AuditLines;
         Settings = new SettingsViewModel(host, Mcp);
         Advisor = new AdvisorViewModel(host, Mcp.Tools);

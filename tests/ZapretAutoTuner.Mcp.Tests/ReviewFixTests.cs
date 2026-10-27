@@ -110,6 +110,63 @@ public sealed class ReviewFixTests
         Assert.DoesNotContain(gui.Calls, c => c.Tool == "strategy_experiment_commit");
     }
 
+    /// <summary>Review 2: like the local Keepable, a variant that breaks a target open without bypass is not committed.</summary>
+    [Fact]
+    public async Task ARouterCommitRefusesAVariantThatBreaksAnOpenTarget()
+    {
+        var (rig, gui) = Router(g =>
+        {
+            g.OpenWithoutBypass = ["open.example"];
+            g.Breaks = (args, t) => t == "open.example" && args.Contains("multisplit", StringComparison.Ordinal);
+        });
+        using var _ = rig;
+        var two = Variants.Replace("[\"blocked.example\"]", "[\"blocked.example\",\"open.example\"]", StringComparison.Ordinal);
+        await rig.Call("router_experiment_start", two);
+        rig.Confirm.Answer(true);
+        await Rig.Until(async () => (string?)(await rig.Call("router_experiment_status")).Data["state"] is "finished" or "failed");
+        var commit = await rig.Call("router_experiment_commit", """{"label":"B"}""");
+        Assert.True(commit.IsError);
+        Assert.Contains("open.example", (string?)commit.Data["error"]);
+        Assert.Single(rig.Confirm.Asked);
+        Assert.DoesNotContain(gui.Calls, c => c.Tool == "strategy_experiment_commit");
+    }
+
+    /// <summary>
+    /// Review 2: while the Agent is starting the model's trial and search already count as busy for the wizard, and if
+    /// the wizard started meanwhile they give way instead of running next to it.
+    /// </summary>
+    [Fact]
+    public async Task TrialAndSearchAreBusyWhileTheAgentStartsAndYieldToTheWizard()
+    {
+        using var rig = new Rig(Rig.All, new BudgetOptions { PerMinute = 10_000 });
+        await rig.Call("diagnose", """{"target":"blocked.example","refresh":true}""");
+        var gate = new TaskCompletionSource();
+        rig.Host.AgentStarting = () => gate.Task;
+
+        var trial = rig.Call("trial_run", """{"target":"blocked.example","strategy":"--lua-desync=multisplit:pos=1"}""");
+        await Rig.Until(() => Task.FromResult(rig.Session.Busy));
+        rig.Host.LocalTuningRunning = true;
+        gate.SetResult();
+        var t = await trial;
+        Assert.True(t.IsError);
+        Assert.Contains("wizard", (string?)t.Data["error"]);
+        Assert.False(rig.Session.Busy);
+
+        rig.Host.LocalTuningRunning = false;
+        gate = new TaskCompletionSource();
+        var search = rig.Call("search_start", """{"target":"blocked.example","mode":"quick"}""");
+        await Rig.Until(() => Task.FromResult(rig.Session.Search.Running));
+        var second = await rig.Call("search_start", """{"target":"blocked.example","mode":"quick"}""");
+        Assert.True(second.IsError);
+        rig.Host.LocalTuningRunning = true;
+        gate.SetResult();
+        var s = await search;
+        Assert.True(s.IsError);
+        Assert.Contains("wizard", (string?)s.Data["error"]);
+        Assert.False(rig.Session.Busy);
+        Assert.Empty(rig.Host.Engine.Started);
+    }
+
     /// <summary>M4: an experiment without a baseline is refused (AGENTS.md rule 5).</summary>
     [Fact]
     public async Task AnExperimentWithoutBaselineIsRefused()

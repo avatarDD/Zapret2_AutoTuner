@@ -68,6 +68,9 @@ public sealed class McpSession
     /// <summary>A trial, the search or an experiment is running on the model's behalf.</summary>
     public bool Busy => Search.Running || Experiments.Running || Router.Running || _trialsRunning > 0;
 
+    /// <summary>The router is in the model's hands: an experiment runs there, or its kept variant awaits a commit.</summary>
+    public bool RouterBusy => Router.Running || Router.Holding;
+
     private int _trialsRunning;
 
     internal void TrialStarted() => Interlocked.Increment(ref _trialsRunning);

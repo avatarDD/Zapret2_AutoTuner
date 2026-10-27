@@ -165,6 +165,18 @@ public sealed class RouterTuningTests
     }
 
     [Fact]
+    public async Task Keep_without_a_run_id_does_not_claim_a_revert()
+    {
+        // review 2: the start failed, so nothing here can revert the router; the text must not say it was reverted
+        var gui = new RouterGui { RefuseStart = (1, "busy") };
+        var (_, kept, problem) = await RouterTuning.KeepAsync(gui.Experiments(), [("yt", "--filter-tcp=443 --lua-desync=multisplit")], ["rutracker.org"], 120, TimeSpan.FromMilliseconds(1), CancellationToken.None);
+        Assert.False(kept);
+        Assert.Contains("120", problem, StringComparison.Ordinal);
+        Assert.DoesNotContain("restored", problem, StringComparison.Ordinal);
+        Assert.DoesNotContain(gui.Calls, c => c.Tool == "strategy_experiment_rollback");
+    }
+
+    [Fact]
     public void Record_stores_the_routers_measurements_without_open_targets_or_unstarted_variants()
     {
         using var kb = KnowledgeBase.OpenInMemory();

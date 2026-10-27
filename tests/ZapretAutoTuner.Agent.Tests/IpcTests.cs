@@ -143,11 +143,12 @@ public class IpcTests
         var r2 = await conn.Client.CheckEngineArgsAsync(req2.WithLuaFiles());
         Assert.Equal("policy", r2.Stage);
 
-        // user Lua is never loaded from where the UI keeps it: without its content the Agent refuses (review H1)
+        // user Lua is never loaded from where the UI keeps it: without its content the Agent refuses (review H1); the
+        // UI could not read the file, which is no fault of the strategy (review 2: stage "engine")
         var req3 = new CheckEngineArgsRequest();
         req3.Argv.AddRange(["--lua-init=@" + Path.Combine(dir, "zt-mine.lua"), "--filter-tcp=443", "--lua-desync=multisplit"]);
         var r3 = await conn.Client.CheckEngineArgsAsync(req3);
-        Assert.Equal("policy", r3.Stage);
+        Assert.Equal("engine", r3.Stage);
 
         var start = new StartEngineRequest();
         start.Argv.AddRange(["--filter-tcp=443", "--lua-desync=nosuchfunc"]);

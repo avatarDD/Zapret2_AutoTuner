@@ -38,6 +38,9 @@ internal sealed class AgentOptions
     /// <summary>Clean up when the first heartbeat does not arrive for this long after the start.</summary>
     public TimeSpan StartupGrace { get; set; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>The folder for the Agent's Lua copies; default — <see cref="Engine.LuaStore.DefaultRoot"/> (tests set their own).</summary>
+    public string? LuaDir { get; set; }
+
     /// <summary>Hosts file to edit; default — the system one (tests point it elsewhere).</summary>
     public string? HostsFile { get; set; }
 

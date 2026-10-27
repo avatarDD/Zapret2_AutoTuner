@@ -167,7 +167,7 @@ public sealed class StandSearchTests(ITestOutputHelper output) : IAsyncLifetime
         var (circularArgv, _) = ConfigCheck.BuildLaunch(adaptive, targets, new AgentTrialOptions { LuaDir = lua, Blobs = blobs });
         var dryRun = new CheckEngineArgsRequest();
         dryRun.Argv.AddRange(circularArgv);
-        var cr = await conn.Client.CheckEngineArgsAsync(dryRun);
+        var cr = await conn.Client.CheckEngineArgsAsync(dryRun.WithLuaFiles());
         Assert.True(cr.Ok, cr.Stage + ": " + string.Join("\n", cr.Output));
     }
 }

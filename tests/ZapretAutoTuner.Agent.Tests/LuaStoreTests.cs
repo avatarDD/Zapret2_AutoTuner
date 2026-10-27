@@ -53,10 +53,113 @@ public class LuaStoreTests
     {
         var dir = TestEnv.NewTempDir();
         var store = new LuaStore(Path.Combine(dir, "agent", "lua-1"), Path.Combine(dir, "engine"));
+        // the UI could not read it: an environment problem, not the strategy's fault (review 2)
         var e = Assert.Throws<EngineStartException>(() => store.Prepare(["--lua-init=@" + Path.Combine(dir, "zt-x.lua")], new Dictionary<string, byte[]>()));
-        Assert.Equal("policy", e.Stage);
+        Assert.Equal("engine", e.Stage);
         var bad = Path.Combine(dir, "evil name.lua");
-        Assert.Throws<EngineStartException>(() => store.Prepare(["--lua-init=@" + bad], new Dictionary<string, byte[]> { [bad] = [1] }));
+        Assert.Equal("policy", Assert.Throws<EngineStartException>(() => store.Prepare(["--lua-init=@" + bad], new Dictionary<string, byte[]> { [bad] = [1] })).Stage);
+    }
+
+    /// <summary>
+    /// Review 2: nfqws2 reads blobs as root while parsing the options (nfqws.c load_blob_to_collection, before droproot),
+    /// so a blob from the user's data directory is never read there: the UI sends it and the engine gets the copy.
+    /// </summary>
+    [Fact]
+    public void Blob_outside_the_engine_directory_is_copied_and_its_offset_kept()
+    {
+        var dir = TestEnv.NewTempDir();
+        var engineDir = Path.Combine(dir, "engine");
+        var store = new LuaStore(Path.Combine(dir, "agent", "lua-x"), engineDir);
+        var mine = Path.Combine(dir, "data", "fake.bin");
+        var bundled = Path.Combine(engineDir, "files", "fake", "tls.bin");
+        var argv = store.Prepare(["--blob=a:@" + mine, "--blob=b:+5@" + mine, "--blob=c:@" + bundled, "--blob=d:0x0102"],
+            new Dictionary<string, byte[]> { [mine] = [1, 2, 3, 4, 5, 6, 7] });
+        Assert.StartsWith("--blob=a:@" + store.Root, argv[0], StringComparison.Ordinal);
+        Assert.StartsWith("--blob=b:+5@" + store.Root, argv[1], StringComparison.Ordinal);
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5, 6, 7 }, File.ReadAllBytes(argv[0]["--blob=a:@".Length..]));
+        Assert.Equal("--blob=c:@" + bundled, argv[2]);
+        Assert.Equal("--blob=d:0x0102", argv[3]);
+        Assert.Empty(EngineArgvPolicy.Check(argv, [Path.Combine(dir, "data")], store.AllowedRoots));
+
+        var e = Assert.Throws<EngineStartException>(() => store.Prepare(["--blob=a:@" + Path.Combine(dir, "data", "other.bin")], new Dictionary<string, byte[]>()));
+        Assert.Equal("engine", e.Stage);
+    }
+
+    [Fact]
+    public void The_store_prunes_copies_no_engine_uses_and_refuses_when_full()
+    {
+        var dir = TestEnv.NewTempDir();
+        var engineDir = Path.Combine(dir, "engine");
+        var used = new List<string>();
+        var store = new LuaStore(Path.Combine(dir, "agent", "lua-x"), engineDir, () => used) { StoreFoldersCap = 2, Grace = TimeSpan.Zero };
+        string Copy(byte b)
+        {
+            var f = Path.Combine(dir, "data", $"b{b}.bin");
+            return store.Prepare(["--blob=x:@" + f], new Dictionary<string, byte[]> { [f] = [b] })[0]["--blob=x:@".Length..];
+        }
+        var first = Copy(1);
+        used.Add(first);
+        var second = Copy(2);
+        // full: the second (unused) goes, the first (a running engine has it) stays
+        var third = Copy(3);
+        Assert.True(File.Exists(first));
+        Assert.False(File.Exists(second));
+        Assert.True(File.Exists(third));
+        used.Add(third);
+        Assert.Equal("engine", Assert.Throws<EngineStartException>(() => Copy(4)).Stage);
+    }
+
+    /// <summary>Review 2: a folder of a gone Agent goes, a live one stays; the owner is the pid and its start time.</summary>
+    [Fact]
+    public void Stale_folders_are_those_whose_owner_is_not_alive()
+    {
+        var dir = TestEnv.NewTempDir();
+        var parent = Path.Combine(dir, "agent");
+        var store = new LuaStore(Path.Combine(parent, "lua-" + Guid.NewGuid().ToString("N")), Path.Combine(dir, "engine"));
+        var f = Path.Combine(dir, "zt-a.lua");
+        store.Prepare(["--lua-init=@" + f], new Dictionary<string, byte[]> { [f] = [1] });
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        string Folder(string name, string? owner)
+        {
+            var d = Path.Combine(parent, name);
+            Directory.CreateDirectory(d);
+            if (owner is not null)
+                File.WriteAllText(Path.Combine(d, "owner"), owner);
+            return d;
+        }
+        var live = Folder("lua-live", LuaStore.OwnerText(Environment.ProcessId, self.StartTime.ToUniversalTime()));
+        var recycled = Folder("lua-recycled", LuaStore.OwnerText(Environment.ProcessId, self.StartTime.ToUniversalTime().AddHours(-1)));
+        var garbage = Folder("lua-garbage", "x");
+        var fresh = Folder("lua-fresh", null);
+        store.RemoveStale();
+        Assert.True(Directory.Exists(store.Root));
+        Assert.True(Directory.Exists(live));
+        Assert.True(Directory.Exists(fresh));
+        Assert.False(Directory.Exists(recycled));
+        Assert.False(Directory.Exists(garbage));
+    }
+
+    [Fact]
+    public void Default_root_name_is_unpredictable()
+    {
+        Assert.NotEqual(LuaStore.DefaultRoot("/tmp/x"), LuaStore.DefaultRoot("/tmp/x"));
+        Assert.Matches("^lua-[0-9a-f]{32}$", Path.GetFileName(LuaStore.DefaultRoot("/tmp/x")));
+    }
+
+    /// <summary>Review 2: the engine opens and chowns written files as root; a symlink on their way is refused.</summary>
+    [Fact]
+    public void Written_paths_through_a_symlink_are_refused()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var dir = TestEnv.NewTempDir();
+        var data = Path.Combine(dir, "data");
+        Directory.CreateDirectory(data);
+        File.CreateSymbolicLink(Path.Combine(data, "log.txt"), "/etc/passwd");
+        Directory.CreateSymbolicLink(Path.Combine(data, "lists"), "/etc");
+        Assert.Single(EngineManager.LinkProblems(["--debug=@" + Path.Combine(data, "log.txt")], [data]));
+        Assert.Single(EngineManager.LinkProblems(["--hostlist-auto=" + Path.Combine(data, "lists", "auto.txt")], [data]));
+        Assert.Empty(EngineManager.LinkProblems(["--hostlist-auto=" + Path.Combine(data, "auto.txt"), "--debug=1"], [data]));
     }
 
     [Fact]

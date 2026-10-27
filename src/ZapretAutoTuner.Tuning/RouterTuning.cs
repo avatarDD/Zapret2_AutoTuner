@@ -148,11 +148,15 @@ public static class RouterTuning
             await RollbackQuietlyAsync(experiments).ConfigureAwait(false);
             throw;
         }
-        catch (ZapretGuiException e)
+        catch (Exception e) when (e is ZapretGuiException or HttpRequestException or IOException)
         {
             if (runId is not null)
+            {
                 await RollbackQuietlyAsync(experiments).ConfigureAwait(false);
-            return (null, false, "zapret-gui: " + e.Message);
+                return (null, false, "zapret-gui: " + e.Message + Reverted);
+            }
+            // no run id: the start may still have reached the router, and nothing here can name the run to revert
+            return (null, false, "zapret-gui: " + e.Message + RevertsByTtl(ttlSec));
         }
         catch
         {
@@ -167,8 +171,13 @@ public static class RouterTuning
         var why = v is null ? report.Error
             : v.ValidationErrors.Count > 0 ? string.Join("; ", v.ValidationErrors)
             : v.EngineError ?? (v.SkipReason.Length > 0 ? v.SkipReason : "роутер не оставил вариант: цели не открылись / the router kept nothing: the targets did not open");
-        return (report, false, why.Length > 0 ? why : report.Error);
+        return (report, false, (why.Length > 0 ? why : report.Error) + Reverted);
     }
+
+    private const string Reverted = " (прежнее состояние роутера возвращено / the router's previous state is restored)";
+
+    private static string RevertsByTtl(int ttlSec) =>
+        $" (если роутер всё же принял вариант, он вернёт прежнее состояние сам через {ttlSec} с / if the router did accept it, it reverts by itself within {ttlSec} s)";
 
     /// <summary>
     /// R5, second half, after the user's yes: commit the kept variant. With <paramref name="saveAs"/> it is also saved as

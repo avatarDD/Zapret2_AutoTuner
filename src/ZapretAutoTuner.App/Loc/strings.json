@@ -1184,8 +1184,8 @@
   "The zapret-gui token lacks these tools: {0}. Enable the experiments permission (with control and probes) in zapret-gui's MCP settings."
  ],
  "wizard.router_not_kept": [
-  "Роутер не оставил стратегию, всё возвращено: {0}",
-  "The router did not keep the strategy, everything is reverted: {0}"
+  "Роутер не оставил стратегию: {0}",
+  "The router did not keep the strategy: {0}"
  ],
  "wizard.router_not_set": [
   "Укажите адрес zapret-gui и MCP-токен.",

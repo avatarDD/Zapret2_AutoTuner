@@ -33,6 +33,7 @@ public sealed class RouterExperimentRunner(McpSession session)
     private ZapretGuiExperiments? _experiments;
     private CancellationTokenSource? _cts;
     private Task? _task;
+    private DateTime? _keptUntil;
 
     /// <summary>How often the router is asked for the state of a run.</summary>
     public TimeSpan Poll { get; set; } = TimeSpan.FromSeconds(2);
@@ -43,6 +44,20 @@ public sealed class RouterExperimentRunner(McpSession session)
         {
             lock (_lock)
                 return _state == "running";
+        }
+    }
+
+    /// <summary>
+    /// A finished run left its best variant applied on the router (keep_best, awaiting commit) and its TTL has not run
+    /// out: zapret-gui still holds it, so the wizard must not start its own router trials over it (review).
+    /// </summary>
+    public bool Holding
+    {
+        get
+        {
+            lock (_lock)
+                return _state == "finished" && !_committed && _report is { AwaitingCommit: true }
+                    && _keptUntil is { } until && session.Time.GetUtcNow().UtcDateTime < until;
         }
     }
 
@@ -210,6 +225,8 @@ public sealed class RouterExperimentRunner(McpSession session)
             _error = null;
             _note = null;
             _committed = false;
+            // zapret-gui reverts a kept variant by itself at the run's deadline
+            _keptUntil = session.Time.GetUtcNow().UtcDateTime.AddSeconds(ttl);
             var token = _cts.Token;
             _task = Task.Run(() => WatchAsync(x, runId, token));
         }
@@ -370,6 +387,10 @@ public sealed class RouterExperimentRunner(McpSession session)
             if (_report.Variants.FirstOrDefault(x => x.Label == found.Label) is not { Started: true } measured
                 || measured.PerTarget.Where(p => !open.Contains(p.Target)).All(p => p.OkCount == 0))
                 return McpErrors.Error($"variant {found.Label} opened no target that is blocked without bypass on the router; nothing to keep / вариант не открыл ни одной заблокированной цели");
+            // like the local experiment's Keepable: a variant that breaks a site open without bypass is not kept
+            var broken = measured.PerTarget.Where(p => open.Contains(p.Target) && !p.Ok).Select(p => p.Target).ToList();
+            if (broken.Count > 0)
+                return McpErrors.Error($"variant {found.Label} breaks targets that open without bypass on the router: {string.Join(", ", broken)}; nothing to keep / вариант ломает цели, открытые без обхода");
             if (RouterTuning.ProfileLimitProblem([(RouterTrialExecutor.ProfileName, found.Args)], _current) is { } tooMany)
                 return McpErrors.Error(tooMany);
             v = found;

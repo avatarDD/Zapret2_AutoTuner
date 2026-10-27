@@ -138,7 +138,15 @@ internal sealed class FakeHost : IAutoTunerHost, IDisposable
 
     public Task<IReadOnlyList<IPAddress>> ResolveAsync(string host, CancellationToken ct) => Task.FromResult<IReadOnlyList<IPAddress>>([IPAddress.Parse("203.0.113.7")]);
 
-    public Task<IEngineControl> EngineAsync(CancellationToken ct) => Task.FromResult<IEngineControl>(Engine);
+    /// <summary>Runs while the Agent "starts" (a UAC prompt, say); null starts it at once.</summary>
+    public Func<Task>? AgentStarting { get; set; }
+
+    public async Task<IEngineControl> EngineAsync(CancellationToken ct)
+    {
+        if (AgentStarting is { } starting)
+            await starting();
+        return Engine;
+    }
 
     public Task<ProbeResult> ProbeAsync(HttpProbeOptions options, CancellationToken ct)
     {

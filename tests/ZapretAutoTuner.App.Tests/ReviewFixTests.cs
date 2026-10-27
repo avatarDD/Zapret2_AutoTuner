@@ -54,6 +54,29 @@ public sealed class ReviewFixTests
         main.Mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
+    /// <summary>Review 2: a permission toggled while MCP is off does not run the full stop (nor cancel the advisor).</summary>
+    [AvaloniaFact]
+    public void APermissionChangeWhileMcpIsOffDoesNotStop()
+    {
+        var main = new MainViewModel(Host);
+        var s = main.Settings;
+        int stops = 0;
+        main.Mcp.Stopped += () => stops++;
+        s.McpEnabled = true;
+        s.McpEnabled = false;
+        // switching it off is the full stop
+        RunUntil(() => stops == 1);
+        s.PermProbes = !s.PermProbes;
+        s.PermControl = !s.PermControl;
+        for (int i = 0; i < 30; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+        Assert.Equal(1, stops);
+        main.Mcp.DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
+
     /// <summary>M5: the Stop banner shows while work runs or a dialog waits, even with MCP off.</summary>
     [Fact]
     public void TheBannerShowsWhileWorkRunsWhateverTheSettings()

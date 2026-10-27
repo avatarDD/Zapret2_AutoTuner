@@ -21,6 +21,7 @@ internal sealed class EngineManager : IDisposable
 
     private readonly ConcurrentDictionary<string, EngineInstance> _engines = new();
     private readonly ConcurrentDictionary<string, int> _queues = new();
+    private readonly ConcurrentDictionary<string, string[]> _copies = new();
     private readonly AgentOptions _options;
     private readonly FirewallManager? _firewall;
     private readonly AgentStateStore _state;
@@ -36,7 +37,8 @@ internal sealed class EngineManager : IDisposable
         EnginePath = options.Engine ?? (options.Pkexec ? new Tools.Zapret2Bundle(Path.Combine(AppContext.BaseDirectory, "zapret2")) : Tools.Zapret2Bundle.Locate()).EnginePath;
         if (OperatingSystem.IsWindows())
             _job = new WindowsJob();
-        Lua = new LuaStore(options.LuaDir ?? LuaStore.DefaultRoot(options.DataDir!), Path.GetDirectoryName(Path.GetFullPath(EnginePath)) ?? options.DataDir!);
+        Lua = new LuaStore(options.LuaDir ?? LuaStore.DefaultRoot(options.DataDir!), Path.GetDirectoryName(Path.GetFullPath(EnginePath)) ?? options.DataDir!,
+            () => [.. _copies.Values.SelectMany(c => c)]);
     }
 
     public string EnginePath { get; }
@@ -50,8 +52,12 @@ internal sealed class EngineManager : IDisposable
 
     public IReadOnlyList<string> WriteRoots => [_options.DataDir!];
 
-    /// <summary>Where blob files may come from: the data directory and the engine's own directory (files/fake).</summary>
-    public IReadOnlyList<string> ReadRoots => [_options.DataDir!, Path.GetDirectoryName(EnginePath) ?? _options.DataDir!];
+    /// <summary>
+    /// Where blob files may come from: the engine's own directory (files/fake) and the Agent's copies. nfqws2 reads
+    /// blobs as root before dropping privileges, so a blob is never read from the user-writable data directory (a
+    /// symlink there could point at a root-only file): the UI sends its content and <see cref="LuaStore"/> copies it.
+    /// </summary>
+    public IReadOnlyList<string> ReadRoots => [Path.GetDirectoryName(EnginePath) ?? _options.DataDir!, Lua.Root];
 
     public EngineInstance? Find(string id) => _engines.GetValueOrDefault(id);
 
@@ -60,6 +66,7 @@ internal sealed class EngineManager : IDisposable
     public CheckResult? Precheck(IReadOnlyList<string> argv, IReadOnlyList<string>? extraReadRoots = null)
     {
         var policy = EngineArgvPolicy.Check(argv, WriteRoots, [.. ReadRoots, .. extraReadRoots ?? []], luaRoots: [.. Lua.AllowedRoots, .. extraReadRoots ?? []]);
+        policy.AddRange(LinkProblems(argv, WriteRoots));
         if (policy.Count > 0)
             return new CheckResult(false, "policy", policy);
         var ctx = new ValidationContext { Catalog = LuaCatalog.Default, Platform = Platform };
@@ -67,6 +74,42 @@ internal sealed class EngineManager : IDisposable
         if (!result.Ok)
             return new CheckResult(false, "validator", result.Errors.Select(e => e.ToString()).ToList());
         return null;
+    }
+
+    /// <summary>
+    /// The engine opens and chowns the files of <c>--debug=@</c>, <c>--hostlist-auto</c> and <c>--hostlist-auto-debug</c>
+    /// as root before dropping privileges (nfqws.c: <c>ensure_file_access</c>), and they lie in the user-writable data
+    /// directory: a symlink (or a junction) on the way would hand any file to the engine's user. Such a path is refused.
+    /// The check runs before the start, so it narrows the window rather than closing it (the user's own folder).
+    /// </summary>
+    internal static List<string> LinkProblems(IReadOnlyList<string> argv, IReadOnlyList<string> roots)
+    {
+        var problems = new List<string>();
+        foreach (var tok in argv)
+        {
+            if (!tok.StartsWith("--", StringComparison.Ordinal))
+                continue;
+            var (name, value) = Core.Model.ArgTokenizer.SplitOption(tok);
+            var key = name[2..];
+            string? path = key == "debug" && value is { Length: > 1 } && value[0] == '@' ? value[1..]
+                : EngineArgvPolicy.WrittenPaths.Contains(key) ? value : null;
+            if (path is null || !Path.IsPathFullyQualified(path))
+                continue;
+            var full = Path.GetFullPath(path);
+            var root = roots.Select(r => Path.TrimEndingDirectorySeparator(Path.GetFullPath(r))).FirstOrDefault(r => EngineArgvPolicy.IsUnder(full, [r]));
+            if (root is null)
+                continue;
+            for (var p = full; p.Length > root.Length; p = Path.GetDirectoryName(p)!)
+            {
+                FileSystemInfo info = Directory.Exists(p) ? new DirectoryInfo(p) : new FileInfo(p);
+                if (info.Exists && info.LinkTarget is not null)
+                {
+                    problems.Add($"{name}: {p} — символическая ссылка, движок не пишет через неё");
+                    break;
+                }
+            }
+        }
+        return problems;
     }
 
     /// <summary>
@@ -159,6 +202,7 @@ internal sealed class EngineManager : IDisposable
             throw;
         }
         _engines[id] = inst;
+        _copies[id] = [.. Protocol.LuaFiles.Paths(argv).Where(p => EngineArgvPolicy.IsUnder(p, [Lua.Root]))];
         _state.Update(s => s.Engines.Add(new AgentState.EngineRecord(inst.Pid, EnginePath, inst.StartTimeUtc)));
         _ = inst.Exited.ContinueWith(_ => OnExited(inst), TaskScheduler.Default);
         return inst;
@@ -168,6 +212,7 @@ internal sealed class EngineManager : IDisposable
     {
         _firewall?.Unset(inst.Id);
         _queues.TryRemove(inst.Id, out _);
+        _copies.TryRemove(inst.Id, out _);
         _state.Update(s => s.Engines.RemoveAll(e => e.Pid == inst.Pid));
     }
 

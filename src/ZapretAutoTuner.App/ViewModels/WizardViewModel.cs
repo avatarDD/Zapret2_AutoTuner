@@ -88,6 +88,11 @@ public sealed partial class WizardViewModel : PageViewModel
     /// <summary>Set by the main view model: the MCP session works on the model's behalf (search, trials, experiments).</summary>
     public Func<bool>? McpBusy { get; set; }
 
+    /// <summary>Set by the main view model: the model's router experiment runs or its kept variant awaits a commit.</summary>
+    public Func<bool>? McpRouterBusy { get; set; }
+
+    private bool McpBusyForRouter => McpBusy?.Invoke() == true || McpRouterBusy?.Invoke() == true;
+
     /// <summary>The search runs on this PC: the MCP tools refuse their own trials meanwhile (review M6).</summary>
     public bool LocalTuningRunning => Volatile.Read(ref _localRunning);
 
@@ -383,7 +388,7 @@ public sealed partial class WizardViewModel : PageViewModel
             var text = L.F("wizard.router_session_text", _host.Settings.GuiUrl, string.Join(", ", hosts), activeId.Length > 0 ? activeId : "—", current.Count);
             if (Confirm is null || !await Confirm(L["wizard.router_session_title"], text))
                 return;
-            if (McpBusy?.Invoke() == true)
+            if (McpBusyForRouter)
             {
                 Error = L["wizard.mcp_busy"];
                 return;
@@ -481,7 +486,7 @@ public sealed partial class WizardViewModel : PageViewModel
             RouterStatus = L.F("wizard.router_too_many", RouterTuning.MaxProfiles, profiles.Count + _routerCurrent.Count, string.Join(", ", dropped));
             return;
         }
-        if (McpBusy?.Invoke() == true)
+        if (McpBusyForRouter)
         {
             RouterStatus = L["wizard.mcp_busy"];
             return;

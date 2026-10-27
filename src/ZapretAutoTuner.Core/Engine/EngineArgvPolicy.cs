@@ -4,8 +4,9 @@ namespace ZapretAutoTuner.Core.Engine;
 /// What the privileged Agent refuses to pass to the engine, on top of the Validator. The engine starts as root
 /// (Administrator on Windows) and drops privileges itself; before the drop it reads blob files and creates and
 /// chowns files named by some options. So: no options that keep root or detach the process, files the engine
-/// writes must lie inside the Agent's data directory, and blob files inside the data or engine directory (a blob
-/// is sent on the wire, so reading e.g. /etc/shadow into one would leak it). Lists and Lua files are read after the
+/// writes must lie inside the Agent's data directory, and blob files inside the read roots the Agent passes (its
+/// engine directory and its own copy folder: a blob is sent on the wire, so reading e.g. /etc/shadow into one through
+/// a symlink in the user's folder would leak it; the UI sends a blob's content like a Lua file's). Lists and Lua files are read after the
 /// privilege drop on Linux (nfqws.c: droproot, then test_list_files and lua_test_init_script_files), so a Lua file
 /// in the user's home (often 0700/0750) would be unreadable; on Windows winws2 keeps Administrator rights and reads
 /// Lua as Administrator, so a Lua file the user can write could be swapped between the check and the load. Hence

@@ -27,6 +27,9 @@ internal sealed class RouterGui : HttpMessageHandler
     /// <summary>Awaited before a start is answered (after it is recorded): a slow router, to cancel a start in flight.</summary>
     public Func<CancellationToken, Task>? BeforeStart { get; set; }
 
+    /// <summary>A candidate that breaks a target open without bypass (candidate args, target).</summary>
+    public Func<string, string, bool>? Breaks { get; set; }
+
     /// <summary>Status answers in turn; the last one repeats.</summary>
     public List<string> States { get; set; } = ["finished"];
 
@@ -152,7 +155,9 @@ internal sealed class RouterGui : HttpMessageHandler
             var rows = new JsonArray();
             foreach (var t in _targets)
             {
-                var (ok, code, okCount) = OpenWithoutBypass.Contains(t) ? (true, "ok", 3) : Probe(candidate, t);
+                var (ok, code, okCount) = OpenWithoutBypass.Contains(t)
+                    ? Breaks?.Invoke(candidate, t) == true ? (false, "tls_rst", 0) : (true, "ok", 3)
+                    : Probe(candidate, t);
                 rows.Add((JsonNode)new JsonObject
                 {
                     ["target"] = t, ["ok"] = ok, ["code"] = code, ["code_desc"] = code, ["latency_ms"] = 200.0, ["latency_stat"] = "median",

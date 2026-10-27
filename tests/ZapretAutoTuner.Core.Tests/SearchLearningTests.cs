@@ -202,6 +202,23 @@ public sealed class SearchLearningTests
         Assert.Equal(winner, stat.Runs[^1]);
     }
 
+    [Fact]
+    public async Task Explicitly_enqueued_candidates_go_before_the_learned_order()
+    {
+        // review: search_enqueue promises "first"; with learning on they were one more arm and went after the winner
+        var set = Standard;
+        var (_, winner, history) = WinnerOnAsn(set);
+        var mine = new StrategyCandidate(Strategy.Parse("--payload=tls_client_hello --lua-desync=fake:blob=0x00000000:badsum"), "llm", 0, ["llm"], L4Kind.Tcp) { Source = CandidateSource.Llm };
+        var dpi = new SimDpi(k => k == winner);
+        await new StrategySearch(dpi, new SearchOptions
+        {
+            StopAfterFound = 1,
+            First = [mine],
+            Learning = L(history, new LearningContext(Asn, Sni)),
+        }).RunAsync();
+        Assert.Equal([mine.Key, winner], dpi.Runs);
+    }
+
     [Theory]
     [InlineData(SearchMode.Quick)]
     [InlineData(SearchMode.Standard)]

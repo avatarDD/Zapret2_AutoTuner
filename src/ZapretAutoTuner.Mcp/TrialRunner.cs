@@ -54,14 +54,18 @@ internal sealed class TrialRunner(McpSession session)
             MinBytes = verdict.Labels.Contains(BlockLabel.Cutoff16K) ? 128 * 1024 : 64 * 1024,
         };
         var probeLevel = level == "L1" ? ProbeLevel.L1Handshake : ProbeLevel.L2Body;
-        var engine = await session.Host.EngineAsync(ct).ConfigureAwait(false);
-        var executor = new AgentTrialExecutor(engine, trialTarget, session.Host.TrialOptions);
         var candidate = new StrategyCandidate(strategy, "llm", 0, ["llm"], checkedStrategy.L4);
         var strategyId = session.Remember(strategy, checkedStrategy.L4);
 
+        // busy for the wizard from here on, also while the Agent is still starting (it may take a UAC prompt)
         session.TrialStarted();
         try
         {
+            var engine = await session.Host.EngineAsync(ct).ConfigureAwait(false);
+            // the wizard may have started its own tuning while the Agent came up
+            if (session.LocalWorkRefusal() is { } busyNow)
+                return busyNow;
+            var executor = new AgentTrialExecutor(engine, trialTarget, session.Host.TrialOptions);
             var baseline = session.Baseline(target);
             if (baseline is null)
             {

@@ -37,9 +37,17 @@ Name: "{group}\{cm:UninstallProgram,Zapret2 AutoTuner}"; Filename: "{uninstallex
 Name: "{autodesktop}\Zapret2 AutoTuner"; Filename: "{app}\ZapretAutoTuner.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\ZapretAutoTuner.exe"; Description: "{cm:LaunchProgram,Zapret2 AutoTuner}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ZapretAutoTuner.exe"; Description: "{cm:LaunchProgram,Zapret2 AutoTuner}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]
+; the winws2 service the user installed from AutoTuner (WinwsService.Name = zt_winws2) runs from
+; %ProgramData%\ZapretAutoTuner-service: stop it (waiting until it has stopped), delete it, and stop any winws2 left there
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ""Stop-Service -Name zt_winws2 -Force -ErrorAction SilentlyContinue; & sc.exe delete zt_winws2 | Out-Null; $d = (Join-Path $env:ProgramData 'ZapretAutoTuner-service') + '\'; Get-Process -Name winws2 -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -and $_.Path.StartsWith($d, [StringComparison]::OrdinalIgnoreCase) }} | Stop-Process -Force"""; Flags: runhidden; RunOnceId: "RemoveService"
 ; the Agent removes its WinDivert filters on exit; make sure no engine of ours is left behind. Only processes started
 ; from {app}: a winws2.exe of another zapret install keeps running.
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ""$d = '{app}\'; Get-Process -Name winws2,ztuner-agent -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -and $_.Path.StartsWith($d, [StringComparison]::OrdinalIgnoreCase) }} | Stop-Process -Force"""; Flags: runhidden; RunOnceId: "KillOurs"
+
+[UninstallDelete]
+; the service's copy of winws2 and its strategy, and the Agent's protected copies (Lua scripts, verified engine files)
+Type: filesandordirs; Name: "{commonappdata}\ZapretAutoTuner-service"
+Type: filesandordirs; Name: "{commonappdata}\ZapretAutoTuner-agent"

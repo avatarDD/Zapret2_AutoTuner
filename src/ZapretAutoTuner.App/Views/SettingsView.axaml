@@ -62,6 +62,22 @@
         </DockPanel>
         <CheckBox x:Name="ShowToken" Content="{l:T mcp.show_token}" IsVisible="{Binding McpHttp}" />
         <TextBlock Text="{Binding McpError}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding McpError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBlock Classes="h2" Text="{l:T mcp.bridge_title}" Margin="0,8,0,0" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T mcp.bridge_hint}" />
+        <TextBlock Classes="error" TextWrapping="Wrap" Text="{l:T mcp.bridge_warning}" />
+        <CheckBox Content="{l:T mcp.perm_router_proxy}" IsChecked="{Binding PermRouterProxy}" />
+        <TextBlock Classes="error" TextWrapping="Wrap" Text="{l:T mcp.bridge_gui_missing}" IsVisible="{Binding BridgeGuiMissing}" />
+        <TextBlock Text="{l:T mcp.bridge_origins}" TextWrapping="Wrap" />
+        <TextBox Text="{Binding BridgeOriginsText}" AcceptsReturn="True" MinHeight="56" FontFamily="monospace" Watermark="chrome-extension://abcdefghijklmnopabcdefghijklmnop" />
+        <TextBlock Text="{Binding BridgeOriginsError}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding BridgeOriginsError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T mcp.bridge_origins_none}" IsVisible="{Binding BridgeOriginsEmpty}" />
+        <TextBlock Text="{l:T mcp.bridge_proxy_stdio}" TextWrapping="Wrap" />
+        <SelectableTextBlock Text="{Binding BridgeProxyStdioSnippet}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />
+        <TextBlock Text="{l:T mcp.bridge_proxy_http}" TextWrapping="Wrap" />
+        <SelectableTextBlock Text="{Binding BridgeProxyHttpSnippet}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />
+        <TextBlock Text="{l:T mcp.bridge_direct}" TextWrapping="Wrap" />
+        <SelectableTextBlock Text="{Binding BridgeDirectSnippet}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />
+        <CheckBox Content="{l:T mcp.show_token}" IsChecked="{Binding BridgeRevealToken}" />
       </StackPanel>
       <TextBlock Classes="h2" Text="{l:T advisor.title}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T advisor.settings_hint}" />

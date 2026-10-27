@@ -459,6 +459,54 @@
   "Подбором управляет внешний агент",
   "An external agent is driving the search"
  ],
+ "mcp.bridge_direct": [
+  "Для расширения, которое подключается само (URL и заголовок):",
+  "For an extension that connects by itself (URL and header):"
+ ],
+ "mcp.bridge_gui_missing": [
+  "Для router_proxy задайте адрес и MCP-токен zapret-gui выше.",
+  "For router_proxy, set zapret-gui's address and MCP token above."
+ ],
+ "mcp.bridge_hint": [
+  "Стороннее расширение-мост MCP в браузере подключается к HTTP-серверу AutoTuner выше: через него чату доступны инструменты AutoTuner (с разрешениями выше) и, если разрешено, инструменты zapret-gui роутера. Нужен включённый Streamable HTTP. Токен обязателен всегда; слушаем только 127.0.0.1.",
+  "A third-party MCP bridge extension in the browser connects to AutoTuner's HTTP server above: through it the chat gets AutoTuner's tools (with the permissions above) and, if allowed, the router's zapret-gui tools. Streamable HTTP must be on. The token is always required; it listens on 127.0.0.1 only."
+ ],
+ "mcp.bridge_no_http": [
+  "Включите Streamable HTTP выше, чтобы получить адрес.",
+  "Turn Streamable HTTP on above to get the address."
+ ],
+ "mcp.bridge_origins": [
+  "Разрешённые расширения (Origin, по одному в строке): chrome-extension://<id>, moz-extension://<id>",
+  "Allowed extensions (Origin, one per line): chrome-extension://<id>, moz-extension://<id>"
+ ],
+ "mcp.bridge_origins_invalid": [
+  "Не принято (только Origin расширений): {0}",
+  "Not accepted (extension Origins only): {0}"
+ ],
+ "mcp.bridge_origins_none": [
+  "Список пуст: расширения с Origin отклоняются (403). Локальный прокси без Origin (например, mcp-superassistant-proxy) работает и так, с токеном.",
+  "The list is empty: extensions sending an Origin are refused (403). A local proxy without an Origin (such as mcp-superassistant-proxy) works anyway, with the token."
+ ],
+ "mcp.bridge_proxy_http": [
+  "Тот же прокси через HTTP с токеном:",
+  "The same proxy over HTTP with the token:"
+ ],
+ "mcp.bridge_proxy_stdio": [
+  "Локальный прокси (mcpconfig.json, например для mcp-superassistant-proxy), через stdio:",
+  "Local proxy (mcpconfig.json, e.g. for mcp-superassistant-proxy), over stdio:"
+ ],
+ "mcp.bridge_title": [
+  "Мост для расширения браузера (claude.ai и другие чаты)",
+  "Browser extension bridge (claude.ai and other chats)"
+ ],
+ "mcp.bridge_token_hidden": [
+  "<токен скрыт: «Показать токен»>",
+  "<token hidden: «Show the token»>"
+ ],
+ "mcp.bridge_warning": [
+  "Внимание: стороннее расширение видит весь обмен, а ответы роутера (замаскированные: адреса заменены) уходят в чат claude.ai. Подключайте только расширение, которому доверяете.",
+  "Warning: the third-party extension sees all traffic, and the router's answers (masked: addresses replaced) go to the claude.ai chat. Connect only an extension you trust."
+ ],
  "mcp.confirm_from_agent": [
   "Запрос внешнего агента ({0}). Агент не может ответить за вас.",
   "A request from the external agent ({0}). The agent cannot answer for you."
@@ -514,6 +562,10 @@
  "mcp.perm_router": [
   "router — эксперименты на роутере через zapret-gui (нужны control и probes)",
   "router — experiments on the router through zapret-gui (needs control and probes)"
+ ],
+ "mcp.perm_router_proxy": [
+  "router_proxy — инструменты zapret-gui роутера через AutoTuner (gui_*); всё, что не только читает, спросит вас здесь",
+  "router_proxy — the router's zapret-gui tools through AutoTuner (gui_*); anything that does more than read asks you here"
  ],
  "mcp.permissions": [
   "Разрешения (чтение доступно всегда):",

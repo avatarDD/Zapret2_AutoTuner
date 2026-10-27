@@ -15,6 +15,12 @@ public enum McpScope
     Router,
     /// <summary>Strategy resources (PLAN 4a.5): hostlists, ipsets, blobs, Lua drafts; never approval of a script.</summary>
     Resources,
+
+    /// <summary>
+    /// The router's own zapret-gui tools relayed as <c>gui_*</c> (PLAN 4a.7): AutoTuner forwards them with the address and
+    /// token the user entered; every tool not marked read-only waits for the user's yes. No tool of ours has this scope.
+    /// </summary>
+    RouterProxy,
 }
 
 /// <summary>
@@ -23,7 +29,7 @@ public enum McpScope
 /// not silently ignored. There is no switch for anything else: the
 /// program has no code for a shell, files or the OS, so there is nothing to switch on.
 /// </summary>
-public sealed record McpPermissions(bool Probes = false, bool Control = false, bool Experiments = false, bool Export = false, bool Router = false, bool Resources = false)
+public sealed record McpPermissions(bool Probes = false, bool Control = false, bool Experiments = false, bool Export = false, bool Router = false, bool Resources = false, bool RouterProxy = false)
 {
     public static IReadOnlyDictionary<McpScope, McpScope[]> Requires { get; } = new Dictionary<McpScope, McpScope[]>
     {
@@ -31,7 +37,7 @@ public sealed record McpPermissions(bool Probes = false, bool Control = false, b
         [McpScope.Router] = [McpScope.Control, McpScope.Probes],
     };
 
-    public static string Name(McpScope s) => s.ToString().ToLowerInvariant();
+    public static string Name(McpScope s) => s == McpScope.RouterProxy ? "router_proxy" : s.ToString().ToLowerInvariant();
 
     /// <summary>The switch as the user set it.</summary>
     public bool IsSet(McpScope s) => s switch
@@ -43,6 +49,7 @@ public sealed record McpPermissions(bool Probes = false, bool Control = false, b
         McpScope.Export => Export,
         McpScope.Router => Router,
         McpScope.Resources => Resources,
+        McpScope.RouterProxy => RouterProxy,
         _ => false,
     };
 

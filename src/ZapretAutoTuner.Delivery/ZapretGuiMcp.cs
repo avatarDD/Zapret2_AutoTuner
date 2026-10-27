@@ -51,11 +51,18 @@ public sealed class ZapretGuiMcp
     }
 
     /// <summary>The tools this token may call (the GUI hides tools whose permission is off), every page of the list.</summary>
-    public async Task<HashSet<string>> ToolsAsync(CancellationToken ct = default)
+    public async Task<HashSet<string>> ToolsAsync(CancellationToken ct = default) =>
+        [.. (await ToolDefinitionsAsync(ct).ConfigureAwait(false)).Select(t => (string?)t["name"]).OfType<string>()];
+
+    /// <summary>
+    /// The full tool definitions (name, description, inputSchema, annotations…) as zapret-gui lists them, every page of
+    /// the list, at most <paramref name="max"/> tools.
+    /// </summary>
+    public async Task<IReadOnlyList<JsonObject>> ToolDefinitionsAsync(CancellationToken ct = default, int max = 500)
     {
         if (_negotiated is null)
             await InitializeAsync(ct).ConfigureAwait(false);
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        var tools = new List<JsonObject>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         string? cursor = null;
         do
@@ -64,12 +71,26 @@ public sealed class ZapretGuiMcp
             if (cursor is not null)
                 p["cursor"] = cursor;
             var result = await RpcAsync("tools/list", p, ct).ConfigureAwait(false);
-            names.UnionWith((result?["tools"] as JsonArray ?? []).Select(t => (string?)t?["name"]).OfType<string>());
+            foreach (var t in result?["tools"] as JsonArray ?? [])
+                if (t is JsonObject o && (string?)o["name"] is not null && tools.Count < max)
+                    tools.Add((JsonObject)o.DeepClone());
             cursor = (string?)result?["nextCursor"];
         }
         // a server that hands the same cursor back would loop forever
-        while (!string.IsNullOrEmpty(cursor) && seen.Add(cursor));
-        return names;
+        while (!string.IsNullOrEmpty(cursor) && seen.Add(cursor) && tools.Count < max);
+        return tools;
+    }
+
+    /// <summary>
+    /// Calls a tool and returns zapret-gui's <c>tools/call</c> result as it is (content, structuredContent, isError): a
+    /// tool's own refusal is part of the result, not an exception. Transport and JSON-RPC errors still throw.
+    /// </summary>
+    public async Task<JsonObject> CallRawAsync(string tool, JsonObject arguments, CancellationToken ct = default)
+    {
+        if (_negotiated is null)
+            await InitializeAsync(ct).ConfigureAwait(false);
+        return await RpcAsync("tools/call", new JsonObject { ["name"] = tool, ["arguments"] = arguments }, ct).ConfigureAwait(false) as JsonObject
+            ?? throw new ZapretGuiException($"{tool}: пустой ответ / empty result");
     }
 
     private static JsonObject ParseText(JsonNode result)

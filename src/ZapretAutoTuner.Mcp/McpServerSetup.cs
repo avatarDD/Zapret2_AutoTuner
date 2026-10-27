@@ -19,6 +19,8 @@ public static class McpServerSetup
         files, URLs or OS changes. Strategies use --lua-desync with catalog functions only and pass the Validator. Probes go
         only to the user's targets; adding a target, live experiments, commits and saving exports wait for the user's yes
         in the AutoTuner window. Start with the prompt tune_strategy or targets_list, and read ztuner://skills/*.
+        When the user allows it (router_proxy), the router's own zapret-gui tools are relayed as gui_*; a gui_ tool that is
+        not read-only waits for the user's yes in the AutoTuner window like ours.
         """;
 
     public static void Configure(McpServerOptions o, AutoTunerTools tools)
@@ -31,7 +33,10 @@ public static class McpServerSetup
             Resources = new ResourcesCapability(),
             Prompts = new PromptsCapability(),
         };
-        o.Handlers.ListToolsHandler = (_, _) => ValueTask.FromResult(new ListToolsResult { Tools = [.. tools.ListTools().Select(ToTool)] });
+        o.Handlers.ListToolsHandler = async (_, ct) => new ListToolsResult
+        {
+            Tools = [.. tools.ListTools().Select(ToTool), .. (await tools.ListRouterToolsAsync(ct).ConfigureAwait(false)).Select(ToRelayedTool)],
+        };
         o.Handlers.CallToolHandler = async (ctx, ct) =>
         {
             var p = ctx.Params ?? throw new ModelContextProtocol.McpProtocolException("missing params", ModelContextProtocol.McpErrorCode.InvalidParams);
@@ -102,6 +107,11 @@ public static class McpServerSetup
         Description = d.Description + (d.Confirms ? " Needs the user's confirmation in the AutoTuner window." : ""),
         InputSchema = JsonSerializer.SerializeToElement(d.InputSchema, McpJson.Default.JsonObject),
     };
+
+    /// <summary>A router tool as <see cref="RouterProxy.Relayed"/> built it (name, title, description, inputSchema, annotations).</summary>
+    public static Tool ToRelayedTool(JsonObject relayed) =>
+        JsonSerializer.Deserialize<Tool>(relayed.ToJsonString(), ModelContextProtocol.McpJsonUtilities.DefaultOptions)
+            ?? throw new InvalidOperationException("relayed tool");
 
     /// <summary>Serves one MCP session over a pair of streams (stdio, or pipes in tests) until the client leaves.</summary>
     public static async Task RunStreamAsync(AutoTunerTools tools, Stream input, Stream output, CancellationToken ct)

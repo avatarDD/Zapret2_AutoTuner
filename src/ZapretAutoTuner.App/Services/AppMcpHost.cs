@@ -84,6 +84,8 @@ public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor, WizardVie
 
     public Delivery.ZapretGuiExperiments? RouterExperiments() => host.Router.Experiments();
 
+    public Delivery.ZapretGuiMcp? RouterMcp() => host.Router.Mcp();
+
     public void RouterCommitted(IReadOnlyList<string> targets, string strategy) => host.Router.StartFeedback(targets);
 
     private sealed class AgentCapture(AppHost host) : ITrialCapture

@@ -65,6 +65,12 @@ public interface IAutoTunerHost
     /// </summary>
     Delivery.ZapretGuiExperiments? RouterExperiments() => null;
 
+    /// <summary>
+    /// The MCP link to zapret-gui on the router (the same address and token), for relaying its own tools (router_proxy,
+    /// PLAN 4a.7); null when either is missing.
+    /// </summary>
+    Delivery.ZapretGuiMcp? RouterMcp() => null;
+
     /// <summary>A router experiment was committed (after the user's yes): the app starts reading the router's feedback.</summary>
     void RouterCommitted(IReadOnlyList<string> targets, string strategy)
     {

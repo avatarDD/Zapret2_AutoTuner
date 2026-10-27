@@ -169,6 +169,11 @@ internal sealed class FakeHost : IAutoTunerHost, IDisposable
 
     public Delivery.ZapretGuiExperiments? RouterExperiments() => Router;
 
+    /// <summary>zapret-gui's MCP link for relaying its tools (router_proxy); null is "not set up".</summary>
+    public Delivery.ZapretGuiMcp? RouterLink { get; set; }
+
+    public Delivery.ZapretGuiMcp? RouterMcp() => RouterLink;
+
     public void RouterCommitted(IReadOnlyList<string> targets, string strategy) => RouterCommits.Add((targets, strategy));
 
     public ResourceStore? Resources { get; set; }

@@ -25,6 +25,7 @@ public sealed partial class McpService : ObservableObject, IUserConfirm, IAsyncD
         _host = host;
         Session = new McpSession(new AppMcpHost(host, monitor, wizard), this, () => _host.Settings.McpEnabled ? _host.Settings.McpPermissions : new McpPermissions());
         Tools = new AutoTunerTools(Session);
+        BridgeOrigins = host.Settings.McpBridgeOrigins;
         Session.Audit.Added += _ => Dispatcher.UIThread.Post(Refresh);
         _timer = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => Refresh());
         _timer.Start();
@@ -39,6 +40,16 @@ public sealed partial class McpService : ObservableObject, IUserConfirm, IAsyncD
     public Func<string, string, CancellationToken, Task<bool>>? Ask { get; set; }
 
     public Uri? HttpEndpoint => _http?.Endpoint;
+
+    public Uri? SseEndpoint => _http?.SseEndpoint;
+
+    /// <summary>
+    /// The extensions' Origins of the bridge (PLAN 4a.7), read by the server on each request; kept in memory so a request
+    /// does not read the knowledge base, refreshed by the settings page.
+    /// </summary>
+    public IReadOnlyCollection<string> BridgeOrigins { get; set; } = [];
+
+    private IReadOnlyCollection<string> AllowedOrigins() => BridgeOrigins;
 
     /// <summary>"Подбором управляет внешний агент": a call came in recently or work runs on the model's behalf.</summary>
     [ObservableProperty]
@@ -70,12 +81,12 @@ public sealed partial class McpService : ObservableObject, IUserConfirm, IAsyncD
                 {
                     try
                     {
-                        _http = await McpHttpServer.StartAsync(Tools, _host.Settings.McpPort, _host.Settings.McpToken).ConfigureAwait(false);
+                        _http = await McpHttpServer.StartAsync(Tools, _host.Settings.McpPort, _host.Settings.McpToken, AllowedOrigins).ConfigureAwait(false);
                     }
                     catch (IOException)
                     {
                         // the kept port is taken by now: take any free one, clients read it from the settings page
-                        _http = await McpHttpServer.StartAsync(Tools, 0, _host.Settings.McpToken).ConfigureAwait(false);
+                        _http = await McpHttpServer.StartAsync(Tools, 0, _host.Settings.McpToken, AllowedOrigins).ConfigureAwait(false);
                     }
                     _host.Settings.McpPort = _http.Port;
                 }

@@ -16,13 +16,12 @@ public sealed class ViewsTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    public async Task DisposeAsync()
-    {
-        if (_host is not null)
-            await _host.DisposeAsync();
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        Directory.Delete(_dir, recursive: true);
-    }
+    /// <summary>
+    /// The host stays open, like in <see cref="ReviewFixTests"/>: a MainViewModel keeps its language subscriptions (the
+    /// monitor and MCP read the knowledge base on a language switch), so a disposed host would break later tests that
+    /// switch the language.
+    /// </summary>
+    public Task DisposeAsync() => Task.CompletedTask;
 
     [AvaloniaFact]
     public void EveryPageRenders()

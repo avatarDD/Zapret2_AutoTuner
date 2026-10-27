@@ -129,7 +129,9 @@ public sealed class ResourceStoreTests : IDisposable
         _store.Approve("other", 1, confirmedByUser: true);
         // a directory where the file of "twice" goes: it cannot be written
         Directory.CreateDirectory(Path.Combine(_store.Root, "lua", "zt-twice.lua"));
-        Assert.ThrowsAny<IOException>(() => _store.Approve("twice", 1, confirmedByUser: true));
+        // Linux reports the directory in the way as IOException, Windows as UnauthorizedAccessException
+        var e = Assert.ThrowsAny<Exception>(() => _store.Approve("twice", 1, confirmedByUser: true));
+        Assert.True(e is IOException or UnauthorizedAccessException, e.GetType().Name);
         Assert.Equal(LuaApproval.Draft, _store.List(ResourceKind.LuaScript).Single(i => i.Name == "twice").Approval);
 
         Directory.Delete(Path.Combine(_store.Root, "lua", "zt-twice.lua"));

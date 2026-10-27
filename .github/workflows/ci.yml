@@ -46,10 +46,13 @@ jobs:
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        # diagnostics only: a full artifact quota must not fail the tests
+        continue-on-error: true
         with:
           name: test-results-${{ matrix.os }}
           path: TestResults
           if-no-files-found: ignore
+          retention-days: 3
 
   # PLAN 1.2: the real engine through the Agent. Linux: nfqws2 + nft in a network namespace (root).
   # Windows: winws2 + WinDivert sniff capture (runners are Administrator).
@@ -150,7 +153,9 @@ jobs:
           grep -q "lua_compat_ver 6" engine-version.txt
           if [ "${{ runner.os }}" = "Windows" ]; then "$out/ztuner-agent.exe" --version; else "$out/ztuner-agent" --version; fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        continue-on-error: true
         with:
           name: ZapretAutoTuner-${{ matrix.rid }}
           path: artifacts/publish/${{ matrix.rid }}
           if-no-files-found: error
+          retention-days: 3

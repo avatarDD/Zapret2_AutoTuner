@@ -323,6 +323,11 @@ public sealed partial class ResourcesViewModel : PageViewModel
         {
             Status = L.Pick(e.Ru, e.En);
         }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // the script file could not be written: the version stays a draft
+            Status = e.Message;
+        }
     }
 
     [RelayCommand]

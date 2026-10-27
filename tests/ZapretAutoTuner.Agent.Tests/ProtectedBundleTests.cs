@@ -7,15 +7,18 @@ namespace ZapretAutoTuner.Agent.Tests;
 /// <summary>Final review 9: a privileged Agent runs a bundle others can write only from its verified copy.</summary>
 public sealed class ProtectedBundleTests
 {
+    /// <summary>The engine file the bundle check looks for on this platform.</summary>
+    private static readonly string Eng = OperatingSystem.IsWindows() ? "winws2.exe" : "nfqws2";
+
     private static string Bundle(Action<string, JsonObject>? tweak = null)
     {
         var dir = TestEnv.NewTempDir();
         Directory.CreateDirectory(Path.Combine(dir, "lua"));
-        File.WriteAllText(Path.Combine(dir, "nfqws2"), "#!/bin/sh\necho engine\n");
+        File.WriteAllText(Path.Combine(dir, Eng), "#!/bin/sh\necho engine\n");
         File.WriteAllText(Path.Combine(dir, "lua", "zapret-lib.lua"), "-- lib\n");
         var files = new JsonObject
         {
-            ["nfqws2"] = Zapret2Bundle.Sha256File(Path.Combine(dir, "nfqws2")),
+            [Eng] = Zapret2Bundle.Sha256File(Path.Combine(dir, Eng)),
             ["lua/zapret-lib.lua"] = Zapret2Bundle.Sha256File(Path.Combine(dir, "lua", "zapret-lib.lua")),
         };
         var manifest = new JsonObject { ["tag"] = "v1", ["version"] = "1", ["rid"] = "linux-x64", ["lua_compat"] = Core.AppInfo.LuaCompatVersion, ["files"] = files };
@@ -29,27 +32,27 @@ public sealed class ProtectedBundleTests
     {
         var src = Bundle();
         var dst = TestEnv.NewTempDir();
-        ProtectedBundle.CopyAndVerify(src, dst, "nfqws2");
+        ProtectedBundle.CopyAndVerify(src, dst, Eng);
         Assert.Equal("-- lib\n", File.ReadAllText(Path.Combine(dst, "lua", "zapret-lib.lua")));
         Assert.True(File.Exists(Path.Combine(dst, "bundle.json")));
         if (!OperatingSystem.IsWindows())
-            Assert.True(File.GetUnixFileMode(Path.Combine(dst, "nfqws2")).HasFlag(UnixFileMode.UserExecute));
+            Assert.True(File.GetUnixFileMode(Path.Combine(dst, Eng)).HasFlag(UnixFileMode.UserExecute));
     }
 
     [Fact]
     public void ATamperedFileOrAMissingManifestIsRefused()
     {
-        var src = Bundle((dir, _) => File.WriteAllText(Path.Combine(dir, "nfqws2"), "#!/bin/sh\nevil\n"));
-        var e = Assert.Throws<EngineStartException>(() => ProtectedBundle.CopyAndVerify(src, TestEnv.NewTempDir(), "nfqws2"));
+        var src = Bundle((dir, _) => File.WriteAllText(Path.Combine(dir, Eng), "#!/bin/sh\nevil\n"));
+        var e = Assert.Throws<EngineStartException>(() => ProtectedBundle.CopyAndVerify(src, TestEnv.NewTempDir(), Eng));
         Assert.Equal("engine", e.Stage);
-        Assert.Contains(e.Problems, p => p.Contains("nfqws2", StringComparison.Ordinal));
+        Assert.Contains(e.Problems, p => p.Contains(Eng, StringComparison.Ordinal));
 
         var none = Bundle();
         File.Delete(Path.Combine(none, "bundle.json"));
-        Assert.Equal("engine", Assert.Throws<EngineStartException>(() => ProtectedBundle.CopyAndVerify(none, TestEnv.NewTempDir(), "nfqws2")).Stage);
+        Assert.Equal("engine", Assert.Throws<EngineStartException>(() => ProtectedBundle.CopyAndVerify(none, TestEnv.NewTempDir(), Eng)).Stage);
 
         var escape = Bundle((_, m) => m["files"]!["../outside"] = new string('0', 64));
-        Assert.Contains(Assert.Throws<EngineStartException>(() => ProtectedBundle.CopyAndVerify(escape, TestEnv.NewTempDir(), "nfqws2")).Problems,
+        Assert.Contains(Assert.Throws<EngineStartException>(() => ProtectedBundle.CopyAndVerify(escape, TestEnv.NewTempDir(), Eng)).Problems,
             p => p.Contains("../outside", StringComparison.Ordinal));
     }
 

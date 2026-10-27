@@ -108,6 +108,8 @@ jobs:
           name: dist-${{ matrix.rid }}
           path: dist/*
           if-no-files-found: error
+          # handed to the release job of the same run only
+          retention-days: 1
 
   release:
     name: GitHub release

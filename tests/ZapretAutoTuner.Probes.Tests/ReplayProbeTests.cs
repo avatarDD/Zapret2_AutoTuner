@@ -197,7 +197,8 @@ public sealed class ReplayProbeTests
         Assert.Equal("no answer", r.ErrorEn);
         l.Stop();
 
-        var refused = await ReplayProbe.RunAsync(Tcp(port, new byte[64]));
+        // Windows retries a refused SYN for about two seconds before it reports the refusal
+        var refused = await ReplayProbe.RunAsync(Tcp(port, new byte[64]) with { Timeout = TimeSpan.FromSeconds(10) });
         Assert.False(refused.Ok);
         Assert.Equal(ReplayError.NoConnection, refused.Error);
         Assert.Equal(SocketError.ConnectionRefused, refused.Socket);

@@ -44,6 +44,9 @@ internal sealed class RouterGui : HttpMessageHandler
 
     public int ToolLists { get; private set; }
 
+    /// <summary>Runs before a tools/list answer (a slow or unreachable router).</summary>
+    public Func<CancellationToken, Task>? BeforeToolsList { get; set; }
+
     /// <summary>A whole tools/call result for a tool (content, structuredContent, isError); null falls through to the built-in answers.</summary>
     public Func<string, JsonObject, CancellationToken, Task<JsonObject?>>? OnTool { get; set; }
 
@@ -79,6 +82,8 @@ internal sealed class RouterGui : HttpMessageHandler
         else if (method == "tools/list")
         {
             ToolLists++;
+            if (BeforeToolsList is { } slow)
+                await slow(ct);
             var all = ToolDefinitions?.Select(t => (JsonNode)t.DeepClone()).ToList() ?? [.. Tools.Select(t => (JsonNode)new JsonObject { ["name"] = t })];
             int from = int.TryParse((string?)body["params"]?["cursor"], out var c) ? c : 0;
             int size = ToolsPageSize ?? all.Count;

@@ -58,31 +58,35 @@ public static class StrategyPolicy
         if (s.InstanceCount == 0)
             issues.Add(Err("policy.empty", "нет ни одного --lua-desync", "no --lua-desync at all"));
         foreach (var call in s.Calls)
-        {
-            var spec = cat.Find(call.Function);
-            if (spec is null)
-            {
-                issues.Add(Err("policy.function", $"функции {call.Function} нет в каталоге: свой Lua передать нельзя", $"{call.Function} is not a catalog function: custom Lua is not accepted", call.Function));
-                continue;
-            }
-            if (ForbiddenCategories.Contains(spec.Category))
-                issues.Add(Err("policy.category", $"{call.Function} ({spec.Category}) недоступна через MCP", $"{call.Function} ({spec.Category}) is not available over MCP", call.Function));
-            foreach (var a in call.Args)
-            {
-                var aspec = cat.FindArg(spec, a.Name);
-                if (ForbiddenArgs.Contains(a.Name) || aspec?.Kind == ArgKind.LuaCode)
-                    issues.Add(Err("policy.arg", $"аргумент {a.Name} недоступен через MCP", $"argument {a.Name} is not available over MCP", call.Function));
-                else if (aspec?.Kind == ArgKind.Function && !AllowedFunctionArgs.Contains(a.Value ?? ""))
-                    issues.Add(Err("policy.arg", $"{a.Name}: допустимы только {string.Join(", ", AllowedFunctionArgs)}", $"{a.Name}: only {string.Join(", ", AllowedFunctionArgs)} are allowed", call.Function));
-                else if (aspec?.Kind == ArgKind.Iff && a.Value == "cond_lua")
-                    issues.Add(Err("policy.arg", "cond_lua исполняет код и недоступна через MCP", "cond_lua executes code and is not available over MCP", call.Function));
-            }
-        }
+            CallIssues(call, cat, issues);
         var validator = new StrategyValidator(platform is { } pl
             ? new ValidationContext { Catalog = cat, Client = client, Platform = pl }
             : new ValidationContext { Catalog = cat, Client = client });
         issues.AddRange(validator.ValidateStrategy(s, l4).Issues);
         return new(s, l4, issues);
+    }
+
+    /// <summary>What the model may not use in one <c>--lua-desync</c> call: code, debug and obfuscation functions, files.</summary>
+    internal static void CallIssues(LuaCall call, LuaCatalog cat, List<ValidationIssue> issues)
+    {
+        var spec = cat.Find(call.Function);
+        if (spec is null)
+        {
+            issues.Add(Err("policy.function", $"функции {call.Function} нет в каталоге: свой Lua передать нельзя", $"{call.Function} is not a catalog function: custom Lua is not accepted", call.Function));
+            return;
+        }
+        if (ForbiddenCategories.Contains(spec.Category))
+            issues.Add(Err("policy.category", $"{call.Function} ({spec.Category}) недоступна через MCP", $"{call.Function} ({spec.Category}) is not available over MCP", call.Function));
+        foreach (var a in call.Args)
+        {
+            var aspec = cat.FindArg(spec, a.Name);
+            if (ForbiddenArgs.Contains(a.Name) || aspec?.Kind == ArgKind.LuaCode)
+                issues.Add(Err("policy.arg", $"аргумент {a.Name} недоступен через MCP", $"argument {a.Name} is not available over MCP", call.Function));
+            else if (aspec?.Kind == ArgKind.Function && !AllowedFunctionArgs.Contains(a.Value ?? ""))
+                issues.Add(Err("policy.arg", $"{a.Name}: допустимы только {string.Join(", ", AllowedFunctionArgs)}", $"{a.Name}: only {string.Join(", ", AllowedFunctionArgs)} are allowed", call.Function));
+            else if (aspec?.Kind == ArgKind.Iff && a.Value == "cond_lua")
+                issues.Add(Err("policy.arg", "cond_lua исполняет код и недоступна через MCP", "cond_lua executes code and is not available over MCP", call.Function));
+        }
     }
 
     public static JsonArray Issues(IEnumerable<ValidationIssue> issues, Severity severity) =>

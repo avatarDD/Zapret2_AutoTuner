@@ -52,7 +52,7 @@ public sealed class ZapretGuiMcp
 
     /// <summary>The tools this token may call (the GUI hides tools whose permission is off), every page of the list.</summary>
     public async Task<HashSet<string>> ToolsAsync(CancellationToken ct = default) =>
-        [.. (await ToolDefinitionsAsync(ct).ConfigureAwait(false)).Select(t => (string?)t["name"]).OfType<string>()];
+        [.. (await ToolDefinitionsAsync(ct).ConfigureAwait(false)).Select(t => t["name"]!.GetValue<string>())];
 
     /// <summary>
     /// The full tool definitions (name, description, inputSchema, annotations…) as zapret-gui lists them, every page of
@@ -72,7 +72,8 @@ public sealed class ZapretGuiMcp
                 p["cursor"] = cursor;
             var result = await RpcAsync("tools/list", p, ct).ConfigureAwait(false);
             foreach (var t in result?["tools"] as JsonArray ?? [])
-                if (t is JsonObject o && (string?)o["name"] is not null && tools.Count < max)
+                // a name that is not a string (a malformed definition) is skipped, not an exception for the whole list
+                if (t is JsonObject o && o["name"] is JsonValue n && n.GetValueKind() == System.Text.Json.JsonValueKind.String && tools.Count < max)
                     tools.Add((JsonObject)o.DeepClone());
             cursor = (string?)result?["nextCursor"];
         }

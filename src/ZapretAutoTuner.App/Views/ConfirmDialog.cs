@@ -10,6 +10,9 @@ public static class ConfirmDialog
     /// <param name="ct">Closes the dialog with "no" when cancelled (an MCP request withdrawn by Stop or the session's end).</param>
     public static async Task<bool> AskAsync(Window owner, string title, string text, CancellationToken ct = default)
     {
+        // the text may carry the model's or the router's words: no hidden bidi or format characters in what the user approves
+        title = Core.SafeText.ForDisplay(title);
+        text = Core.SafeText.ForDisplay(text);
         var L = Loc.Loc.I;
         var yes = new Button { Content = L["common.yes"], Classes = { "accent" } };
         var no = new Button { Content = L["common.no"], IsDefault = true, IsCancel = true };

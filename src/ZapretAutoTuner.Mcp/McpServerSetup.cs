@@ -35,7 +35,7 @@ public static class McpServerSetup
         };
         o.Handlers.ListToolsHandler = async (_, ct) => new ListToolsResult
         {
-            Tools = [.. tools.ListTools().Select(ToTool), .. (await tools.ListRouterToolsAsync(ct).ConfigureAwait(false)).Select(ToRelayedTool)],
+            Tools = [.. tools.ListTools().Select(ToTool), .. RelayedTools(await tools.ListRouterToolsAsync(ct).ConfigureAwait(false))],
         };
         o.Handlers.CallToolHandler = async (ctx, ct) =>
         {
@@ -107,6 +107,25 @@ public static class McpServerSetup
         Description = d.Description + (d.Confirms ? " Needs the user's confirmation in the AutoTuner window." : ""),
         InputSchema = JsonSerializer.SerializeToElement(d.InputSchema, McpJson.Default.JsonObject),
     };
+
+    /// <summary>The router's tools the SDK accepts: one that does not build is left out, never the whole list.</summary>
+    public static IEnumerable<Tool> RelayedTools(IEnumerable<JsonObject> relayed)
+    {
+        foreach (var r in relayed)
+        {
+            Tool? tool;
+            try
+            {
+                tool = ToRelayedTool(r);
+            }
+            catch (Exception e) when (e is JsonException or InvalidOperationException or FormatException or ArgumentException or NotSupportedException)
+            {
+                tool = null;
+            }
+            if (tool is not null)
+                yield return tool;
+        }
+    }
 
     /// <summary>A router tool as <see cref="RouterProxy.Relayed"/> built it (name, title, description, inputSchema, annotations).</summary>
     public static Tool ToRelayedTool(JsonObject relayed) =>

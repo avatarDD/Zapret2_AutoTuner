@@ -30,6 +30,18 @@ internal sealed class AgentHost : IAsyncDisposable
         Sysctl = new Sysctl(State);
         Firewall = OperatingSystem.IsLinux() ? new FirewallManager(State, Sysctl, EngineManager.FwMark) : null;
         Engines = new EngineManager(options, State, Firewall);
+        var engines = Engines;
+        EngineManager.CaptureBundleRoot = () =>
+        {
+            try
+            {
+                return Path.GetDirectoryName(engines.PrepareEngine());
+            }
+            catch (EngineStartException)
+            {
+                return null;
+            }
+        };
         Captures = new CaptureManager();
         Hosts = new HostsManager(options.HostsFile ?? Core.Hosts.HostsFile.DefaultPath, options.DataDir!);
     }

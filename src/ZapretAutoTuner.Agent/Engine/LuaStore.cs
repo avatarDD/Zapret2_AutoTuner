@@ -42,7 +42,7 @@ internal sealed partial class LuaStore
     private static partial Regex SafeBlobName();
 
     private readonly Lock _lock = new();
-    private readonly string _engineDir;
+    private string _engineDir;
     private readonly Func<IReadOnlyCollection<string>> _inUse;
     private bool _rootReady;
 
@@ -64,6 +64,30 @@ internal sealed partial class LuaStore
     internal int StoreFoldersCap { get; init; } = MaxStoreFolders;
 
     internal TimeSpan Grace { get; init; } = PruneGrace;
+
+    /// <summary>The engine's directory: becomes the protected copy once <see cref="EngineManager"/> made one.</summary>
+    public string EngineDir
+    {
+        get => _engineDir;
+        set => _engineDir = value;
+    }
+
+    /// <summary>The folder of the verified engine copy (final review 9): never pruned, removed with the store.</summary>
+    public const string EngineFolderName = "engine";
+
+    /// <summary>Creates this store (protected) and an empty folder for the engine copy in it, and returns its path.</summary>
+    public string NewEngineFolder()
+    {
+        lock (_lock)
+        {
+            EnsureRoot();
+            var dir = Path.Combine(Root, EngineFolderName);
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, recursive: true);
+            CreateDir(dir);
+            return dir;
+        }
+    }
 
     /// <summary>Where Lua and blobs may be loaded from: the engine's directory and this store.</summary>
     public IReadOnlyList<string> AllowedRoots => [_engineDir, Root];
@@ -190,7 +214,7 @@ internal sealed partial class LuaStore
     /// </summary>
     private void MakeRoom(long adding)
     {
-        var folders = new DirectoryInfo(Root).GetDirectories()
+        var folders = new DirectoryInfo(Root).GetDirectories().Where(d => d.Name != EngineFolderName)
             .Select(d => (Dir: d, Bytes: d.GetFiles().Sum(f => f.Length)))
             .ToList();
         long bytes = folders.Sum(f => f.Bytes);

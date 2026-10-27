@@ -13,6 +13,16 @@
 Файлы можно сверить с `SHA256SUMS.txt` из релиза. Движок zapret2 внутри —
 официальная сборка bol-van/zapret2 без изменений.
 
+**Права администратора и portable-архивы.** Агент запускает движок с правами
+администратора (root). Безопаснее всего установщик, `.deb` или `.rpm`: они кладут
+программу в каталог, который могут менять только администраторы. Portable-архив
+(`.zip`, `.tar.gz`) распакуйте в такую же папку (например, `C:\Program Files\…`
+или `/opt/…` с владельцем root), а не в «Загрузки» или домашний каталог. Если папка
+движка доступна на запись обычному пользователю, агент запускает движок только из
+своей защищённой копии, сверенной с `bundle.json`, и отказывает при расхождении,
+но сам файл агента так защитить нельзя: подменённый агент получит права при
+следующем запуске.
+
 ## Как пользоваться
 
 1. **Главная → «Проверить блокировки».** Программа проверит популярные сайты и
@@ -122,6 +132,15 @@ zapret-gui на роутере (например, 192.168.2.1).
 
 Check files against `SHA256SUMS.txt`. The bundled zapret2 is the unmodified
 official bol-van/zapret2 build.
+
+**Administrator rights and portable archives.** The agent runs the engine as
+Administrator (root). The installer, `.deb` or `.rpm` are the safe choice: they put
+the program into a folder only administrators can change. Unpack a portable archive
+(`.zip`, `.tar.gz`) into such a folder too (for example `C:\Program Files\…`, or
+`/opt/…` owned by root), not into Downloads or your home. When the engine folder is
+writable by a normal user, the agent runs the engine only from its protected copy
+verified against `bundle.json` and refuses on a mismatch, but the agent binary itself
+cannot be protected that way: a replaced agent gets the rights on its next start.
 
 ## Use
 

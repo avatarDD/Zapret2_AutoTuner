@@ -34,14 +34,91 @@ internal sealed class EngineManager : IDisposable
         _state = state;
         _firewall = firewall;
         // under pkexec only the engine next to the Agent binary: ZT_ZAPRET2_DIR is the caller's to set
-        EnginePath = options.Engine ?? (options.Pkexec ? new Tools.Zapret2Bundle(Path.Combine(AppContext.BaseDirectory, "zapret2")) : Tools.Zapret2Bundle.Locate()).EnginePath;
+        _originalEnginePath = options.Engine ?? (options.Pkexec ? new Tools.Zapret2Bundle(Path.Combine(AppContext.BaseDirectory, "zapret2")) : Tools.Zapret2Bundle.Locate()).EnginePath;
+        EnginePath = _originalEnginePath;
+        // the bundle (next to the Agent, or ZT_ZAPRET2_DIR) run with rights: copied and verified if others can write it
+        _guarded = Environment.IsPrivilegedProcess && IsBundled(_originalEnginePath, options.Pkexec);
         if (OperatingSystem.IsWindows())
             _job = new WindowsJob();
         Lua = new LuaStore(options.LuaDir ?? LuaStore.DefaultRoot(options.DataDir!), Path.GetDirectoryName(Path.GetFullPath(EnginePath)) ?? options.DataDir!,
             () => [.. _copies.Values.SelectMany(c => c)]);
     }
 
-    public string EnginePath { get; }
+    private readonly string _originalEnginePath;
+    private readonly bool _guarded;
+    private readonly Lock _prepareLock = new();
+    private bool _prepared;
+
+    /// <summary>The engine that runs: the bundled one, or the Agent's verified copy of it (<see cref="PrepareEngine"/>).</summary>
+    public string EnginePath { get; private set; }
+
+    private static bool IsBundled(string enginePath, bool pkexec)
+    {
+        var dir = Path.GetDirectoryName(Path.GetFullPath(enginePath));
+        var roots = new List<string> { Path.Combine(AppContext.BaseDirectory, "zapret2") };
+        if (!pkexec)
+            roots.Add(Tools.Zapret2Bundle.Locate().Root);
+        var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return roots.Any(r => string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(r)), dir, cmp));
+    }
+
+    /// <summary>
+    /// Before the engine runs with the Agent's rights (final review 9): a bundle that a non-administrator could change
+    /// (a portable archive in the user's folder) is copied into the protected store and verified against bundle.json;
+    /// from then on <see cref="EnginePath"/> is the copy. Throws <see cref="EngineStartException"/> "engine" when the copy
+    /// does not verify. Nothing happens for an installed bundle, an unprivileged Agent or an engine named explicitly.
+    /// </summary>
+    public string PrepareEngine()
+    {
+        lock (_prepareLock)
+        {
+            if (_prepared || !_guarded || !File.Exists(_originalEnginePath))
+                return EnginePath;
+            var root = Path.GetDirectoryName(Path.GetFullPath(_originalEnginePath))!;
+            var name = Path.GetFileName(_originalEnginePath);
+            if (ProtectedBundle.WritableByOthers(root, name).Count == 0)
+            {
+                _prepared = true;
+                return EnginePath;
+            }
+            var copy = Lua.NewEngineFolder();
+            try
+            {
+                ProtectedBundle.CopyAndVerify(root, copy, name);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                throw new EngineStartException("engine", [$"не удалось скопировать движок в защищённый каталог / could not copy the engine: {e.Message}"]);
+            }
+            EnginePath = Path.Combine(copy, name);
+            Lua.EngineDir = copy;
+            _bundleRoot = root;
+            _prepared = true;
+            return EnginePath;
+        }
+    }
+
+    private string? _bundleRoot;
+
+    /// <summary>Where the capture loads WinDivert.dll from: the folder of the prepared engine, null when it did not verify.</summary>
+    internal static Func<string?>? CaptureBundleRoot { get; set; }
+
+    /// <summary>The UI names the bundle's own files (lua, files/fake) where it found them: they are loaded from the copy.</summary>
+    internal List<string> FromCopy(IReadOnlyList<string> argv)
+    {
+        if (_bundleRoot is not { } from)
+            return [.. argv];
+        var to = Path.GetDirectoryName(EnginePath)!;
+        var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var prefixes = new[] { from + Path.DirectorySeparatorChar, from + Path.AltDirectorySeparatorChar }.Distinct().ToList();
+        return [.. argv.Select(t =>
+        {
+            foreach (var p in prefixes)
+                if (t.Contains(p, cmp))
+                    return t.Replace(p, to + Path.DirectorySeparatorChar, cmp);
+            return t;
+        })];
+    }
 
     /// <summary>The Agent's protected copies of the Lua files the UI sends (user Lua, PLAN 4a.5).</summary>
     public LuaStore Lua { get; }
@@ -129,7 +206,8 @@ internal sealed class EngineManager : IDisposable
     {
         try
         {
-            argv = Lua.Prepare(argv, luaFiles);
+            PrepareEngine();
+            argv = Lua.Prepare(FromCopy(argv), luaFiles);
         }
         catch (EngineStartException e)
         {
@@ -169,7 +247,8 @@ internal sealed class EngineManager : IDisposable
     /// <param name="luaFiles">The content of the <c>--lua-init=@file</c> files outside the engine's directory, by path.</param>
     public EngineInstance Start(IReadOnlyList<string> argv, IReadOnlyDictionary<string, byte[]> luaFiles, NftQueueRule? queue, string tag)
     {
-        argv = Lua.Prepare(argv, luaFiles);
+        PrepareEngine();
+        argv = Lua.Prepare(FromCopy(argv), luaFiles);
         if (Precheck(argv) is { } bad)
             throw new EngineStartException(bad.Stage, bad.Output);
         if (!File.Exists(EnginePath))

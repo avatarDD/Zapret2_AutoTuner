@@ -42,6 +42,15 @@ internal sealed class AgentService : Protocol.Agent.AgentBase
             return "";
         try
         {
+            _host.Engines.PrepareEngine();
+        }
+        catch (EngineStartException)
+        {
+            // not run with rights unverified; Start and Check report why
+            return "";
+        }
+        try
+        {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var r = await Cmd.RunAsync(_host.Engines.EnginePath, ["--version"], ct: cts.Token);
             return Tools.Zapret2Bundle.ParseVersion(r.Stdout + r.Stderr).Version ?? "";
@@ -184,6 +193,14 @@ internal sealed class AgentService : Protocol.Agent.AgentBase
         var files = request.Files.ToDictionary(kv => kv.Key, kv => kv.Value.ToByteArray(), StringComparer.Ordinal);
         try
         {
+            try
+            {
+                _host.Engines.PrepareEngine();
+            }
+            catch (EngineStartException e)
+            {
+                throw new RpcException(new Status(StatusCode.FailedPrecondition, e.Message));
+            }
             var output = await WinwsService.InstallAsync(files, _host.Engines.EnginePath,
                 argv => _host.Engines.Precheck(argv, [WinwsService.Directory + ".new"]) is { } bad ? $"{bad.Stage}: {string.Join("; ", bad.Output)}" : null,
                 context.CancellationToken);

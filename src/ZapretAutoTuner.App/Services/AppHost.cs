@@ -18,7 +18,10 @@ public sealed class AppHost : IAsyncDisposable
     {
         DataDir = dataDir ?? DefaultDataDir;
         Directory.CreateDirectory(DataDir);
-        Kb = KnowledgeBase.Open(Path.Combine(DataDir, "knowledge.db"));
+        var db = Path.Combine(DataDir, "knowledge.db");
+        Restrict(DataDir, db);
+        Kb = KnowledgeBase.Open(db);
+        Restrict(DataDir, db);
         Bundle = new Zapret2Bundle(Path.Combine(AppContext.BaseDirectory, "zapret2"));
         Settings = new AppSettings(Kb);
         Resources = new ResourceStore(Kb);
@@ -26,6 +29,26 @@ public sealed class AppHost : IAsyncDisposable
     }
 
     public static AppHost? Current { get; set; }
+
+    /// <summary>
+    /// On Linux the data folder is the user's alone (0700) and the knowledge base 0600: it keeps the MCP token and the
+    /// zapret-gui settings. Windows' %LOCALAPPDATA% is per-user already. A folder the user does not own is left as it is.
+    /// </summary>
+    internal static void Restrict(string dir, string db)
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        try
+        {
+            File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            foreach (var f in new[] { db, db + "-wal", db + "-shm", db + "-journal" })
+                if (File.Exists(f))
+                    File.SetUnixFileMode(f, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
 
     public static string DefaultDataDir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ZapretAutoTuner");
 

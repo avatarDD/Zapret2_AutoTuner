@@ -30,6 +30,16 @@ public sealed class ReviewFixTests
         Assert.True(done());
     }
 
+    /// <summary>Final review 7: the data folder keeps the MCP token: on Linux it is the user's alone.</summary>
+    [AvaloniaFact]
+    public void TheDataFolderAndKnowledgeBaseAreTheUsersAlone()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(Host.DataDir));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(Path.Combine(Host.DataDir, "knowledge.db")));
+    }
+
     /// <summary>M5 + L5: turning MCP off in Settings is the full stop: a waiting dialog is withdrawn and closed.</summary>
     [AvaloniaFact]
     public void TurningMcpOffStopsEverythingAndClosesTheDialog()

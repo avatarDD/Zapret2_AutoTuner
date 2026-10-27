@@ -139,10 +139,13 @@ public sealed partial class SettingsViewModel : PageViewModel
     {
         if (_loading)
             return;
+        bool turnedOff = _host.Settings.McpEnabled && !McpEnabled;
         _host.Settings.McpEnabled = McpEnabled;
         _host.Settings.McpHttp = McpHttp;
         _host.Settings.McpPermissions = new ZapretAutoTuner.Mcp.McpPermissions(PermProbes, PermControl, PermExperiments, PermExport, PermRouter, PermResources);
-        _ = ApplyMcpAsync();
+        // a permission toggled while MCP is off changes only the settings: nothing runs that could be stopped
+        if (McpEnabled || turnedOff)
+            _ = ApplyMcpAsync();
     }
 
     private async Task ApplyMcpAsync()
@@ -150,7 +153,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         try
         {
             // off means off: the same full stop as the banner's button (stdio closes, the search and the experiments
-            // stop and roll back, dialogs go), not only the HTTP transport
+            // stop and roll back, dialogs go), not only the HTTP transport; only when MCP is switched off
             if (!McpEnabled)
                 await _mcp.StopAsync();
             else

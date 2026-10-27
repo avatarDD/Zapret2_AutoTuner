@@ -7,7 +7,7 @@ namespace ZapretAutoTuner.Storage;
 /// </summary>
 internal static class Schema
 {
-    public const int Version = 1;
+    public const int Version = 4;
 
     /// <summary>Migrations by target version; each runs once, in order, inside a transaction.</summary>
     public static readonly IReadOnlyList<(int Version, string Sql)> Migrations =
@@ -134,6 +134,80 @@ internal static class Schema
                 trust INTEGER NOT NULL DEFAULT 0,
                 last_seen TEXT
             );
+            """),
+        (2, """
+            -- live monitor (PLAN 7.1-7.2): closed windows per domain, no addresses
+            CREATE TABLE monitor_windows (
+                id INTEGER PRIMARY KEY,
+                domain TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                sessions INTEGER NOT NULL,
+                ok INTEGER NOT NULL,
+                reset INTEGER NOT NULL,
+                stalled16k INTEGER NOT NULL,
+                stalled INTEGER NOT NULL,
+                no_reply INTEGER NOT NULL,
+                retransmissions INTEGER NOT NULL,
+                UNIQUE (domain, started_at)
+            );
+            CREATE INDEX monitor_windows_time ON monitor_windows(started_at);
+
+            -- what changed and why (PLAN 7.3.5)
+            CREATE TABLE change_journal (
+                id INTEGER PRIMARY KEY,
+                uid TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                domain TEXT NOT NULL,
+                kind TEXT NOT NULL,             -- degraded | recovered | repaired | block_lifted | site_down | not_found | applied | declined | router_outdated
+                old_args TEXT,
+                new_args TEXT,
+                reason TEXT NOT NULL,
+                applied INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX change_journal_time ON change_journal(created_at);
+            """),
+        (3, """
+            -- learned search order (PLAN 4a.1): the block label and where the candidate came from, per attempt
+            ALTER TABLE trials ADD COLUMN block_label TEXT;
+            ALTER TABLE trials ADD COLUMN source TEXT NOT NULL DEFAULT 'generator';  -- generator | mutation | prior | llm
+            UPDATE trials SET block_label = (SELECT ss.block_label FROM search_sessions ss WHERE ss.id = trials.session_id)
+                WHERE session_id IS NOT NULL;
+            UPDATE trials SET source = 'mutation'
+                WHERE strategy_id IN (SELECT ts.strategy_id FROM tuning_steps ts WHERE ts.session_id = trials.session_id);
+            CREATE INDEX trials_time ON trials(created_at);
+            """),
+        (4, """
+            -- strategy resources (PLAN 4a.5): named hostlists, ipsets, blobs and Lua scripts, every version kept
+            CREATE TABLE resources (
+                id INTEGER PRIMARY KEY,
+                uid TEXT NOT NULL UNIQUE,
+                kind TEXT NOT NULL,             -- hostlist | ipset | blob | lua
+                name TEXT NOT NULL,
+                current_version INTEGER NOT NULL,
+                approved_version INTEGER,       -- lua: the version in effect (approved by the user), NULL: none yet
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE (kind, name)
+            );
+
+            CREATE TABLE resource_versions (
+                resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+                version INTEGER NOT NULL,
+                content BLOB NOT NULL,          -- list lines, blob bytes or UTF-8 source
+                origin TEXT NOT NULL DEFAULT 'ui',  -- ui | mcp | import
+                created_at TEXT NOT NULL,
+                approved_at TEXT,
+                PRIMARY KEY (resource_id, version)
+            );
+
+            -- who uses a resource: a saved or the current solution; such a resource cannot be deleted
+            CREATE TABLE resource_refs (
+                owner TEXT NOT NULL,            -- e.g. solution:current
+                kind TEXT NOT NULL,
+                name TEXT NOT NULL,
+                PRIMARY KEY (owner, kind, name)
+            );
+            CREATE INDEX resource_refs_target ON resource_refs(kind, name);
             """),
     ];
 }

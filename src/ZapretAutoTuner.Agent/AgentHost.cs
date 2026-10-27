@@ -30,6 +30,18 @@ internal sealed class AgentHost : IAsyncDisposable
         Sysctl = new Sysctl(State);
         Firewall = OperatingSystem.IsLinux() ? new FirewallManager(State, Sysctl, EngineManager.FwMark) : null;
         Engines = new EngineManager(options, State, Firewall);
+        var engines = Engines;
+        EngineManager.CaptureBundleRoot = () =>
+        {
+            try
+            {
+                return Path.GetDirectoryName(engines.PrepareEngine());
+            }
+            catch (EngineStartException)
+            {
+                return null;
+            }
+        };
         Captures = new CaptureManager();
         Hosts = new HostsManager(options.HostsFile ?? Core.Hosts.HostsFile.DefaultPath, options.DataDir!);
     }
@@ -112,6 +124,7 @@ internal sealed class AgentHost : IAsyncDisposable
         // remove our table/chains even if the state file was lost: they are ours by name
         Firewall?.RemoveAll();
         Sysctl.RestoreAll();
+        Engines.Lua.RemoveStale();
     }
 
     public async Task CleanupAsync()
@@ -129,6 +142,7 @@ internal sealed class AgentHost : IAsyncDisposable
         Captures.StopAll();
         Firewall?.RemoveAll();
         Sysctl.RestoreAll();
+        Engines.Lua.Clear();
         try
         {
             State.Delete();

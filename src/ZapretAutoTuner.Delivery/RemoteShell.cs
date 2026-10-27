@@ -15,6 +15,29 @@ public interface IRemoteShell : IDisposable
     Task WriteAsync(string path, byte[] data, CancellationToken ct);
 }
 
+/// <summary>Trust on first use of a router's SSH host key.</summary>
+public enum HostKeyCheck
+{
+    /// <summary>No key is remembered for the host: the user is shown the fingerprint and decides.</summary>
+    FirstUse,
+
+    Match,
+
+    /// <summary>The host shows another key than the remembered one: refused (a different router or an interception).</summary>
+    Mismatch,
+}
+
+public static class HostKeys
+{
+    public static HostKeyCheck Check(string? remembered, string seen) =>
+        string.IsNullOrEmpty(remembered) ? HostKeyCheck.FirstUse
+        : string.Equals(remembered, seen, StringComparison.Ordinal) ? HostKeyCheck.Match
+        : HostKeyCheck.Mismatch;
+
+    /// <summary>The settings key the fingerprint of a host is remembered under.</summary>
+    public static string SettingKey(string host, int port) => $"ssh.hostkey.{host.Trim().ToLowerInvariant()}:{port}";
+}
+
 /// <summary>How to reach the router over SSH.</summary>
 public sealed record SshTarget
 {
@@ -51,6 +74,33 @@ public sealed class SshRemoteShell : IRemoteShell
     {
         _ssh = ssh;
         _sftp = sftp;
+    }
+
+    /// <summary>
+    /// The server's host key fingerprint (<c>SHA256:base64</c>), learned without logging in: the key is refused during
+    /// the key exchange, so no password or key is offered to a server the user has not seen yet.
+    /// </summary>
+    public static async Task<string> HostKeyAsync(SshTarget t, CancellationToken ct)
+    {
+        string? seen = null;
+        var probe = t with
+        {
+            Password = t.Password ?? "-",
+            PrivateKeyPath = null,
+            TrustHostKey = fp =>
+            {
+                seen = fp;
+                return false;
+            },
+        };
+        try
+        {
+            using var sh = await ConnectAsync(probe, ct).ConfigureAwait(false);
+        }
+        catch (Exception e) when (seen is not null && e is SshException or IOException or System.Net.Sockets.SocketException)
+        {
+        }
+        return seen ?? throw new SshConnectionException($"{t.Host}: сервер не прислал ключ / the server sent no host key");
     }
 
     public static async Task<SshRemoteShell> ConnectAsync(SshTarget t, CancellationToken ct)

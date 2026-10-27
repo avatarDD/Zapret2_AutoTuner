@@ -1,0 +1,113 @@
+{
+  "comment": "Hosting providers for the provider mode (PLAN 6.4, dpi-diagnostics §4a). ranges: official lists where the provider publishes one, else the ASN's announced prefixes from RIPEstat (one source per ASN). link: the url is a page and the list is the first link matching this regex (Azure's Service Tags file is renamed every week). fallback: used only when no other source loaded; warning: shown when it is used. test_endpoints: large files on the provider's own network (speed tests); san is the name the certificate must carry. major: part of 'All major'.",
+  "providers": [
+    {
+      "id": "cloudflare", "name": "Cloudflare", "major": true, "asn": [13335],
+      "ranges": [
+        {"url": "https://www.cloudflare.com/ips-v4", "format": "text"},
+        {"url": "https://www.cloudflare.com/ips-v6", "format": "text"}
+      ],
+      "test_endpoints": [
+        {"url": "https://speed.cloudflare.com/__down?bytes=1048576", "san": "speed.cloudflare.com", "min_bytes": 1048576}
+      ]
+    },
+    {
+      "id": "hetzner", "name": "Hetzner", "major": true, "asn": [24940, 213230],
+      "ranges": [
+        {"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS24940", "format": "ripestat"},
+        {"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS213230", "format": "ripestat"}
+      ],
+      "test_endpoints": [
+        {"url": "https://fsn1-speed.hetzner.com/100MB.bin", "san": "fsn1-speed.hetzner.com", "min_bytes": 1048576},
+        {"url": "https://hel1-speed.hetzner.com/100MB.bin", "san": "hel1-speed.hetzner.com", "min_bytes": 1048576},
+        {"url": "https://ash-speed.hetzner.com/100MB.bin", "san": "ash-speed.hetzner.com", "min_bytes": 1048576}
+      ]
+    },
+    {
+      "id": "ovh", "name": "OVHcloud", "major": true, "asn": [16276],
+      "ranges": [{"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS16276", "format": "ripestat"}],
+      "test_endpoints": [
+        {"url": "https://proof.ovh.net/files/10Mb.dat", "san": "proof.ovh.net", "min_bytes": 1048576}
+      ]
+    },
+    {
+      "id": "aws", "name": "Amazon Web Services", "major": true, "asn": [16509, 14618],
+      "ranges": [{"url": "https://ip-ranges.amazonaws.com/ip-ranges.json", "format": "aws"}],
+      "test_endpoints": []
+    },
+    {
+      "id": "google-cloud", "name": "Google Cloud", "major": true, "asn": [396982],
+      "ranges": [{"url": "https://www.gstatic.com/ipranges/cloud.json", "format": "google"}],
+      "test_endpoints": []
+    },
+    {
+      "id": "azure", "name": "Microsoft Azure", "major": true, "asn": [8075],
+      "ranges": [
+        {"url": "https://www.microsoft.com/en-us/download/details.aspx?id=56519", "format": "azure",
+         "link": "https://download\\.microsoft\\.com/download/[^\"'\\s<>]+/ServiceTags_Public_[0-9]{8}\\.json"},
+        {"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS8075", "format": "ripestat", "fallback": true,
+         "warning": "AS8075 — вся сеть Microsoft (Office 365, Xbox, Bing), не только Azure / AS8075 is all of Microsoft (Office 365, Xbox, Bing), not only Azure"}
+      ],
+      "test_endpoints": []
+    },
+    {
+      "id": "fastly", "name": "Fastly", "major": true, "asn": [54113],
+      "ranges": [{"url": "https://api.fastly.com/public-ip-list", "format": "fastly"}],
+      "test_endpoints": []
+    },
+    {
+      "id": "akamai", "name": "Akamai", "major": true, "asn": [20940, 16625],
+      "ranges": [
+        {"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS20940", "format": "ripestat"},
+        {"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS16625", "format": "ripestat"}
+      ],
+      "test_endpoints": []
+    },
+    {
+      "id": "digitalocean", "name": "DigitalOcean", "major": true, "asn": [14061],
+      "ranges": [{"url": "https://digitalocean.com/geo/google.csv", "format": "geofeed"}],
+      "test_endpoints": [
+        {"url": "https://speedtest-ams3.digitalocean.com/10mb.test", "san": "speedtest-ams3.digitalocean.com", "min_bytes": 1048576}
+      ]
+    },
+    {
+      "id": "linode", "name": "Akamai Cloud (Linode)", "major": true, "asn": [63949],
+      "ranges": [{"url": "https://geoip.linode.com/", "format": "geofeed"}],
+      "test_endpoints": [
+        {"url": "https://speedtest.frankfurt.linode.com/100MB-frankfurt.bin", "san": "speedtest.frankfurt.linode.com", "min_bytes": 1048576}
+      ]
+    },
+    {
+      "id": "vultr", "name": "Vultr", "major": true, "asn": [20473],
+      "ranges": [{"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS20473", "format": "ripestat"}],
+      "test_endpoints": [
+        {"url": "https://fra-de-ping.vultr.com/vultr.com.100MB.bin", "san": "fra-de-ping.vultr.com", "min_bytes": 1048576}
+      ]
+    },
+    {
+      "id": "oracle", "name": "Oracle Cloud", "major": true, "asn": [31898],
+      "ranges": [{"url": "https://docs.oracle.com/en-us/iaas/tools/public_ip_ranges.json", "format": "oracle"}],
+      "test_endpoints": []
+    },
+    {
+      "id": "scaleway", "name": "Scaleway", "major": false, "asn": [12876],
+      "ranges": [{"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS12876", "format": "ripestat"}],
+      "test_endpoints": []
+    },
+    {
+      "id": "contabo", "name": "Contabo", "major": false, "asn": [51167],
+      "ranges": [{"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS51167", "format": "ripestat"}],
+      "test_endpoints": []
+    },
+    {
+      "id": "leaseweb", "name": "Leaseweb", "major": false, "asn": [60781],
+      "ranges": [{"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS60781", "format": "ripestat"}],
+      "test_endpoints": []
+    },
+    {
+      "id": "gcore", "name": "G-Core Labs", "major": false, "asn": [199524],
+      "ranges": [{"url": "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS199524", "format": "ripestat"}],
+      "test_endpoints": []
+    }
+  ]
+}

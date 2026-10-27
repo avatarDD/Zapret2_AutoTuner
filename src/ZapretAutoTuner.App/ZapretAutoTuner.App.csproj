@@ -8,6 +8,10 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Loc\strings.json" LogicalName="ZapretAutoTuner.App.strings.json" />
+    <InternalsVisibleTo Include="ZapretAutoTuner.App.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
@@ -17,6 +21,12 @@
   <ItemGroup>
     <ProjectReference Include="..\ZapretAutoTuner.Core\ZapretAutoTuner.Core.csproj" />
     <ProjectReference Include="..\ZapretAutoTuner.Tools\ZapretAutoTuner.Tools.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Probes\ZapretAutoTuner.Probes.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Tuning\ZapretAutoTuner.Tuning.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Delivery\ZapretAutoTuner.Delivery.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Storage\ZapretAutoTuner.Storage.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Protocol\ZapretAutoTuner.Protocol.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Mcp\ZapretAutoTuner.Mcp.csproj" />
   </ItemGroup>
   <!-- The engine bundle produced by tools/bundle is shipped as <app>/zapret2 -->
   <ItemGroup Condition="'$(RuntimeIdentifier)' != ''">

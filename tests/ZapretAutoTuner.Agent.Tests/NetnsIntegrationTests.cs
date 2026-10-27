@@ -95,10 +95,10 @@ public sealed class NetnsIntegrationTests : IDisposable
         ]);
         var check = new CheckEngineArgsRequest();
         check.Argv.AddRange(start.Argv);
-        var cr = await conn.Client.CheckEngineArgsAsync(check);
+        var cr = await conn.Client.CheckEngineArgsAsync(check.WithLuaFiles());
         Assert.True(cr.Ok, cr.Stage + ": " + string.Join("\n", cr.Output));
 
-        var eng = await conn.Client.StartEngineAsync(start);
+        var eng = await conn.Client.StartEngineAsync(start.WithLuaFiles());
         await Task.Delay(500);
         var curl = TestEnv.Run("curl", "-sk", "--noproxy", "*", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}", "--resolve", $"test.local:443:{ServerIp}", "https://test.local/");
         await conn.Client.StopEngineAsync(new StopEngineRequest { EngineId = eng.EngineId });

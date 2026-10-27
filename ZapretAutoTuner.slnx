@@ -2,8 +2,10 @@
   <Folder Name="/src/">
     <Project Path="src/ZapretAutoTuner.Agent/ZapretAutoTuner.Agent.csproj" />
     <Project Path="src/ZapretAutoTuner.App/ZapretAutoTuner.App.csproj" />
+    <Project Path="src/ZapretAutoTuner.Bench/ZapretAutoTuner.Bench.csproj" />
     <Project Path="src/ZapretAutoTuner.Core/ZapretAutoTuner.Core.csproj" />
     <Project Path="src/ZapretAutoTuner.Delivery/ZapretAutoTuner.Delivery.csproj" />
+    <Project Path="src/ZapretAutoTuner.Mcp/ZapretAutoTuner.Mcp.csproj" />
     <Project Path="src/ZapretAutoTuner.Probes/ZapretAutoTuner.Probes.csproj" />
     <Project Path="src/ZapretAutoTuner.Protocol/ZapretAutoTuner.Protocol.csproj" />
     <Project Path="src/ZapretAutoTuner.Storage/ZapretAutoTuner.Storage.csproj" />
@@ -12,8 +14,11 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ZapretAutoTuner.Agent.Tests/ZapretAutoTuner.Agent.Tests.csproj" />
+    <Project Path="tests/ZapretAutoTuner.App.Tests/ZapretAutoTuner.App.Tests.csproj" />
+    <Project Path="tests/ZapretAutoTuner.Bench.Tests/ZapretAutoTuner.Bench.Tests.csproj" />
     <Project Path="tests/ZapretAutoTuner.Core.Tests/ZapretAutoTuner.Core.Tests.csproj" />
     <Project Path="tests/ZapretAutoTuner.Delivery.Tests/ZapretAutoTuner.Delivery.Tests.csproj" />
+    <Project Path="tests/ZapretAutoTuner.Mcp.Tests/ZapretAutoTuner.Mcp.Tests.csproj" />
     <Project Path="tests/ZapretAutoTuner.Probes.Tests/ZapretAutoTuner.Probes.Tests.csproj" />
     <Project Path="tests/ZapretAutoTuner.Storage.Tests/ZapretAutoTuner.Storage.Tests.csproj" />
     <Project Path="tests/ZapretAutoTuner.Tools.Tests/ZapretAutoTuner.Tools.Tests.csproj" />

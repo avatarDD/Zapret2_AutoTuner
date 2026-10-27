@@ -34,6 +34,35 @@ public sealed class ValidationContext
 
     /// <summary><c>--ipcache-hostname</c> is on, so hostlist profiles can match from the first packet.</summary>
     public bool IpcacheHostname { get; init; }
+
+    /// <summary>
+    /// Functions of the user's <b>approved</b> Lua scripts (PLAN 4a.5): function → script file (<c>zt-name.lua</c>).
+    /// <c>--lua-desync</c> calls to them are accepted; their argument names are unknown to the catalog and are not
+    /// checked, everything else (blobs, substitutions, ranges, payloads, profile rules) is.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> UserFunctions { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Functions defined only by user scripts that are not approved yet: function → script name. Calls to them are
+    /// refused with a message that says to approve the script in AutoTuner first.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> DraftFunctions { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>Approved user functions whose file the argv does not load (set by <see cref="StrategyValidator.ValidateArgv"/>).</summary>
+    internal IReadOnlyDictionary<string, string> UnloadedUserFunctions { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>A copy with the user's Lua functions: approved ones by file, drafts by script name.</summary>
+    public ValidationContext WithUserLua(IReadOnlyDictionary<string, string> approved, IReadOnlyDictionary<string, string> drafts) => new()
+    {
+        Catalog = Catalog,
+        Platform = Platform,
+        DeclaredBlobs = DeclaredBlobs,
+        LoadedFunctions = LoadedFunctions,
+        Client = Client,
+        IpcacheHostname = IpcacheHostname,
+        UserFunctions = approved,
+        DraftFunctions = drafts,
+    };
 }
 
 /// <summary>
@@ -96,7 +125,11 @@ public sealed partial class StrategyValidator
     /// lua load order, blob declarations and sizes, WinDivert coverage of profile ports, and every profile.
     /// <paramref name="fileExists"/> and <paramref name="fileSize"/> resolve blob paths (null skips file checks).
     /// </summary>
-    public ValidationResult ValidateArgv(IReadOnlyList<string> argv, Func<string, long?>? fileSize = null)
+    /// <param name="luaFunctions">
+    /// The functions a <c>--lua-init=@file</c> outside the zapret2 library defines (the Agent indexes the file it is
+    /// about to load); null leaves such files to <see cref="ValidationContext.UserFunctions"/>.
+    /// </param>
+    public ValidationResult ValidateArgv(IReadOnlyList<string> argv, Func<string, long?>? fileSize = null, Func<string, IReadOnlyCollection<string>?>? luaFunctions = null)
     {
         var r = new ValidationResult();
         var parsed = Engine.EngineArgsParser.Parse(argv, Cat);
@@ -129,13 +162,27 @@ public sealed partial class StrategyValidator
         // functions available at runtime: known only when every --lua-init is a bundled file
         var loadedFiles = new HashSet<string>(StringComparer.Ordinal);
         bool loadedKnown = true;
+        var userFiles = _ctx.UserFunctions.Values.ToHashSet(StringComparer.Ordinal);
+        var resolvedUser = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var init in parsed.LuaInits)
         {
             var file = init.TrimStart('@').Replace('\\', '/').Split('/')[^1];
             if (file.EndsWith(".gz", StringComparison.Ordinal))
                 file = file[..^3];
             if (!init.StartsWith('@') || !Cat.Functions.Any(f => f.File == file))
-                loadedKnown = false;
+            {
+                // a user script: known by its file name, or indexed by the caller (the Agent); anything else is opaque
+                if (init.StartsWith('@') && userFiles.Contains(file))
+                {
+                }
+                else if (init.StartsWith('@') && luaFunctions?.Invoke(init[1..]) is { } defined)
+                {
+                    foreach (var fn in defined.Where(fn => Cat.Find(fn) is null))
+                        resolvedUser[fn] = file;
+                }
+                else
+                    loadedKnown = false;
+            }
             loadedFiles.Add(file);
             int rank = order.IndexOf(file);
             if (rank < 0)
@@ -189,6 +236,10 @@ public sealed partial class StrategyValidator
                 ?? (loadedKnown ? Cat.Functions.Where(f => loadedFiles.Contains(f.File)).Select(f => f.Name).ToHashSet(StringComparer.Ordinal) : null),
             Client = _ctx.Client,
             IpcacheHostname = _ctx.IpcacheHostname || argv.Any(t => t is "--ipcache-hostname" or "--ipcache-hostname=1"),
+            UserFunctions = _ctx.UserFunctions.Where(kv => loadedFiles.Contains(kv.Value)).Concat(resolvedUser)
+                .GroupBy(kv => kv.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Value, StringComparer.Ordinal),
+            DraftFunctions = _ctx.DraftFunctions,
+            UnloadedUserFunctions = _ctx.UserFunctions.Where(kv => !loadedFiles.Contains(kv.Value)).ToDictionary(StringComparer.Ordinal),
         });
         for (int i = 0; i < parsed.Profiles.Count; i++)
             inner.ValidateProfile(parsed.Profiles[i], r, parsed.Profiles[i].Name.Length > 0 ? parsed.Profiles[i].Name : $"профиль {i + 1}");
@@ -316,6 +367,22 @@ public sealed partial class StrategyValidator
         var spec = Cat.Find(call.Function);
         if (spec is null)
         {
+            if (_ctx.UserFunctions.ContainsKey(call.Function))
+            {
+                ValidateUserCall(call, r, at, producedBlobs);
+                return;
+            }
+            if (_ctx.DraftFunctions.TryGetValue(call.Function, out var draft))
+            {
+                r.Error("func.unapproved", $"функция {call.Function} из Lua-скрипта «{draft}», который не подтверждён: откройте скрипт в AutoTuner, проверьте текст и нажмите «Подтвердить»",
+                    $"function {call.Function} comes from the Lua script '{draft}', which is not approved: open it in AutoTuner, review the text and press Approve", at);
+                return;
+            }
+            if (_ctx.UnloadedUserFunctions.TryGetValue(call.Function, out var file))
+            {
+                r.Error("func.user_notloaded", $"функция {call.Function} из своего скрипта {file}, но --lua-init для него нет", $"function {call.Function} is from the user script {file}, but there is no --lua-init for it", at);
+                return;
+            }
             if (_ctx.LoadedFunctions is { } loaded && loaded.Contains(call.Function))
                 return; // custom function from an extra lua file: arguments are unknown to us
             r.Error("func.unknown", $"функция {call.Function} не определена в загружаемых lua", $"function {call.Function} is not defined in the loaded lua", at);
@@ -397,6 +464,44 @@ public sealed partial class StrategyValidator
 
         if (call.Function == "tls_client_hello_clone" && call["blob"] is { } produced)
             producedBlobs.Add(produced);
+    }
+
+    /// <summary>
+    /// A call to a function of an approved user script: its own argument names are unknown, but the orchestrator's
+    /// instance arguments, blob names and <c>%var</c>/<c>#var</c> substitutions follow the same rules as everywhere.
+    /// </summary>
+    private void ValidateUserCall(LuaCall call, ValidationResult r, string at, HashSet<string> producedBlobs)
+    {
+        foreach (var arg in call.Args)
+        {
+            // the orchestrator's instance args and the standard dir/payload filters mean the same for every function
+            var standard = Cat.Data.InstanceArgs
+                .Concat(Cat.Data.Blocks.GetValueOrDefault("direction") ?? [])
+                .Concat(Cat.Data.Blocks.GetValueOrDefault("payload") ?? []);
+            if (standard.FirstOrDefault(a => a.Name == arg.Name) is { } instance)
+            {
+                ValidateArgValue(instance, arg, call, r, at, producedBlobs);
+                continue;
+            }
+            if (arg.Value is { Length: > 0 } v && Resources.ResourceRefs.BlobArgs.Contains(arg.Name) && v[0] is not ('%' or '#') && !HexBlobRegex().IsMatch(v))
+            {
+                if (!Identifiers.IsLuaIdentifier(v))
+                    r.Error("blob.name", $"имя блоба «{v}» не идентификатор Lua", $"blob name '{v}' is not a Lua identifier", at);
+                else if (!BlobAvailable(v, producedBlobs))
+                    r.Error("blob.missing", $"блоб «{v}» в {arg.Name} не объявлен: движок оборвёт план профиля до Lua (нужен --blob={v}:@файл)", $"blob '{v}' in {arg.Name} is not declared: the engine aborts the profile plan", at);
+            }
+            if (arg.Value is { Length: > 2 } hx && hx.StartsWith("0x", StringComparison.Ordinal) && HexBlobRegex().IsMatch(hx) && (hx.Length - 2) / 2 > MaxBlobSize)
+                r.Error("blob.size", $"hex-блоб в {arg.Name} больше 16 KB", $"hex blob in {arg.Name} exceeds 16 KB", at);
+        }
+        foreach (var arg in call.Args.Where(a => a.Value is not null))
+        {
+            foreach (Match m in SubstitutionRegex().Matches(arg.Value!))
+            {
+                var name = m.Groups[2].Value;
+                if (!BlobAvailable(name, producedBlobs))
+                    r.Error("blob.subst", $"подстановка {m.Value} в {arg.Name} не разрешится: блоб {name} не объявлен (движок отменит весь план профиля)", $"substitution {m.Value} in {arg.Name} cannot resolve: blob {name} is not declared", at);
+            }
+        }
     }
 
     private void ValidateArgValue(ArgSpec spec, LuaArg arg, LuaCall call, ValidationResult r, string at, HashSet<string> producedBlobs)
@@ -531,9 +636,12 @@ public sealed partial class StrategyValidator
             return;
         if (!PositionMarker.TryParse(so, Cat.PositionMarkers, out var seq) || !PositionMarker.TryParseList(pos, Cat.PositionMarkers, out var list) || list.Count == 0)
             return;
-        var first = list[0];
-        bool comparable = seq!.Name == first.Name && (!seq.IsAbsolute || (seq.Offset >= 0 && first.Offset >= 0));
-        if (comparable && seq.Offset >= first.Offset)
+        // the engine sorts the resolved positions, so the first split is the smallest one, wherever it is written:
+        // any position of the same kind at or below seqovl already breaks the rule
+        var first = list
+            .Where(m => seq!.Name == m.Name && (!seq.IsAbsolute || (seq.Offset >= 0 && m.Offset >= 0)))
+            .MinBy(m => m.Offset);
+        if (first is not null && seq!.Offset >= first.Offset)
             r.Error("seqovl.pos", $"seqovl={so} должен быть меньше первой позиции pos={first}", $"seqovl={so} must be less than the first split position {first}", at);
     }
 

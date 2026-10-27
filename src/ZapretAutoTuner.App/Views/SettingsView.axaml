@@ -1,0 +1,100 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="12" MaxWidth="640" HorizontalAlignment="Left">
+      <TextBlock Classes="h1" Text="{l:T settings.title}" />
+      <CheckBox Content="English interface" IsChecked="{Binding English}" />
+      <StackPanel Spacing="4">
+        <TextBlock Text="{l:T settings.theme}" />
+        <ComboBox SelectedIndex="{Binding ThemeIndex}" MinWidth="200">
+          <ComboBoxItem Content="{l:T settings.theme_system}" />
+          <ComboBoxItem Content="{l:T settings.theme_light}" />
+          <ComboBoxItem Content="{l:T settings.theme_dark}" />
+        </ComboBox>
+      </StackPanel>
+      <CheckBox Content="{l:T settings.large_font}" IsChecked="{Binding LargeFont}" />
+      <StackPanel Spacing="4">
+        <TextBlock Text="{l:T settings.mode}" />
+        <ComboBox SelectedIndex="{Binding ModeIndex}" MinWidth="200">
+          <ComboBoxItem Content="{l:T settings.mode_quick}" />
+          <ComboBoxItem Content="{l:T settings.mode_standard}" />
+          <ComboBoxItem Content="{l:T settings.mode_full}" />
+        </ComboBox>
+      </StackPanel>
+      <CheckBox Content="{l:T settings.learning}" IsChecked="{Binding Learning}" />
+      <TextBlock Classes="muted" Text="{l:T settings.learning_hint}" TextWrapping="Wrap" />
+      <TextBox Text="{Binding ProviderAsn}" Watermark="{l:T settings.provider_asn}" MaxWidth="320" HorizontalAlignment="Left" />
+      <CheckBox Content="{l:T monitor.auto_apply}" IsChecked="{Binding AutoApply}" />
+      <TextBlock Classes="muted" Text="{l:T settings.auto_apply_hint}" />
+      <TextBlock Classes="h2" Text="zapret-gui" />
+      <TextBox Text="{Binding GuiUrl}" Watermark="http://192.168.1.1:8080" />
+      <TextBox Text="{Binding GuiToken}" PasswordChar="•" Watermark="{l:T settings.gui_token}" />
+      <TextBlock Classes="muted" Text="{l:T settings.token_session}" />
+      <TextBlock Classes="h2" Text="{l:T settings.router}" />
+      <TextBox Text="{Binding RouterHost}" Watermark="192.168.1.1" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="{l:T settings.forget_ssh}" Command="{Binding ForgetSshKeysCommand}" />
+        <TextBlock Classes="muted" Text="{Binding SshKeysStatus}" VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBlock Classes="h2" Text="{l:T mcp.title}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T mcp.hint}" />
+      <CheckBox Content="{l:T mcp.enabled}" IsChecked="{Binding McpEnabled}" />
+      <StackPanel Spacing="6" Margin="24,0,0,0" IsEnabled="{Binding McpEnabled}">
+        <TextBlock Text="{l:T mcp.permissions}" />
+        <CheckBox Content="{l:T mcp.perm_probes}" IsChecked="{Binding PermProbes}" />
+        <CheckBox Content="{l:T mcp.perm_control}" IsChecked="{Binding PermControl}" />
+        <CheckBox Content="{l:T mcp.perm_experiments}" IsChecked="{Binding PermExperiments}" />
+        <CheckBox Content="{l:T mcp.perm_export}" IsChecked="{Binding PermExport}" />
+        <CheckBox Content="{l:T mcp.perm_router}" IsChecked="{Binding PermRouter}" />
+        <CheckBox Content="{l:T mcp.perm_resources}" IsChecked="{Binding PermResources}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T mcp.perm_hint}" />
+        <TextBlock Text="{l:T mcp.stdio}" />
+        <SelectableTextBlock Text="{Binding StdioSnippet}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />
+        <CheckBox Content="{l:T mcp.http}" IsChecked="{Binding McpHttp}" />
+        <TextBlock Text="{Binding Mcp.HttpStatus}" Classes="muted" TextWrapping="Wrap" />
+        <DockPanel IsVisible="{Binding McpHttp}">
+          <Button DockPanel.Dock="Right" Content="{l:T mcp.new_token}" Command="{Binding NewTokenCommand}" Margin="8,0,0,0" />
+          <TextBox Text="{Binding McpToken}" IsReadOnly="True" PasswordChar="•" RevealPassword="{Binding #ShowToken.IsChecked}" />
+        </DockPanel>
+        <CheckBox x:Name="ShowToken" Content="{l:T mcp.show_token}" IsVisible="{Binding McpHttp}" />
+        <TextBlock Text="{Binding McpError}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding McpError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBlock Classes="h2" Text="{l:T mcp.bridge_title}" Margin="0,8,0,0" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T mcp.bridge_hint}" />
+        <TextBlock Classes="error" TextWrapping="Wrap" Text="{l:T mcp.bridge_warning}" />
+        <CheckBox Content="{l:T mcp.perm_router_proxy}" IsChecked="{Binding PermRouterProxy}" />
+        <TextBlock Classes="error" TextWrapping="Wrap" Text="{l:T mcp.bridge_gui_missing}" IsVisible="{Binding BridgeGuiMissing}" />
+        <TextBlock Text="{l:T mcp.bridge_origins}" TextWrapping="Wrap" />
+        <TextBox Text="{Binding BridgeOriginsText}" AcceptsReturn="True" MinHeight="56" FontFamily="monospace" Watermark="chrome-extension://abcdefghijklmnopabcdefghijklmnop" />
+        <TextBlock Text="{Binding BridgeOriginsError}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding BridgeOriginsError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T mcp.bridge_origins_none}" IsVisible="{Binding BridgeOriginsEmpty}" />
+        <TextBlock Text="{l:T mcp.bridge_proxy_stdio}" TextWrapping="Wrap" />
+        <SelectableTextBlock Text="{Binding BridgeProxyStdioSnippet}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />
+        <TextBlock Text="{l:T mcp.bridge_proxy_http}" TextWrapping="Wrap" />
+        <SelectableTextBlock Text="{Binding BridgeProxyHttpSnippet}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />
+        <TextBlock Text="{l:T mcp.bridge_direct}" TextWrapping="Wrap" />
+        <SelectableTextBlock Text="{Binding BridgeDirectSnippet}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />
+        <CheckBox Content="{l:T mcp.show_token}" IsChecked="{Binding BridgeRevealToken}" />
+      </StackPanel>
+      <TextBlock Classes="h2" Text="{l:T advisor.title}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T advisor.settings_hint}" />
+      <CheckBox Content="{l:T advisor.enabled}" IsChecked="{Binding AdvisorEnabled}" />
+      <StackPanel Spacing="6" Margin="24,0,0,0" IsEnabled="{Binding AdvisorEnabled}">
+        <ComboBox SelectedIndex="{Binding AdvisorProviderIndex}" MinWidth="260">
+          <ComboBoxItem Content="{l:T advisor.provider_claude}" />
+          <ComboBoxItem Content="{l:T advisor.provider_local}" />
+        </ComboBox>
+        <TextBox Text="{Binding AdvisorModel}" Watermark="{l:T advisor.model}" />
+        <TextBox Text="{Binding AdvisorEndpoint}" Watermark="http://127.0.0.1:11434/v1" IsVisible="{Binding AdvisorLocal}" />
+        <TextBox Text="{Binding AdvisorKey}" PasswordChar="•" Watermark="{l:T advisor.key}" />
+        <TextBlock Classes="muted" Text="{l:T advisor.key_session}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T advisor.data}" />
+      </StackPanel>
+      <TextBlock Classes="muted" Text="{l:T settings.privacy}" />
+      <SelectableTextBlock Text="{Binding DataDir}" Classes="muted" FontSize="12" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

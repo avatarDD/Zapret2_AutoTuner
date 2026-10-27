@@ -4,6 +4,10 @@ using ZapretAutoTuner.Core.Search;
 
 namespace ZapretAutoTuner.Core.Unify;
 
+/// <summary>A strategy for addresses rather than names: a provider (its ranges) or a program's servers.</summary>
+/// <param name="Name">The profile and ipset name: a provider id or a program endpoint name.</param>
+public sealed record IpResult(string Name, IReadOnlyList<string> Cidrs, L4Kind L4, string Ports, IReadOnlyList<string> L7, Strategy Strategy);
+
 /// <summary>What is known about one strategy on one domain: from the search, the knowledge base or a cross-check.</summary>
 public sealed record DomainResult(string Domain, L4Kind L4, Strategy Strategy, Efficiency Efficiency, double Score);
 
@@ -216,6 +220,33 @@ public static class Unifier
         }
         s.Meta.Targets = [.. plan.Profiles.SelectMany(p => p.Domains).Distinct(StringComparer.Ordinal)];
         return s;
+    }
+
+    /// <summary>
+    /// Appends address-based profiles (PLAN 6.3–6.4): a provider's ranges or a program's servers, each with its own
+    /// ipset (aggregated, dpi-diagnostics §4a). They go after the hostlist profiles: a site's own strategy is more
+    /// specific than its hoster's. A name already taken by a profile, a hostlist or an ipset gets a suffix
+    /// (<c>name-2</c>, <c>name-3</c>…), so nothing in the solution is overwritten.
+    /// </summary>
+    public static void AddIpProfiles(Solution s, IEnumerable<IpResult> results)
+    {
+        foreach (var r in results)
+        {
+            var name = r.Name;
+            for (int i = 2; s.Profiles.Any(p => p.Name == name) || s.Ipsets.ContainsKey(name) || s.Hostlists.ContainsKey(name); i++)
+                name = $"{r.Name}-{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            s.Ipsets[name] = [.. Providers.CidrSet.Aggregate(r.Cidrs).Select(c => c.ToString())];
+            s.Profiles.Add(new Profile
+            {
+                Name = name,
+                TcpPorts = r.L4 == L4Kind.Tcp ? r.Ports : null,
+                UdpPorts = r.L4 == L4Kind.Udp ? r.Ports : null,
+                L7 = [.. r.L7],
+                Ipsets = [new ListRef(name)],
+                Strategy = r.Strategy,
+            });
+            s.Meta.Targets.Add(name);
+        }
     }
 
     private static string Norm(string domain) => domain.Trim().TrimEnd('.').ToLowerInvariant();

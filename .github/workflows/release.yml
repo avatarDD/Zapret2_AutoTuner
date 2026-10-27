@@ -1,0 +1,151 @@
+name: Release
+
+# A tag v1.2.3 builds, tests and packages every platform and publishes a GitHub release.
+# Only official upstream binaries go in: nfqws2/winws2, WinDivert, cygwin1.dll and lua from the bol-van/zapret2
+# release archive pinned by SHA-256 in tools/bundle/zapret2.lock.json (bundle.py --strict checks it).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version without the v (a dry run: packages are built, no release is made)'
+        required: true
+        default: '0.0.0-test'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  AVALONIA_TELEMETRY_OPTOUT: 1
+  VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test ZapretAutoTuner.slnx -c Release
+
+  package:
+    name: Package ${{ matrix.rid }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+          - rid: linux-x64
+            os: ubuntu-latest
+          - rid: linux-arm64
+            os: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Version
+        shell: bash
+        run: echo "VER=${VERSION#v}" >> "$GITHUB_ENV"
+      - name: Bundle zapret2 (official release, pinned)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/bundle/bundle.py --rid ${{ matrix.rid }} --strict
+      - name: Publish
+        shell: bash
+        run: |
+          out="artifacts/publish/ZapretAutoTuner"
+          for p in src/ZapretAutoTuner.App/ZapretAutoTuner.App.csproj src/ZapretAutoTuner.Agent/ZapretAutoTuner.Agent.csproj; do
+            dotnet publish "$p" -c Release -r ${{ matrix.rid }} --self-contained true -p:Version="$VER" -o "$out"
+          done
+          cp README.md docs/USER.md "$out/" 2>/dev/null || true
+      - name: Engine and Agent start
+        shell: bash
+        run: |
+          out="artifacts/publish/ZapretAutoTuner"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            "$out/zapret2/winws2.exe" --version | tee v.txt; "$out/ztuner-agent.exe" --version
+          else
+            "$out/zapret2/nfqws2" --version | tee v.txt; "$out/ztuner-agent" --version
+          fi
+          grep -q "lua_compat_ver 6" v.txt
+
+      - name: Windows installer and portable zip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path artifacts/publish/ZapretAutoTuner -DestinationPath "dist/ZapretAutoTuner-$env:VER-win-x64-portable.zip"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          & $iscc "/DAppVersion=$env:VER" "/DPublishDir=$PWD\artifacts\publish\ZapretAutoTuner" "/DOutDir=$PWD\dist" packaging\windows\autotuner.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq rpm
+          packaging/linux/build.sh ${{ matrix.rid }} "$VER" artifacts/publish/ZapretAutoTuner dist
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-${{ matrix.rid }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    needs: package
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums and notes
+        run: |
+          cd dist && sha256sum * > SHA256SUMS.txt && cd ..
+          python3 - <<'PY'
+          import json, os
+          lock = json.load(open("tools/bundle/zapret2.lock.json"))
+          v = os.environ["VERSION"]
+          notes = f"""Zapret2 AutoTuner {v}
+
+          Движок: zapret2 {lock['version']} ({lock['repo']} {lock['tag']}), архив SHA-256 `{lock['sha256']}`.
+          В релизе только официальные бинарники апстримов. Телеметрии нет.
+          Engine: zapret2 {lock['version']}, official upstream binaries only. No telemetry.
+
+          - Windows: `*-setup.exe` (установщик) или `*-portable.zip`. Антивирус может ругаться на WinDivert: это драйвер перехвата из zapret2, см. docs/USER.md.
+          - Linux: `.deb`, `.rpm` или `.tar.gz`. Нужны nftables (или iptables) и polkit.
+          - Проверка файлов: `SHA256SUMS.txt`.
+          - Права администратора: для работы с правами безопаснее установщик, `.deb` или `.rpm`; portable-архив распакуйте в папку, которую могут менять только администраторы (см. docs/USER.md).
+          - Admin rights: for privileged use the installer, `.deb` or `.rpm` are the safe choice; unpack a portable archive only into a folder only administrators can write (see docs/USER.md).
+          """
+          open("notes.md", "w").write(notes)
+          PY
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: dist/*
+          body_path: notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}

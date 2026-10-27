@@ -1,0 +1,1122 @@
+[
+  {
+    "name": "targets_list",
+    "scope": "read",
+    "confirms": false,
+    "description": "The targets the user put in AutoTuner, with the last diagnosis. Probes go only to these; a new one is added by the user (target_add asks).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "diagnose",
+    "scope": "read",
+    "confirms": false,
+    "description": "The block classifier's verdict for a target with its evidence (DNS, IP, SNI, 16 KB cut-off, QUIC…). refresh=true probes the target again and needs the probes permission.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "A target from targets_list (a host name, never a URL)",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "refresh": {
+          "type": "boolean",
+          "description": "Run the classifier again (probes the target; needs the probes permission)"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "trials_history",
+    "scope": "read",
+    "confirms": false,
+    "description": "What was tried: the knowledge base's results per strategy (successes/attempts) and this session's trials.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "Only this target",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Rows at most",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "catalog_functions",
+    "scope": "read",
+    "confirms": false,
+    "description": "The --lua-desync functions a strategy may use, with their arguments, ranges and defaults (the bundled zapret2 catalog).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "Only this category",
+          "enum": [
+            "basic",
+            "http",
+            "handshake",
+            "window",
+            "fake",
+            "split",
+            "faked",
+            "oob",
+            "udp",
+            "orchestrator"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Only this function",
+          "maxLength": 40,
+          "pattern": "^[a-z0-9_]+$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_validate",
+    "scope": "read",
+    "confirms": false,
+    "description": "Checks a strategy without running it: the Validator's errors and warnings and its id. Nothing is sent anywhere.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "description": "A strategy in nfqws2 syntax: only --payload=, --in-range=, --out-range= and --lua-desync= with catalog functions. Checked by the Validator before anything runs.",
+          "maxLength": 2048
+        },
+        "l4": {
+          "type": "string",
+          "description": "Transport",
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "client": {
+          "type": "string",
+          "description": "Client profile the strategy must survive",
+          "enum": [
+            "curl",
+            "chrome",
+            "firefox",
+            "safari_ios",
+            "android_chrome",
+            "smart_tv",
+            "old_tv"
+          ]
+        }
+      },
+      "required": [
+        "strategy"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "kb_query",
+    "scope": "read",
+    "confirms": false,
+    "description": "The local knowledge base: what worked for a target and what worked on a provider (ASN) for anyone's targets here.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "Results for this target",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "asn": {
+          "type": "integer",
+          "description": "Provider's AS number",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "l4": {
+          "type": "string",
+          "description": "Transport",
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Rows at most",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "target_add",
+    "scope": "probes",
+    "confirms": true,
+    "description": "Asks the user to add a target. The AutoTuner window shows a dialog; the answer is pending until the user decides. Call again with the same arguments to see the decision. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "The host name to add",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why, shown to the user",
+          "maxLength": 300
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "trial_run",
+    "scope": "probes",
+    "confirms": false,
+    "description": "Runs one strategy against a blocked target: the engine (through the privileged Agent) for the target's addresses, then the probe. Returns a compact observation: L0-L3, bytes, time, successes/attempts against the baseline, what went out and what came back, the classifier's reading. Never page content.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "A target from targets_list (a host name, never a URL)",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "strategy": {
+          "type": "string",
+          "description": "A strategy in nfqws2 syntax: only --payload=, --in-range=, --out-range= and --lua-desync= with catalog functions. Checked by the Validator before anything runs.",
+          "maxLength": 2048
+        },
+        "strategy_id": {
+          "type": "string",
+          "description": "A strategy id (s-…) from another answer of this server",
+          "maxLength": 14,
+          "pattern": "^s-[0-9a-f]{12}$"
+        },
+        "client": {
+          "type": "string",
+          "description": "Client profile the strategy must survive",
+          "enum": [
+            "curl",
+            "chrome",
+            "firefox",
+            "safari_ios",
+            "android_chrome",
+            "smart_tv",
+            "old_tv"
+          ]
+        },
+        "level": {
+          "type": "string",
+          "description": "L1 handshake, L2 full download (default), L3 page in a browser",
+          "enum": [
+            "L1",
+            "L2",
+            "L3"
+          ]
+        },
+        "attempts": {
+          "type": "integer",
+          "description": "Attempts in the series (default 3)",
+          "minimum": 1,
+          "maximum": 5
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_start",
+    "scope": "control",
+    "confirms": false,
+    "description": "Starts the AutoTuner search for a blocked target (the Runner: families in order, refinement, punishment pauses). Strategies put in the queue with search_enqueue go first. Long: poll search_status.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "A target from targets_list (a host name, never a URL)",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "mode": {
+          "type": "string",
+          "description": "Search depth",
+          "enum": [
+            "quick",
+            "standard",
+            "full"
+          ]
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_status",
+    "scope": "control",
+    "confirms": false,
+    "description": "Progress of the search: stage, percent, tried, found strategies with ids and efficiency, the best partial one, the queue.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_pause",
+    "scope": "control",
+    "confirms": false,
+    "description": "Pauses the search between trials (resume=true continues it).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "resume": {
+          "type": "boolean",
+          "description": "Continue a paused search"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_stop",
+    "scope": "control",
+    "confirms": false,
+    "description": "Stops the search; what was found stays in search_status.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_enqueue",
+    "scope": "control",
+    "confirms": false,
+    "description": "Puts your candidate strategies in the Runner's queue: before the next trial of a running search, or first in the next search. Each passes the Validator; results are stored with source llm.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategies": {
+          "type": "array",
+          "description": "Candidates",
+          "items": {
+            "type": "string",
+            "description": "A strategy in nfqws2 syntax: only --payload=, --in-range=, --out-range= and --lua-desync= with catalog functions. Checked by the Validator before anything runs.",
+            "maxLength": 2048
+          },
+          "maxItems": 10,
+          "minItems": 1
+        },
+        "note": {
+          "type": "string",
+          "description": "Why these, kept with them",
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "strategies"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "search_prune_family",
+    "scope": "control",
+    "confirms": false,
+    "description": "Skips a strategy family for the rest of the search (search_status lists the families).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "family": {
+          "type": "string",
+          "description": "Family id",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why",
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "family"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_experiment_start",
+    "scope": "experiments",
+    "confirms": true,
+    "description": "Runs strategy variants one by one on this PC's live traffic to the targets and measures each against a baseline; everything is reverted by itself after ttl_sec unless committed. Starting needs the user's yes in the AutoTuner window. Returns run_id; poll strategy_experiment_status. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "variants": {
+          "type": "array",
+          "description": "Variants",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Variant name",
+                "maxLength": 32,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "strategy": {
+                "type": "string",
+                "description": "A strategy in nfqws2 syntax: only --payload=, --in-range=, --out-range= and --lua-desync= with catalog functions. Checked by the Validator before anything runs.",
+                "maxLength": 2048
+              },
+              "strategy_id": {
+                "type": "string",
+                "description": "A strategy id (s-…) from another answer of this server",
+                "maxLength": 14,
+                "pattern": "^s-[0-9a-f]{12}$"
+              }
+            },
+            "required": [
+              "label"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 5,
+          "minItems": 1
+        },
+        "targets": {
+          "type": "array",
+          "description": "Targets from targets_list (default: all, at most 10)",
+          "items": {
+            "type": "string",
+            "description": "A target from targets_list (a host name, never a URL)",
+            "maxLength": 253,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+          },
+          "maxItems": 10
+        },
+        "repeats": {
+          "type": "integer",
+          "description": "Probes per target and variant (default 3)",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "baseline": {
+          "type": "boolean",
+          "description": "Measure the targets without a strategy first (default true; false is refused: a variant is judged only against the measured block)"
+        },
+        "ttl_sec": {
+          "type": "integer",
+          "description": "Automatic revert after this many seconds (default 300)",
+          "minimum": 30,
+          "maximum": 900
+        },
+        "keep_best": {
+          "type": "boolean",
+          "description": "Keep the best variant applied until the deadline (still not committed)"
+        }
+      },
+      "required": [
+        "variants"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_experiment_status",
+    "scope": "experiments",
+    "confirms": false,
+    "description": "The experiment's state (awaiting_confirmation, running, finished, failed, reverted, committed), phase, variant, seconds left before the revert, awaiting_commit.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_experiment_result",
+    "scope": "experiments",
+    "confirms": false,
+    "description": "The report: per variant and target the probes, success rate, score, delta to the baseline (fixed, broken, unchanged); the best variant.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "description": "The run (default: the last)",
+          "maxLength": 40,
+          "pattern": "^exp-[0-9a-z-]+$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_experiment_commit",
+    "scope": "experiments",
+    "confirms": true,
+    "description": "Keeps a variant: it becomes this PC's active protection. Needs the user's yes in the AutoTuner window; the answer is pending until then. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "The variant (default: best)",
+          "maxLength": 32,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "strategy_experiment_rollback",
+    "scope": "experiments",
+    "confirms": false,
+    "description": "Reverts at once: stops the experiment's engine (a kept variant too).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "export_preview",
+    "scope": "export",
+    "confirms": true,
+    "description": "Builds an export without applying anything: the files and the main config text. save=true asks the user to save it to AutoTuner's export folder; applying to a router or zapret-gui is always done by the user. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "description": "Export format",
+          "enum": [
+            "zapret2",
+            "winws2",
+            "keenetic",
+            "zapret_gui",
+            "argv"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "description": "Target and strategy pairs (default: the best known strategy of each target)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "description": "A target from targets_list (a host name, never a URL)",
+                "maxLength": 253,
+                "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+              },
+              "strategy_id": {
+                "type": "string",
+                "description": "A strategy id (s-…) from another answer of this server",
+                "maxLength": 14,
+                "pattern": "^s-[0-9a-f]{12}$"
+              }
+            },
+            "required": [
+              "target",
+              "strategy_id"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 20
+        },
+        "save": {
+          "type": "boolean",
+          "description": "Ask the user to save the package"
+        }
+      },
+      "required": [
+        "format"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_experiment_start",
+    "scope": "router",
+    "confirms": true,
+    "description": "Tries strategy variants on the router through zapret-gui: the router measures the targets without bypass first, then applies each variant (the router's current strategy profiles stay after it) and probes the targets from the router; everything reverts by itself after ttl_sec unless committed. Each strategy passes the Validator for Linux. Starting needs the user's yes in the AutoTuner window. Poll router_experiment_status. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "variants": {
+          "type": "array",
+          "description": "Variants",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Variant name",
+                "maxLength": 32,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "strategy": {
+                "type": "string",
+                "description": "A strategy in nfqws2 syntax: only --payload=, --in-range=, --out-range= and --lua-desync= with catalog functions. Checked by the Validator before anything runs.",
+                "maxLength": 2048
+              },
+              "strategy_id": {
+                "type": "string",
+                "description": "A strategy id (s-…) from another answer of this server",
+                "maxLength": 14,
+                "pattern": "^s-[0-9a-f]{12}$"
+              },
+              "l4": {
+                "type": "string",
+                "description": "Transport",
+                "enum": [
+                  "tcp",
+                  "udp"
+                ]
+              }
+            },
+            "required": [
+              "label"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 5,
+          "minItems": 1
+        },
+        "targets": {
+          "type": "array",
+          "description": "Targets from targets_list (default: all, at most 10)",
+          "items": {
+            "type": "string",
+            "description": "A target from targets_list (a host name, never a URL)",
+            "maxLength": 253,
+            "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+          },
+          "maxItems": 10
+        },
+        "repeats": {
+          "type": "integer",
+          "description": "Probes per target and variant (default 3)",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "ttl_sec": {
+          "type": "integer",
+          "description": "Automatic revert on the router after this many seconds (default 300)",
+          "minimum": 60,
+          "maximum": 900
+        },
+        "keep_best": {
+          "type": "boolean",
+          "description": "Keep the best variant applied on the router until the deadline (still not committed)"
+        }
+      },
+      "required": [
+        "variants"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_experiment_status",
+    "scope": "router",
+    "confirms": false,
+    "description": "The router experiment's state (awaiting_confirmation, running, finished, failed, reverted, committed), the router's phase, awaiting_commit, and whether zapret-gui is set up in AutoTuner.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_experiment_result",
+    "scope": "router",
+    "confirms": false,
+    "description": "The router's report: targets open without bypass, per variant and target the probes from the router, success rate, score, zapret-gui's hints; the best variant. The results are stored with source router.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "description": "The run (default: the last)",
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_experiment_commit",
+    "scope": "router",
+    "confirms": true,
+    "description": "Keeps a variant on the router: it becomes zapret-gui's strategy (save=true also saves it as a user strategy and makes it active). Needs the user's yes in the AutoTuner window; the answer is pending until then. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "The variant (default: best)",
+          "maxLength": 32,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "save": {
+          "type": "boolean",
+          "description": "Also save it as a user strategy on the router and make it active"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_experiment_rollback",
+    "scope": "router",
+    "confirms": false,
+    "description": "Reverts the router at once to its state before the experiment (a kept variant too). A committed variant stays.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "bug_report_draft",
+    "scope": "read",
+    "confirms": false,
+    "description": "Drafts an issue about a problem found in AutoTuner, zapret-gui or zapret2: the fixed template with versions, the classifier's verdict, the event log tail, addresses always masked (domains on request), a suggestion where to file it and GitHub's new-issue link. Returns text only: nothing is opened or sent; show it to the user, who reviews and submits it (or uses Reports → Report a problem in AutoTuner).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "What went wrong",
+          "enum": [
+            "app_error",
+            "engine_refused",
+            "validator_mismatch",
+            "tuning_failed",
+            "zapret_gui_error",
+            "engine_crash",
+            "engine_behaviour"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "description": "One line on what happened",
+          "maxLength": 300
+        },
+        "what_did": {
+          "type": "string",
+          "description": "What was done",
+          "maxLength": 2000
+        },
+        "expected": {
+          "type": "string",
+          "description": "What was expected",
+          "maxLength": 2000
+        },
+        "got": {
+          "type": "string",
+          "description": "What happened instead",
+          "maxLength": 2000
+        },
+        "about": {
+          "type": "string",
+          "description": "A target from targets_list whose diagnosis goes in",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "tracker": {
+          "type": "string",
+          "description": "Where to file it (default: suggested)",
+          "enum": [
+            "autotuner",
+            "zapret_gui",
+            "zapret2"
+          ]
+        },
+        "mask_domains": {
+          "type": "boolean",
+          "description": "Replace domains with d1, d2… (addresses are masked always)"
+        },
+        "language": {
+          "type": "string",
+          "description": "Template language (default ru)",
+          "enum": [
+            "ru",
+            "en"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_list",
+    "scope": "resources",
+    "confirms": false,
+    "description": "The user's strategy resources (hostlists, ipsets, blobs, Lua scripts) with version, size, the solutions that use them and, for Lua, whether a version is approved.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Only this kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_get",
+    "scope": "resources",
+    "confirms": false,
+    "description": "One resource with its content (domains, entries, hex or lua_source) and its versions. Addresses in answers are masked as in the report.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        },
+        "version": {
+          "type": "integer",
+          "description": "A version (default: the current one)",
+          "minimum": 1,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_diff",
+    "scope": "resources",
+    "confirms": false,
+    "description": "Line diff between two versions of a resource. For a Lua script the default is from the approved version to the current draft (what the user will be shown before approving).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        },
+        "from_version": {
+          "type": "integer",
+          "description": "Old version (default: approved for Lua, else the previous one)",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "to_version": {
+          "type": "integer",
+          "description": "New version (default: the current one)",
+          "minimum": 1,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_create",
+    "scope": "resources",
+    "confirms": true,
+    "description": "Creates a resource from typed content: domains for a hostlist, entries for an ipset, hex for a blob, lua_source for a Lua script. Checked first; then the user decides in the AutoTuner window (pending until then, call again with the same arguments). A Lua script is created as a draft: you cannot approve it, only the user can, in the AutoTuner window after seeing the whole text and the diff. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        },
+        "domains": {
+          "type": "array",
+          "description": "hostlist: the domains, one per item (normalised: lower case, IDN to punycode, ^domain for no subdomains)",
+          "items": {
+            "type": "string",
+            "description": "A domain",
+            "maxLength": 260
+          },
+          "maxItems": 10000
+        },
+        "entries": {
+          "type": "array",
+          "description": "ipset: IP addresses and CIDRs, one per item",
+          "items": {
+            "type": "string",
+            "description": "An address or CIDR",
+            "maxLength": 64
+          },
+          "maxItems": 10000
+        },
+        "hex": {
+          "type": "string",
+          "description": "blob: the bytes in hex (spaces and : allowed), 1 to 16384 bytes",
+          "maxLength": 40000
+        },
+        "lua_source": {
+          "type": "string",
+          "description": "lua: the script source; desync functions are function name(ctx, desync) and must not reuse zapret2's names",
+          "maxLength": 262144
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_update",
+    "scope": "resources",
+    "confirms": true,
+    "description": "Replaces the content of a resource with a new version (same fields as resource_create); the user decides in the AutoTuner window. Editing a Lua script makes a new draft: the approved version stays in effect until the user approves the new one in the window; you cannot approve it. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        },
+        "domains": {
+          "type": "array",
+          "description": "hostlist: the domains, one per item (normalised: lower case, IDN to punycode, ^domain for no subdomains)",
+          "items": {
+            "type": "string",
+            "description": "A domain",
+            "maxLength": 260
+          },
+          "maxItems": 10000
+        },
+        "entries": {
+          "type": "array",
+          "description": "ipset: IP addresses and CIDRs, one per item",
+          "items": {
+            "type": "string",
+            "description": "An address or CIDR",
+            "maxLength": 64
+          },
+          "maxItems": 10000
+        },
+        "hex": {
+          "type": "string",
+          "description": "blob: the bytes in hex (spaces and : allowed), 1 to 16384 bytes",
+          "maxLength": 40000
+        },
+        "lua_source": {
+          "type": "string",
+          "description": "lua: the script source; desync functions are function name(ctx, desync) and must not reuse zapret2's names",
+          "maxLength": 262144
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resource_delete",
+    "scope": "resources",
+    "confirms": true,
+    "description": "Deletes a resource with all its versions after the user's yes. Refused while a saved or the current solution uses it (the answer names them). Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_resource_push",
+    "scope": "resources",
+    "confirms": true,
+    "description": "Writes a resource to the router the user configured (zapret-gui or nfqws2-keenetic) after the user's yes in the AutoTuner window, which shows exactly what is written. Also needs the export permission. A Lua script goes only in its approved version; a draft is refused. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "router_resource_delete",
+    "scope": "resources",
+    "confirms": true,
+    "description": "Removes one of AutoTuner's resources from the configured router after the user's yes (zapret-gui: refused while a GUI strategy uses it; keenetic: kept as .bak, refused while nfqws2.conf refers to it). Also needs the export permission. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind",
+          "enum": [
+            "hostlist",
+            "ipset",
+            "blob",
+            "lua"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name: lower-case letters, digits, _ and - (a blob name must also be a Lua identifier: no -)",
+          "maxLength": 48,
+          "pattern": "^[a-z0-9_-]{1,48}$"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

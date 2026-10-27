@@ -47,6 +47,7 @@ public static partial class KeeneticExporter
         var vars = new Dictionary<string, string>(StringComparer.Ordinal);
         var bases = new List<string> { "--fastpath-workaround=auto" };
         bases.AddRange(new[] { "zapret-lib", "zapret-antidpi", "zapret-auto" }.Select(f => $"--lua-init=@{Root}/lua/{f}.lua"));
+        bases.AddRange(ExportCommon.LuaInits(s, $"{Root}/lua"));
         if (Unifier.NeedsIpcacheHostname(s))
             bases.Add("--ipcache-hostname");
         bases.Add($"--blob=quic_initial:@{Root}/blobs/quic_initial.bin");
@@ -100,13 +101,14 @@ public static partial class KeeneticExporter
             pkg.AddText(IpsetFile(name), ExportCommon.ListLines(s.Ipsets[name]));
         foreach (var (name, bytes) in s.Blobs)
             pkg.Files[BlobFile(name)] = bytes;
+        ExportCommon.AddLuaFiles(pkg, s);
         if (mode == "MODE_ALL" && main is not null)
             pkg.Warnings.Add("MODE_ALL: основной профиль применяется ко всем доменам, кроме exclude.list / the main profile applies to every domain but exclude.list");
 
         pkg.AddText("README.txt", ExportCommon.Header(s) + $"""
 
             Экспорт для nfqws2-keenetic 1.3.x.
-            Вариант 1 (файлы): скопируйте nfqws2.conf, lists/ и blobs/ в {Root}/ и выполните
+            Вариант 1 (файлы): скопируйте nfqws2.conf, lists/{(s.LuaFiles.Count > 0 ? ", lua/" : "")} и blobs/ в {Root}/ и выполните
               /opt/etc/init.d/S51nfqws2 restart
             nfqws2.conf — полный файл пакета с нашими переменными. Проверьте ISP_INTERFACE (у вас он свой).
             lists/user.list заменит ваш список: если в нём есть свои домены, допишите наши к ним.
@@ -114,7 +116,7 @@ public static partial class KeeneticExporter
             nfqws2.conf.fragment, положите lists/ и blobs/ и перезапустите сервис.
 
             Export for nfqws2-keenetic 1.3.x.
-            Option 1 (files): copy nfqws2.conf, lists/ and blobs/ into {Root}/ and restart S51nfqws2.
+            Option 1 (files): copy nfqws2.conf, lists/{(s.LuaFiles.Count > 0 ? ", lua/" : "")} and blobs/ into {Root}/ and restart S51nfqws2.
             nfqws2.conf is the package's full file with our variables; check ISP_INTERFACE.
             lists/user.list replaces yours: append our domains if you keep your own.
             Option 2 (fragment): replace only the lines of nfqws2.conf.fragment in your nfqws2.conf.

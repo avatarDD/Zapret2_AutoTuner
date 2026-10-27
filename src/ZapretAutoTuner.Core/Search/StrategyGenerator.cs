@@ -21,12 +21,28 @@ public enum TargetProtocol
     Tls,
     Http,
     Quic,
+
+    // programs (PLAN 6.3): what a non-HTTP flow speaks, from ProtocolDetector
+    Stun,
+    WireGuard,
+    Discord,
+    Dtls,
+    Mtproto,
+
+    /// <summary>UDP the engine does not recognise.</summary>
+    Udp,
+
+    /// <summary>TCP the engine does not recognise (not TLS, HTTP or MTProto).</summary>
+    Tcp,
 }
 
 /// <summary>One strategy the search will try, with where it came from.</summary>
 public sealed record StrategyCandidate(Strategy Strategy, string Family, int Order, IReadOnlyList<string> Tags, L4Kind L4)
 {
     public string Key => Strategy.ToString();
+
+    /// <summary>Where the candidate came from (<see cref="CandidateSource"/>), recorded with its trials.</summary>
+    public string Source { get; init; } = CandidateSource.Generator;
 
     public override string ToString() => $"[{Family}] {Strategy}";
 }
@@ -274,9 +290,17 @@ public static class StrategyGenerator
         string payload = f.Payload switch
         {
             "none" => "",
-            "auto" => o.Protocol switch { TargetProtocol.Http => "--payload=http_req ", TargetProtocol.Quic => "--payload=quic_initial ", _ => "--payload=tls_client_hello " },
+            "auto" => $"--payload={AutoPayload(o.Protocol)} ",
             var p => $"--payload={p} ",
         };
+        // An unrecognised payload is "unknown": the engine filter lets it through, but the antidpi functions check
+        // payload= themselves with the default "known" (zapret-lib.lua payload_check), so each instance needs
+        // payload=unknown, or it does nothing. Such a flow has no message boundaries either: only its first data
+        // packets are touched (--out-range), not the whole stream.
+        bool unknown = payload == "--payload=unknown ";
+        string lpayload = unknown ? ":" + LuaPayloadUnknown : "";
+        if (unknown)
+            payload += $"--out-range={UnknownOutRange} ";
         foreach (var template in f.Templates)
         {
             var used = axes.Where(a => template.Contains("{" + a.Name + "}", StringComparison.Ordinal)).ToList();
@@ -286,6 +310,7 @@ public static class StrategyGenerator
                 for (int i = 0; i < used.Count; i++)
                     text = text.Replace("{" + used[i].Name + "}", combo[i], StringComparison.Ordinal);
                 text = text.Replace("{white}", o.WhiteSni, StringComparison.Ordinal); // also inside axis values
+                text = text.Replace("{lpayload}", lpayload, StringComparison.Ordinal);
                 // an empty fooling or tls_mod value leaves "::" or a trailing ":" behind
                 while (text.Contains("::", StringComparison.Ordinal))
                     text = text.Replace("::", ":", StringComparison.Ordinal);
@@ -295,6 +320,40 @@ public static class StrategyGenerator
             }
         }
     }
+
+    /// <summary>The per-instance filter for an unrecognised protocol (the template slot <c>{lpayload}</c>).</summary>
+    public const string LuaPayloadUnknown = "payload=unknown";
+
+    /// <summary>Data packets of an unrecognised flow that the strategy acts on: the first two outgoing.</summary>
+    public const string UnknownOutRange = "-d2";
+
+    /// <summary>The engine's payload type for what the target speaks (protocols.json).</summary>
+    public static string AutoPayload(TargetProtocol p) => p switch
+    {
+        TargetProtocol.Http => "http_req",
+        TargetProtocol.Quic => "quic_initial",
+        TargetProtocol.Stun => "stun",
+        TargetProtocol.WireGuard => "wireguard_initiation",
+        TargetProtocol.Discord => "discord_ip_discovery",
+        TargetProtocol.Dtls => "dtls_client_hello",
+        TargetProtocol.Mtproto => "mtproto_initial",
+        TargetProtocol.Udp or TargetProtocol.Tcp => "unknown",
+        _ => "tls_client_hello",
+    };
+
+    /// <summary>The search protocol of a detected flow protocol.</summary>
+    public static TargetProtocol FromApp(Packets.AppProtocol p, bool udp) => p switch
+    {
+        Packets.AppProtocol.Http => TargetProtocol.Http,
+        Packets.AppProtocol.Quic => TargetProtocol.Quic,
+        Packets.AppProtocol.Stun => TargetProtocol.Stun,
+        Packets.AppProtocol.WireGuard => TargetProtocol.WireGuard,
+        Packets.AppProtocol.Discord => TargetProtocol.Discord,
+        Packets.AppProtocol.Dtls => TargetProtocol.Dtls,
+        Packets.AppProtocol.Mtproto => TargetProtocol.Mtproto,
+        Packets.AppProtocol.Tls => TargetProtocol.Tls,
+        _ => udp ? TargetProtocol.Udp : TargetProtocol.Tcp,
+    };
 
     private static IReadOnlyList<string> Resolve(AxisValues a, SearchMode mode, string protocol, FamilyCatalog catalog, int depth = 0)
     {

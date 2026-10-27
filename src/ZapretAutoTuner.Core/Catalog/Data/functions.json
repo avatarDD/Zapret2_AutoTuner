@@ -1,5 +1,5 @@
 {
-  "zapret2_version": "1.0.5.2",
+  "zapret2_version": "1.0.6",
   "lua_compat": 6,
   "lua_init_order": ["zapret-lib.lua", "zapret-antidpi.lua", "zapret-auto.lua", "zapret-obfs.lua", "zapret-pcap.lua"],
   "builtin_blobs": ["fake_default_tls", "fake_default_http", "fake_default_quic"],

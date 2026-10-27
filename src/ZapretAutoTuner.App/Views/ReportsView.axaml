@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.ReportsView"
+             x:DataType="vm:ReportsViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Spacing="8">
+      <TextBlock Classes="h1" Text="{l:T reports.title}" />
+      <TextBlock Classes="muted" Text="{l:T reports.subtitle}" />
+      <CheckBox Content="{l:T reports.mask_domains}" IsChecked="{Binding MaskDomains}" />
+      <TextBox Text="{Binding Environment}" AcceptsReturn="True" Height="60" Watermark="{l:T reports.environment}" />
+      <WrapPanel>
+        <Button Content="{l:T reports.refresh}" Command="{Binding RefreshCommand}" Margin="0,0,8,8" />
+        <Button Classes="accent" Content="{l:T reports.save}" Command="{Binding SaveCommand}" Margin="0,0,8,8" />
+        <Button Content="{l:T reports.copy}" Command="{Binding CopyCommand}" Margin="0,0,8,8" />
+        <Button Content="{l:T reports.copy_prompt}" Command="{Binding CopyPromptCommand}" Margin="0,0,8,8" />
+        <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" Margin="0,0,8,8" />
+      </WrapPanel>
+      <TextBlock Text="{Binding Status}" Classes="muted" />
+    </StackPanel>
+    <TextBox Text="{Binding Preview}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" FontSize="12" Margin="0,8,0,0" />
+  </DockPanel>
+</UserControl>

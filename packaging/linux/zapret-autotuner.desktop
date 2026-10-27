@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Zapret2 AutoTuner
+Comment=Подбор стратегий zapret2 / zapret2 strategy tuning
+Exec=zapret-autotuner
+Icon=zapret-autotuner
+Terminal=false
+Categories=Network;Utility;

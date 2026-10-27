@@ -110,6 +110,10 @@ internal sealed class FakeHost : IAutoTunerHost, IDisposable
 
     public bool ProtectionActive { get; set; }
 
+    public bool LocalTuningRunning { get; set; }
+
+    public bool RouterTuningRunning { get; set; }
+
     public AgentTrialOptions TrialOptions { get; } = new() { LuaDir = "/opt/zapret2/lua", Platform = Core.Validation.EnginePlatform.Linux, Warmup = TimeSpan.Zero, Pause = TimeSpan.Zero };
 
     public Func<string, CancellationToken, Task<PageLoad>>? OpenPage => null;

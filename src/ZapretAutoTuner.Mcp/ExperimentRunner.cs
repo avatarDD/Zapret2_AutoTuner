@@ -67,8 +67,8 @@ public sealed class ExperimentRunner(McpSession session)
         }
         if (session.Search.Running)
             return McpErrors.Error("busy: the search is running; search_stop first / занято: идёт поиск");
-        if (session.Host.ProtectionActive)
-            return McpErrors.Error("busy: «Защита активна» runs on this PC; the user stops it first / занято: работает защита");
+        if (session.LocalWorkRefusal() is { } localBusy)
+            return localBusy;
 
         var targets = (args["targets"] as JsonArray)?.Select(t => (string)t!).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? [.. session.Host.Targets.Take(10)];
         if (targets.Count == 0)
@@ -93,6 +93,9 @@ public sealed class ExperimentRunner(McpSession session)
         }
         int repeats = (int?)args["repeats"] ?? 3;
         bool baseline = (bool?)args["baseline"] ?? true;
+        // AGENTS.md rule 5: a strategy is judged only against the block measured without it
+        if (!baseline)
+            return McpErrors.Error("baseline=false is refused: variants are measured only against a baseline without bypass (a variant on an open site proves nothing) / без измерения без обхода эксперимент не запускается");
         int ttl = (int?)args["ttl_sec"] ?? 300;
         bool keepBest = (bool?)args["keep_best"] ?? false;
 
@@ -128,6 +131,9 @@ public sealed class ExperimentRunner(McpSession session)
             if (_state == "running")
                 return McpErrors.Error($"busy: experiment {_runId} is running");
             _awaitingConfirmation = false;
+            // the user may have started the wizard or the protection while the dialog was open
+            if (session.LocalWorkRefusal() is { } localBusy)
+                return localBusy;
             _runId = "exp-" + session.Time.GetUtcNow().UtcDateTime.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
             _state = "running";
             _phase = "starting";
@@ -323,13 +329,17 @@ public sealed class ExperimentRunner(McpSession session)
             Math.Round(StrategyScore.Compute(v.Strategy, eff).Total, 2), fixedList, broken, unchanged);
     }
 
-    /// <summary>The winner must have fixed something when a baseline was measured (zapret-gui: a variant on an open site finds nothing).</summary>
+    /// <summary>
+    /// A variant that may win or be kept: it ran, fixed at least one target that was blocked in the baseline and broke
+    /// none (AGENTS.md rule 5; zapret-gui: a variant on an open site finds nothing). Under the lock.
+    /// </summary>
+    private static bool Keepable(VariantResult r) => r.EngineError is null && r.SuccessRate > 0 && r.Fixed.Count > 0 && r.Broken.Count == 0;
+
     private VariantResult? Best()
     {
         lock (_lock)
         {
-            return _results.Where(r => r.EngineError is null && r.SuccessRate > 0 && (_baseline.Count == 0 || r.Fixed.Count > 0) && r.Broken.Count == 0)
-                .OrderByDescending(r => r.SuccessRate).ThenBy(r => r.Score).FirstOrDefault();
+            return _results.Where(Keepable).OrderByDescending(r => r.SuccessRate).ThenBy(r => r.Score).FirstOrDefault();
         }
     }
 
@@ -414,6 +424,8 @@ public sealed class ExperimentRunner(McpSession session)
             v = _variants.FirstOrDefault(x => x.Label == label);
             if (v is null)
                 return McpErrors.Error(label is null ? "no variant fixed anything: name one with label / победителя нет" : $"no variant {label}");
+            if (_results.FirstOrDefault(r => r.Label == v.Label) is not { } measured || !Keepable(measured))
+                return McpErrors.Error($"variant {v.Label} fixed no target that was blocked in the baseline, or broke one: nothing to keep (AGENTS.md rule 5) / вариант ничего не починил относительно базовой линии");
         }
         var request = new ConfirmRequest("strategy_experiment_commit",
             "Внешний агент предлагает закрепить стратегию", "An external agent proposes to keep a strategy",

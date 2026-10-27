@@ -14,8 +14,12 @@ using ZapretAutoTuner.Tuning;
 namespace ZapretAutoTuner.App.Services;
 
 /// <summary>The MCP tools' view of this program: probes from the UI process, the engine and capture through the Agent.</summary>
-public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor) : IAutoTunerHost
+public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor, WizardViewModel? wizard = null) : IAutoTunerHost
 {
+    public bool LocalTuningRunning => wizard?.LocalTuningRunning ?? false;
+
+    public bool RouterTuningRunning => wizard?.RouterTuningRunning ?? false;
+
     public KnowledgeBase Kb => host.Kb;
 
     public IReadOnlyList<string> Targets => host.Settings.Targets;
@@ -37,7 +41,7 @@ public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor) : IAutoTu
 
     /// <summary>The router of the settings, as the Resources page uses it; the MCP tool asks the user before running it.</summary>
     public Task<Delivery.RouterResourceOperation> PrepareRouterResourceAsync(Delivery.RouterResourceAction action, Core.Resources.ResourceKind kind, string name, CancellationToken ct) =>
-        new RouterResourceService(host).PrepareAsync(action, kind, name, ct);
+        host.RouterResources.PrepareAsync(action, kind, name, ct);
 
     /// <summary>The run's log belongs to the UI thread: read there.</summary>
     public BugReportInput BugReportContext() =>

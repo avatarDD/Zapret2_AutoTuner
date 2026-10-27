@@ -59,7 +59,9 @@ public sealed class RouterTrialExecutor(ZapretGuiExperiments experiments, Router
         for (int i = 0; i < candidates.Count; i++)
         {
             var profiles = Profiles(candidates[i]);
-            if (profiles.FirstOrDefault(p => p.Args.Length > MaxArgsLength) is { Args: not null } big)
+            if (RouterTuning.ProfileLimitProblem([profiles[0]], options.CurrentProfiles) is { } tooMany)
+                results[i] = [TrialOutcome.Fail(TrialFailure.Other, tooMany + " (вариант не отправлен / not sent)")];
+            else if (profiles.FirstOrDefault(p => p.Args.Length > MaxArgsLength) is { Args: not null } big)
                 results[i] = [TrialOutcome.Fail(TrialFailure.Other,
                     $"профиль «{big.Name}» длиннее {MaxArgsLength} символов (лимит zapret-gui), вариант не отправлен / profile '{big.Name}' exceeds zapret-gui's {MaxArgsLength}-character limit, not sent")];
             else
@@ -72,9 +74,12 @@ public sealed class RouterTrialExecutor(ZapretGuiExperiments experiments, Router
             // the outcomes (it says nothing about the strategy). Once per session: the block does not change per batch.
             bool measureBaseline = _openWithoutBypass is null;
             ExperimentReport report;
+            // only a run this call started is rolled back: a refused start (another experiment runs on the router)
+            // must not revert someone else's experiment; a cancel in flight is the exception (see below)
+            string? runId = null;
             try
             {
-                var runId = await experiments.StartAsync(new ExperimentRequest
+                runId = await experiments.StartAsync(new ExperimentRequest
                 {
                     Variants = variants,
                     Targets = options.Targets.Take(10).ToList(),
@@ -86,20 +91,23 @@ public sealed class RouterTrialExecutor(ZapretGuiExperiments experiments, Router
             }
             catch (OperationCanceledException)
             {
-                // the router reverts by the dead-man switch anyway; ask it now so the user's sites come back at once
+                // the router reverts by the dead-man switch anyway; ask it now so the user's sites come back at once.
+                // A cancel during the start is ambiguous (the request may have reached the router): it is ours, revert it
                 await RollbackQuietlyAsync().ConfigureAwait(false);
                 throw;
             }
             catch (ZapretGuiException e)
             {
-                await RollbackQuietlyAsync().ConfigureAwait(false);
+                if (runId is not null)
+                    await RollbackQuietlyAsync().ConfigureAwait(false);
                 foreach (var c in chunk)
                     results[c.Index] = [TrialOutcome.Fail(TrialFailure.Other, "zapret-gui: " + e.Message)];
                 continue;
             }
             catch
             {
-                await RollbackQuietlyAsync().ConfigureAwait(false);
+                if (runId is not null)
+                    await RollbackQuietlyAsync().ConfigureAwait(false);
                 throw;
             }
             LastReport = report;

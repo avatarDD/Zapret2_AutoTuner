@@ -74,6 +74,19 @@ public sealed class McpSession
 
     internal void TrialEnded() => Interlocked.Decrement(ref _trialsRunning);
 
+    /// <summary>
+    /// Why the model's trials, search or experiments on this PC cannot run now, or null: the user tunes in the wizard,
+    /// or «Защита активна» holds the traffic (two engines would fight for it).
+    /// </summary>
+    public JsonObject? LocalWorkRefusal()
+    {
+        if (Host.LocalTuningRunning)
+            return McpErrors.Error("busy: the user is tuning in the AutoTuner wizard on this PC; wait until it finishes / занято: идёт подбор в мастере AutoTuner");
+        if (Host.ProtectionActive)
+            return McpErrors.Error("busy: «Защита активна» runs on this PC; the user stops it first / занято: работает защита");
+        return null;
+    }
+
     public bool IsTarget(string host) => Host.Targets.Contains(host, StringComparer.OrdinalIgnoreCase);
 
     public ClassifierVerdict? Verdict(string host) => _verdicts.GetValueOrDefault(host);

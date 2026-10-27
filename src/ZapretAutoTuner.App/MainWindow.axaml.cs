@@ -22,7 +22,7 @@ public sealed partial class MainWindow : Window
         m.Wizard.CopyText = m.Reports.CopyText = CopyAsync;
         m.Wizard.Confirm = (title, text) => ConfirmDialog.AskAsync(this, title, text);
         m.Expert.OpenFile = OpenFileAsync;
-        m.Mcp.Ask = (title, text) => ConfirmDialog.AskAsync(this, title, text);
+        m.Mcp.Ask = (title, text, ct) => ConfirmDialog.AskAsync(this, title, text, ct);
         m.Resources.Confirm = (title, text) => ConfirmDialog.AskAsync(this, title, text);
         m.Resources.ApproveDialog = r => LuaApprovalDialog.AskAsync(this, r);
         m.Reports.ReportProblem = m.Wizard.ReportProblem = m.Monitor.ReportProblem = m.Resources.ReportProblem = input => ReportProblemAsync(m, input);

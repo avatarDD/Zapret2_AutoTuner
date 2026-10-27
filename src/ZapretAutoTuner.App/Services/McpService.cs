@@ -20,10 +20,10 @@ public sealed partial class McpService : ObservableObject, IUserConfirm, IAsyncD
     private McpHttpServer? _http;
     private CancellationTokenSource _stdio = new();
 
-    public McpService(AppHost host, MonitorViewModel monitor)
+    public McpService(AppHost host, MonitorViewModel monitor, WizardViewModel? wizard = null)
     {
         _host = host;
-        Session = new McpSession(new AppMcpHost(host, monitor), this, () => _host.Settings.McpEnabled ? _host.Settings.McpPermissions : new McpPermissions());
+        Session = new McpSession(new AppMcpHost(host, monitor, wizard), this, () => _host.Settings.McpEnabled ? _host.Settings.McpPermissions : new McpPermissions());
         Tools = new AutoTunerTools(Session);
         Session.Audit.Added += _ => Dispatcher.UIThread.Post(Refresh);
         _timer = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => Refresh());
@@ -35,8 +35,8 @@ public sealed partial class McpService : ObservableObject, IUserConfirm, IAsyncD
 
     public AutoTunerTools Tools { get; }
 
-    /// <summary>The window's yes/no dialog; set by the main window.</summary>
-    public Func<string, string, Task<bool>>? Ask { get; set; }
+    /// <summary>The window's yes/no dialog; set by the main window. The token closes it (with "no") when the request is withdrawn.</summary>
+    public Func<string, string, CancellationToken, Task<bool>>? Ask { get; set; }
 
     public Uri? HttpEndpoint => _http?.Endpoint;
 
@@ -157,15 +157,22 @@ public sealed partial class McpService : ObservableObject, IUserConfirm, IAsyncD
         var L = Loc.Loc.I;
         var title = L.Pick(request.TitleRu, request.TitleEn);
         var text = L.F("mcp.confirm_from_agent", Session.Client ?? "MCP") + "\n\n" + L.Pick(request.TextRu, request.TextEn);
-        return await Dispatcher.UIThread.InvokeAsync(() => ask(title, text)).WaitAsync(ct).ConfigureAwait(false);
+        // the dialog gets the token too: a withdrawn request closes it instead of leaving it on screen
+        return await Dispatcher.UIThread.InvokeAsync(() => ask(title, text, ct)).WaitAsync(ct).ConfigureAwait(false);
     }
 
     private void OnLanguage(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Refresh();
 
+    /// <summary>
+    /// The banner with its Stop button: always while work runs or a dialog waits on the model's behalf (whatever the
+    /// settings say, so it can always be stopped), and for a while after a call while MCP is on.
+    /// </summary>
+    internal static bool ShowBanner(bool enabled, bool busy, int pending, bool recentCall) => busy || pending > 0 || (enabled && recentCall);
+
     private void Refresh()
     {
         var recent = Session.LastCall is { } t && DateTime.UtcNow - t.ToUniversalTime() < ActiveWindow;
-        BannerVisible = _host.Settings.McpEnabled && (Session.Busy || recent || Session.Confirmations.PendingCount > 0);
+        BannerVisible = ShowBanner(_host.Settings.McpEnabled, Session.Busy, Session.Confirmations.PendingCount, recent);
         BannerText = Loc.Loc.I["mcp.banner"] + (Session.Client is { Length: > 0 } c ? " · " + c : "");
     }
 

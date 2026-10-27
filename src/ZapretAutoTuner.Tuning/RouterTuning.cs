@@ -24,6 +24,26 @@ public static class RouterTuning
     /// <summary>zapret-gui's limit on profiles per variant (core/mcp/tools/experiments.py, VARIANT_SCHEMA <c>maxItems</c>).</summary>
     public const int MaxProfiles = 8;
 
+    /// <summary>
+    /// The profiles that would not fit zapret-gui's <see cref="MaxProfiles"/> when <paramref name="ours"/> go first and
+    /// the active strategy's <paramref name="current"/> after them; empty when all fit. Nothing is ever cut silently:
+    /// the caller refuses and names these.
+    /// </summary>
+    public static IReadOnlyList<string> DroppedProfiles(IReadOnlyList<(string Name, string Args)> ours, IReadOnlyList<(string Name, string Args)> current) =>
+        ours.Count + current.Count <= MaxProfiles ? [] : [.. ours.Concat(current).Skip(MaxProfiles).Select(p => p.Name)];
+
+    /// <summary>The refusal (RU / EN) when <paramref name="ours"/> and <paramref name="current"/> exceed <see cref="MaxProfiles"/>, or null.</summary>
+    public static string? ProfileLimitProblem(IReadOnlyList<(string Name, string Args)> ours, IReadOnlyList<(string Name, string Args)> current)
+    {
+        var dropped = DroppedProfiles(ours, current);
+        if (dropped.Count == 0)
+            return null;
+        int total = ours.Count + current.Count;
+        var names = string.Join(", ", dropped);
+        return $"в zapret-gui помещается не больше {MaxProfiles} профилей, а вместе с текущей стратегией их {total}; не вошли бы: {names} / "
+            + $"zapret-gui takes at most {MaxProfiles} profiles, and with the current strategy there are {total}; these would be dropped: {names}";
+    }
+
     /// <summary>The learned order for the router: everything learned anywhere, the router's own trials as the narrowest level.</summary>
     public static SearchLearning? ForRouter(SearchLearning? learning) =>
         learning is null ? null : learning with { Context = learning.Context with { ClientProfile = ClientProfile } };
@@ -104,10 +124,15 @@ public static class RouterTuning
     public static async Task<(ExperimentReport? Report, bool Kept, string Problem)> KeepAsync(ZapretGuiExperiments experiments,
         IReadOnlyList<(string Name, string Args)> profiles, IReadOnlyList<string> targets, int ttlSec, TimeSpan poll, CancellationToken ct)
     {
+        if (profiles.Count > MaxProfiles)
+            return (null, false, ProfileLimitProblem(profiles, [])!);
         ExperimentReport report;
+        // only a run this call started is rolled back: a refused start (another experiment is running, say from the
+        // wizard or an MCP client) must not revert someone else's experiment
+        string? runId = null;
         try
         {
-            var runId = await experiments.StartAsync(new ExperimentRequest
+            runId = await experiments.StartAsync(new ExperimentRequest
             {
                 Variants = [new ExperimentVariant(KeepLabel, profiles)],
                 Targets = [.. targets.Take(10)],
@@ -119,13 +144,21 @@ public static class RouterTuning
         }
         catch (OperationCanceledException)
         {
+            // a cancel during the start is ambiguous (the request may have reached the router): it is ours, revert it
             await RollbackQuietlyAsync(experiments).ConfigureAwait(false);
             throw;
         }
         catch (ZapretGuiException e)
         {
-            await RollbackQuietlyAsync(experiments).ConfigureAwait(false);
+            if (runId is not null)
+                await RollbackQuietlyAsync(experiments).ConfigureAwait(false);
             return (null, false, "zapret-gui: " + e.Message);
+        }
+        catch
+        {
+            if (runId is not null)
+                await RollbackQuietlyAsync(experiments).ConfigureAwait(false);
+            throw;
         }
         if (report.AwaitingCommit)
             return (report, true, "");
@@ -327,8 +360,13 @@ public sealed class RouterFeedbackWatcher(KnowledgeBase kb, Func<double, Cancell
                 await PollOnceAsync(ct).ConfigureAwait(false);
                 LastError = "";
             }
-            catch (Exception e) when (e is ZapretGuiException or HttpRequestException or IOException or TaskCanceledException && !ct.IsCancellationRequested)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                return;
+            }
+            catch (Exception e)
+            {
+                // whatever a read throws (a bad answer, a parse error, a timeout), the watch goes on and says why
                 LastError = e.Message;
             }
             try

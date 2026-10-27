@@ -35,19 +35,39 @@ public sealed partial class App : Application
             }
             desktop.ShutdownRequested += (_, _) =>
             {
+                // the built-in advisor stops talking to its provider at once
+                main.Advisor.Cancel();
                 var mcp = main.Mcp.DisposeAsync().AsTask();
                 // the protection engine and the Agent's firewall rules go away with the app (AGENTS.md rule 6)
                 Task.Run(async () =>
                 {
-                    await mcp.ConfigureAwait(false);
+                    // the router steps are bounded: an unreachable router must not hold the exit for a minute (its
+                    // dead-man switch reverts an uncommitted experiment anyway)
+                    await BoundedAsync(() => mcp).ConfigureAwait(false);
                     // an uncommitted router experiment of the wizard is rolled back (AGENTS.md rule 7)
-                    await main.Wizard.ShutdownAsync().ConfigureAwait(false);
+                    await BoundedAsync(main.Wizard.ShutdownAsync).ConfigureAwait(false);
                     await main.Monitor.ShutdownAsync().ConfigureAwait(false);
                     await host.DisposeAsync().ConfigureAwait(false);
                 }).GetAwaiter().GetResult();
             };
         }
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>How long an exit step that talks to the router may take.</summary>
+    public static readonly TimeSpan ShutdownStepTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>Runs an exit step for at most <see cref="ShutdownStepTimeout"/>; its failure does not stop the next steps.</summary>
+    public static async Task BoundedAsync(Func<Task> step, TimeSpan? timeout = null)
+    {
+        try
+        {
+            await step().WaitAsync(timeout ?? ShutdownStepTimeout).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is TimeoutException or OperationCanceledException or HttpRequestException or IOException or InvalidOperationException or Delivery.ZapretGuiException)
+        {
+            Console.Error.WriteLine("shutdown: " + e.Message);
+        }
     }
 
     public static void ApplyTheme(string theme)

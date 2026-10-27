@@ -149,7 +149,12 @@ public sealed partial class SettingsViewModel : PageViewModel
     {
         try
         {
-            await _mcp.ApplyAsync();
+            // off means off: the same full stop as the banner's button (stdio closes, the search and the experiments
+            // stop and roll back, dialogs go), not only the HTTP transport
+            if (!McpEnabled)
+                await _mcp.StopAsync();
+            else
+                await _mcp.ApplyAsync();
             McpError = "";
         }
         catch (Exception e) when (e is IOException or InvalidOperationException or System.Net.Sockets.SocketException)
@@ -190,6 +195,17 @@ public sealed partial class SettingsViewModel : PageViewModel
     partial void OnGuiUrlChanged(string value) => _host.Settings.GuiUrl = value.Trim();
 
     partial void OnGuiTokenChanged(string value) => _host.Settings.GuiToken = value;
+
+    /// <summary>The wizard edits the same zapret-gui address and token: the settings are the source.</summary>
+    public override void OnShown()
+    {
+        if (GuiUrl.Trim() != _host.Settings.GuiUrl)
+            GuiUrl = _host.Settings.GuiUrl;
+        if (GuiToken != _host.Settings.GuiToken)
+            GuiToken = _host.Settings.GuiToken;
+        if (RouterHost != _host.Settings.RouterHost)
+            RouterHost = _host.Settings.RouterHost;
+    }
 
     /// <summary>Forgets the remembered SSH host keys, after the user changed the router or its key on purpose.</summary>
     [CommunityToolkit.Mvvm.Input.RelayCommand]

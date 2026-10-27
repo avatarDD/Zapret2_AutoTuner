@@ -93,7 +93,7 @@ public static class McpTools
                 ("variants", S.Arr("Variants", S.Obj([("label", S.Str("Variant name", 32, "^[A-Za-z0-9_-]+$")), ("strategy", StrategyText()), ("strategy_id", StrategyId())], "label"), 5, 1)),
                 ("targets", S.Arr("Targets from targets_list (default: all, at most 10)", Target(), 10)),
                 ("repeats", S.Int("Probes per target and variant (default 3)", 1, 5)),
-                ("baseline", S.Bool("Measure the targets without a strategy first (default true)")),
+                ("baseline", S.Bool("Measure the targets without a strategy first (default true; false is refused: a variant is judged only against the measured block)")),
                 ("ttl_sec", S.Int("Automatic revert after this many seconds (default 300)", 30, 900)),
                 ("keep_best", S.Bool("Keep the best variant applied until the deadline (still not committed)")),
             ], "variants"), Confirms: true),

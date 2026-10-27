@@ -17,6 +17,9 @@ public sealed class LiveMonitorFailureTests
 
         public int Stops { get; private set; }
 
+        /// <summary>Called after each completed slice, so a test stops on progress instead of on a wall clock.</summary>
+        public Action? AfterStop { get; set; }
+
         public Task<string> StartCaptureAsync(CancellationToken ct)
         {
             if (++Starts <= failures)
@@ -27,6 +30,7 @@ public sealed class LiveMonitorFailureTests
         public Task<(byte[] Pcapng, long Dropped)> StopCaptureAsync(string captureId, CancellationToken ct)
         {
             Stops++;
+            AfterStop?.Invoke();
             return Task.FromResult((PcapNgWriter.ToBytes([]), 0L));
         }
 
@@ -48,7 +52,13 @@ public sealed class LiveMonitorFailureTests
         var monitor = new LiveMonitor(capture, Options());
         var failed = new List<(string Message, int InARow)>();
         monitor.Failed += (e, n) => failed.Add((e.Message, n));
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        // a loaded CI machine can be slow: stop after a few good slices, with a generous safety limit
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        capture.AfterStop = () =>
+        {
+            if (capture.Stops >= 3)
+                cts.Cancel();
+        };
         await monitor.RunAsync(cts.Token);
         Assert.Equal([1, 2], failed.Select(f => f.InARow));
         Assert.All(failed, f => Assert.Contains("agent gone", f.Message, StringComparison.Ordinal));

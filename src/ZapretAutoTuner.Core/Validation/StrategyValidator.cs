@@ -636,9 +636,12 @@ public sealed partial class StrategyValidator
             return;
         if (!PositionMarker.TryParse(so, Cat.PositionMarkers, out var seq) || !PositionMarker.TryParseList(pos, Cat.PositionMarkers, out var list) || list.Count == 0)
             return;
-        var first = list[0];
-        bool comparable = seq!.Name == first.Name && (!seq.IsAbsolute || (seq.Offset >= 0 && first.Offset >= 0));
-        if (comparable && seq.Offset >= first.Offset)
+        // the engine sorts the resolved positions, so the first split is the smallest one, wherever it is written:
+        // any position of the same kind at or below seqovl already breaks the rule
+        var first = list
+            .Where(m => seq!.Name == m.Name && (!seq.IsAbsolute || (seq.Offset >= 0 && m.Offset >= 0)))
+            .MinBy(m => m.Offset);
+        if (first is not null && seq!.Offset >= first.Offset)
             r.Error("seqovl.pos", $"seqovl={so} должен быть меньше первой позиции pos={first}", $"seqovl={so} must be less than the first split position {first}", at);
     }
 

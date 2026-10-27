@@ -72,6 +72,7 @@ public sealed class ValidatorTests
         { "--lua-desync=fake:blob=fake_default_tls:tcp_md5=zz", "arg.hex" },
         { "--lua-desync=multisplit:seqovl", "arg.novalue" },
         { "--lua-desync=multidisorder:pos=2,midsld:seqovl=3", "seqovl.pos" },
+        { "--lua-desync=multidisorder:pos=midsld,5,2:seqovl=3", "seqovl.pos" },
         { "--lua-desync=oob", "oob.inrange" },
         { "--in-range=-s1 --lua-desync=oob --lua-desync=multisplit:pos=1", "oob.resender" },
         { "--lua-desync=http_methodeol --lua-desync=http_domcase", "http.methodeol.order" },

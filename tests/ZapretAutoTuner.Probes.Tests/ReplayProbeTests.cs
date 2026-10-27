@@ -181,7 +181,7 @@ public sealed class ReplayProbeTests
         var r = await ReplayProbe.RunAsync(Tcp(((IPEndPoint)l.LocalEndpoint).Port, new byte[64]));
         await server;
         Assert.False(r.Ok);
-        Assert.Contains(r.Error, new[] { ReplayError.ServerClosed, ReplayError.Reset });
+        Assert.True(r.Error is ReplayError.ServerClosed or ReplayError.Reset, $"{r.Error} {r.Socket}");
     }
 
     [Fact]

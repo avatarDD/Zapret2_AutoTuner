@@ -257,7 +257,8 @@ public static class ReplayProbe
         {
             var error = e.SocketErrorCode switch
             {
-                SocketError.ConnectionReset => ReplayError.Reset,
+                // Windows reports a reset that arrives during a send or receive as an aborted connection
+                SocketError.ConnectionReset or SocketError.ConnectionAborted => ReplayError.Reset,
                 SocketError.ConnectionRefused or SocketError.TimedOut or SocketError.NetworkUnreachable or SocketError.HostUnreachable => ReplayError.NoConnection,
                 _ => ReplayError.Socket,
             };

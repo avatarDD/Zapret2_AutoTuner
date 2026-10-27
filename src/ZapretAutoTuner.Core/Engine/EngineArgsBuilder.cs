@@ -139,6 +139,13 @@ public static class EngineArgsBuilder
     public static string ToCommandLine(IEnumerable<string> argv) => string.Join(' ', argv.Select(ArgTokenizer.Quote));
 
     /// <summary>
+    /// The same for cmd.exe: double quotes, which cmd honours (so <c>&lt; &gt; | &amp;</c> inside stay literal) and
+    /// Cygwin's command-line parser strips; an inner <c>"</c> is escaped as <c>\"</c>.
+    /// </summary>
+    public static string ToWindowsCommandLine(IEnumerable<string> argv) =>
+        string.Join(' ', argv.Select(a => ArgTokenizer.Quote(a) == a ? a : "\"" + a.Replace("\"", "\\\"", StringComparison.Ordinal) + "\""));
+
+    /// <summary>
     /// Formats argv as an @config file (nfqws2-engine §2): one option per line, never <c>#</c> comments,
     /// single quotes around values with spaces. Throws if the result exceeds 16384 bytes.
     /// </summary>

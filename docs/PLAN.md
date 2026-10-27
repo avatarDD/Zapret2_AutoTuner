@@ -336,6 +336,22 @@ stall, заблокирован браузером, только упомяну�
 (создать списки и блобы, сохранить стратегию, **применить только по второй
 кнопке**). Windows — установить и удалить службу winws2.
 
+- Сделано: `Core/Export` — экспортёры zapret2 (фрагмент config + списки +
+  блобы), winws2 (@config, .cmd, списки, блобы), argv (всё inline),
+  nfqws2-keenetic (полный conf из шаблона пакета 1.3.1 и фрагмент, порядок
+  профилей по `_startup_args`), zapret-gui (NFQWS2_OPT-текст для импорта,
+  JSON стратегии, бэкап, бандл). `StrategyImporter` читает всё это обратно
+  (keenetic собирается как init, .cmd ведёт к @config, JSON берёт списки и
+  блобы из бэкапа или бандла). Golden-файлы в `tests/testdata/export`
+  (`ZT_UPDATE_GOLDEN=1` перезаписывает), round-trip для каждого формата,
+  порт `profile_import.convert` сверен с Python на 7 примерах.
+  `Delivery` — доставка только по подтверждению: Keenetic по SSH (SSH.NET,
+  TOFU-ключ хоста, SFTP или `printf`, бэкап `.bak`, замена только наших
+  переменных в конфиге пользователя, restart + `pidof`, откат), zapret-gui по
+  REST (списки, ipset, блобы, стратегия; `apply` — отдельный вызов), служба
+  winws2 через Agent (`InstallService`: файлы в защищённый каталог
+  ProgramData, абсолютные пути, precheck до замены прежней службы).
+
 **5.4 PR в zapret-gui.** Импорт бандла `zapret-autotuner-bundle` v1,
 `missing_files` в ответе импорта, блобы и ipset в бэкапе, опционально
 эндпоинт статистики стратегии (`strategy-export` §4).

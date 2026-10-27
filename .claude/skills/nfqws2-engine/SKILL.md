@@ -154,6 +154,20 @@ autohostlist или детектор, к этому добавляются `--wf
 | `--lua-init=@file\|code` | Lua-код или файл. Поддерживает `.gz` (сначала ищет `file`, потом `file.gz`) |
 | `--lua-gc=sec` | Принудительный GC, по умолчанию 60 с, 0 — выкл. На 1.0/1.0.1 был баг (60 мс) |
 
+**Когда читаются Lua-файлы и где им лежать (Agent).** На Linux nfqws2
+сначала сбрасывает root (`droproot`, по умолчанию uid `0x7FFFFFFF`), и только
+потом проверяет и читает `--lua-init` файлы (`nfqws.c`, `nfq_main`: `droproot`
+→ `test_list_files` → `lua_test_init_script_files` → `lua_init`). Файл в
+домашнем каталоге пользователя (часто 0700/0750) движок не прочитает. На
+Windows winws2 читает Lua с правами администратора, поэтому файл в
+`%LOCALAPPDATA%`, который пользователь может переписать, — подмена между
+проверкой и загрузкой. Поэтому Agent никогда не грузит пользовательский Lua с
+места: UI передаёт содержимое (`lua_files` в `StartEngine`/`CheckEngineArgs`),
+Agent один раз пишет копию в свой каталог (Linux `/run/zapret-autotuner/lua-<pid>`,
+root, 0755, файлы 0644; Windows `%ProgramData%\ZapretAutoTuner-agent`, только
+Administrators/SYSTEM) и запускает движок с путём к копии. `--lua-init=@file`
+вне каталога движка и этого каталога политика Agent'а отклоняет.
+
 Встроенные блобы (без `--blob`):
 - `fake_default_tls` — ClientHello Firefox без kyber, SNI `www.microsoft.com`;
 - `fake_default_http` — GET на `www.iana.org`;

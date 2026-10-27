@@ -47,6 +47,11 @@ public sealed class AppHost : IAsyncDisposable
 
     private RouterService? _router;
 
+    /// <summary>Resources on the configured router (the Resources page and the MCP tools share it and its HTTP clients).</summary>
+    public RouterResourceService RouterResources => _routerResources ??= new RouterResourceService(this);
+
+    private RouterResourceService? _routerResources;
+
     /// <summary>The Agent dropped (crash, the user closed the elevation prompt): the UI says so and offers to restart.</summary>
     public event Action<string>? AgentLost;
 
@@ -84,6 +89,7 @@ public sealed class AppHost : IAsyncDisposable
             await _agent.DisposeAsync().ConfigureAwait(false);
         if (_router is not null)
             await _router.DisposeAsync().ConfigureAwait(false);
+        _routerResources?.Dispose();
         _resourceSync.Dispose();
         Kb.Dispose();
         _agentGate.Dispose();

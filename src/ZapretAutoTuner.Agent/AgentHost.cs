@@ -112,6 +112,7 @@ internal sealed class AgentHost : IAsyncDisposable
         // remove our table/chains even if the state file was lost: they are ours by name
         Firewall?.RemoveAll();
         Sysctl.RestoreAll();
+        Engines.Lua.RemoveStale();
     }
 
     public async Task CleanupAsync()
@@ -129,6 +130,7 @@ internal sealed class AgentHost : IAsyncDisposable
         Captures.StopAll();
         Firewall?.RemoveAll();
         Sysctl.RestoreAll();
+        Engines.Lua.Clear();
         try
         {
             State.Delete();

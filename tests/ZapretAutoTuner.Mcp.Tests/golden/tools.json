@@ -442,7 +442,7 @@
         },
         "baseline": {
           "type": "boolean",
-          "description": "Measure the targets without a strategy first (default true)"
+          "description": "Measure the targets without a strategy first (default true; false is refused: a variant is judged only against the measured block)"
         },
         "ttl_sec": {
           "type": "integer",

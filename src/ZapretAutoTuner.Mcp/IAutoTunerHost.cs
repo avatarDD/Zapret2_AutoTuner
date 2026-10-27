@@ -47,6 +47,12 @@ public interface IAutoTunerHost
     /// <summary>"Защита активна" is running: a live experiment would fight it for the traffic.</summary>
     bool ProtectionActive { get; }
 
+    /// <summary>The wizard tunes on this PC: the model's trials, search and experiments would fight it for the traffic.</summary>
+    bool LocalTuningRunning => false;
+
+    /// <summary>The wizard runs trials on the router or holds a kept variant there: zapret-gui runs one experiment at a time.</summary>
+    bool RouterTuningRunning => false;
+
     /// <summary>A committed experiment variant becomes the active protection (after the user said yes).</summary>
     Task CommitAsync(Solution solution, CancellationToken ct);
 

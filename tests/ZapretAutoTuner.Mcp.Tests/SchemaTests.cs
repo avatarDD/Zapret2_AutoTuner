@@ -32,6 +32,16 @@ public sealed partial class SchemaTests
         return arr.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).ReplaceLineEndings("\n") + "\n";
     }
 
+    /// <summary>Review L1: a pattern's final $ is the end of the input, as in ECMA-262; "name\n" does not pass.</summary>
+    [Fact]
+    public void PatternDollarIsTheEndOfTheInput()
+    {
+        var schema = new JsonObject { ["type"] = "string", ["pattern"] = ResourceTools.NamePattern };
+        Assert.Null(S.Check(schema, JsonValue.Create("yt")));
+        Assert.NotNull(S.Check(schema, JsonValue.Create("yt\n")));
+        Assert.Equal("^a\\$", S.NetPattern("^a\\$"));
+    }
+
     [Fact]
     public void TheToolListMatchesTheGoldenFile()
     {

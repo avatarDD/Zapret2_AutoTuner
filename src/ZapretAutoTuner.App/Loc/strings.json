@@ -1075,6 +1075,14 @@
   "{0}: работает {1}/{2} · {3}",
   "{0}: works {1}/{2} · {3}"
  ],
+ "wizard.mcp_busy": [
+  "Сейчас подбором управляет внешний агент (MCP). Дождитесь конца или нажмите «Стоп» на баннере.",
+  "An external agent (MCP) is tuning right now. Wait until it finishes or press Stop on the banner."
+ ],
+ "wizard.router_too_many": [
+  "В zapret-gui на роутере помещается не больше {0} профилей, а вместе с текущей стратегией их {1}. Не войдут: {2}. Уменьшите число профилей или выберите в zapret-gui стратегию покороче.",
+  "zapret-gui on the router takes at most {0} profiles, and together with the current strategy there are {1}. These would be dropped: {2}. Use fewer profiles or pick a shorter strategy in zapret-gui."
+ ],
  "wizard.router_cannot": [
   "Эту стратегию нельзя перенести в эксперимент zapret-gui:\n{0}\nСохраните её через экспорт (шаг 5).",
   "This strategy cannot be carried into a zapret-gui experiment:\n{0}\nSave it through the export (step 5)."

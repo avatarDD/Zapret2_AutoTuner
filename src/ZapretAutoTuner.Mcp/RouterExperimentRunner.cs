@@ -55,6 +55,8 @@ public sealed class RouterExperimentRunner(McpSession session)
         }
         if (session.Host.RouterExperiments() is null)
             return NotSetUp();
+        if (session.Host.RouterTuningRunning)
+            return WizardBusy();
         var targets = (args["targets"] as JsonArray)?.Select(t => (string)t!).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? [.. session.Host.Targets.Take(10)];
         if (targets.Count == 0)
             return McpErrors.Error("no targets: the user's target list is empty / список целей пуст");
@@ -132,6 +134,8 @@ public sealed class RouterExperimentRunner(McpSession session)
 
     private async Task<JsonObject> BeginAsync(List<Variant> variants, List<string> targets, int repeats, int ttl, bool keepBest, CancellationToken ct)
     {
+        // the Stop button replaces the session's token: the one of this moment is the one a Stop cancels from now on
+        var stop = session.StopToken;
         var x = session.Host.RouterExperiments();
         if (x is null)
             return NotSetUp();
@@ -141,8 +145,20 @@ public sealed class RouterExperimentRunner(McpSession session)
                 return McpErrors.Error($"busy: router experiment {_runId} is running");
             _awaitingConfirmation = false;
         }
+        if (session.Host.RouterTuningRunning)
+            return WizardBusy();
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, stop);
         // R1: the token must allow the trial tools; the active strategy's profiles stay after each candidate
-        var (missing, _, current) = await RouterTuning.ConnectAsync(x, ct).ConfigureAwait(false);
+        IReadOnlyList<string> missing;
+        IReadOnlyList<(string Name, string Args)> current;
+        try
+        {
+            (missing, _, current) = await RouterTuning.ConnectAsync(x, linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested)
+        {
+            return StoppedBeforeStart();
+        }
         if (missing.Count > 0)
         {
             return new JsonObject
@@ -152,19 +168,37 @@ public sealed class RouterExperimentRunner(McpSession session)
                 ["hint"] = "the user enables the experiments permission (with control and probes) for the token in zapret-gui's MCP settings",
             };
         }
-        var runId = await x.StartAsync(new ExperimentRequest
+        // zapret-gui takes 8 profiles per variant: nothing of the router's current strategy is cut silently
+        if (RouterTuning.ProfileLimitProblem([(RouterTrialExecutor.ProfileName, "")], current) is { } tooMany)
+            return McpErrors.Error(tooMany);
+        string runId;
+        try
         {
-            Variants = [.. variants.Select(v => new ExperimentVariant(v.Label, [(RouterTrialExecutor.ProfileName, v.Args), .. current]))],
-            Targets = targets,
-            Repeats = repeats,
-            Baseline = true,
-            TtlSec = ttl,
-            KeepBest = keepBest,
-        }, ct).ConfigureAwait(false);
+            runId = await x.StartAsync(new ExperimentRequest
+            {
+                Variants = [.. variants.Select(v => new ExperimentVariant(v.Label, [(RouterTrialExecutor.ProfileName, v.Args), .. current]))],
+                Targets = targets,
+                Repeats = repeats,
+                Baseline = true,
+                TtlSec = ttl,
+                KeepBest = keepBest,
+            }, linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested)
+        {
+            // stopped while the start was on its way: it may have reached the router, so it is reverted now
+            await RouterTuning.RollbackQuietlyAsync(x).ConfigureAwait(false);
+            return StoppedBeforeStart();
+        }
+        if (linked.IsCancellationRequested)
+        {
+            await RouterTuning.RollbackQuietlyAsync(x).ConfigureAwait(false);
+            return StoppedBeforeStart();
+        }
         lock (_lock)
         {
             _cts?.Dispose();
-            _cts = CancellationTokenSource.CreateLinkedTokenSource(session.StopToken);
+            _cts = CancellationTokenSource.CreateLinkedTokenSource(ct, stop);
             _experiments = x;
             _runId = runId;
             _state = "running";
@@ -331,8 +365,13 @@ public sealed class RouterExperimentRunner(McpSession session)
             var found = _variants.FirstOrDefault(x => x.Label == label);
             if (found is null)
                 return McpErrors.Error(label is null ? "no variant won on the router: name one with label / победителя нет" : $"no variant {label}");
-            if (_report.Variants.FirstOrDefault(x => x.Label == found.Label) is not { Started: true } measured || measured.PerTarget.All(p => p.OkCount == 0))
-                return McpErrors.Error($"variant {found.Label} opened nothing on the router; nothing to keep / вариант ничего не открыл");
+            // AGENTS.md rule 5: a target that opened without bypass proves nothing about the variant
+            var open = _report.OpenWithoutBypass.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (_report.Variants.FirstOrDefault(x => x.Label == found.Label) is not { Started: true } measured
+                || measured.PerTarget.Where(p => !open.Contains(p.Target)).All(p => p.OkCount == 0))
+                return McpErrors.Error($"variant {found.Label} opened no target that is blocked without bypass on the router; nothing to keep / вариант не открыл ни одной заблокированной цели");
+            if (RouterTuning.ProfileLimitProblem([(RouterTrialExecutor.ProfileName, found.Args)], _current) is { } tooMany)
+                return McpErrors.Error(tooMany);
             v = found;
             runId = _runId;
             keptAlready = _report.AwaitingCommit && _report.Best == found.Label;
@@ -358,6 +397,8 @@ public sealed class RouterExperimentRunner(McpSession session)
                 if (_runId != runId)
                     return McpErrors.Error("the router experiment changed meanwhile / эксперимент сменился");
             }
+            if (session.Host.RouterTuningRunning)
+                return WizardBusy();
             string commitLabel = v.Label;
             if (!keptAlready)
             {
@@ -417,6 +458,20 @@ public sealed class RouterExperimentRunner(McpSession session)
         }
         return Status();
     }
+
+    private JsonObject StoppedBeforeStart()
+    {
+        lock (_lock)
+        {
+            _state = "reverted";
+            _phase = "";
+            _note = "stopped by the user / остановлено пользователем";
+        }
+        return new JsonObject { ["ok"] = false, ["status"] = "stopped", ["error"] = "stopped by the user before the experiment ran; the router was reverted / остановлено пользователем, роутер возвращён" };
+    }
+
+    private static JsonObject WizardBusy() =>
+        McpErrors.Error("busy: the user runs a router tuning in the AutoTuner wizard (zapret-gui runs one experiment at a time) / занято: в мастере идёт подбор на роутере");
 
     private static JsonObject NotSetUp() => new()
     {

@@ -49,6 +49,8 @@ public sealed class SearchController(McpSession session)
             return error;
         if (session.Experiments.Running)
             return McpErrors.Error("busy: an experiment is running; roll it back first / занято: идёт эксперимент");
+        if (session.LocalWorkRefusal() is { } localBusy)
+            return localBusy;
         lock (_lock)
         {
             if (_state is "running" or "paused")

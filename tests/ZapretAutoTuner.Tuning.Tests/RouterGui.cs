@@ -24,6 +24,9 @@ internal sealed class RouterGui : HttpMessageHandler
     /// <summary>When set, the n-th start (1-based) is refused by the GUI with this error.</summary>
     public (int Start, string Error)? RefuseStart { get; set; }
 
+    /// <summary>Awaited before a start is answered (after it is recorded): a slow router, to cancel a start in flight.</summary>
+    public Func<CancellationToken, Task>? BeforeStart { get; set; }
+
     /// <summary>Status answers in turn; the last one repeats.</summary>
     public List<string> States { get; set; } = ["finished"];
 
@@ -68,6 +71,8 @@ internal sealed class RouterGui : HttpMessageHandler
             var name = (string)body["params"]!["name"]!;
             var args = (JsonObject)body["params"]!["arguments"]!;
             Calls.Add((name, args));
+            if (name == "strategy_experiment_start" && BeforeStart is { } wait)
+                await wait(ct);
             var payload = name switch
             {
                 "strategy_experiment_start" when RefuseStart is { } refuse && refuse.Start == Starts =>

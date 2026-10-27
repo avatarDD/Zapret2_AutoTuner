@@ -85,6 +85,18 @@ public sealed partial class WizardViewModel : PageViewModel
     /// <summary>Set by the view: a yes/no dialog. Rule 7: nothing goes to a router or zapret-gui without it.</summary>
     public Func<string, string, Task<bool>>? Confirm { get; set; }
 
+    /// <summary>Set by the main view model: the MCP session works on the model's behalf (search, trials, experiments).</summary>
+    public Func<bool>? McpBusy { get; set; }
+
+    /// <summary>The search runs on this PC: the MCP tools refuse their own trials meanwhile (review M6).</summary>
+    public bool LocalTuningRunning => Volatile.Read(ref _localRunning);
+
+    /// <summary>Trials run on the router or a kept variant waits there: router experiments over MCP refuse meanwhile.</summary>
+    public bool RouterTuningRunning => Volatile.Read(ref _routerRunning) || _routerKept;
+
+    private bool _localRunning;
+    private bool _routerRunning;
+
     /// <summary>Set by the window: the "Сообщить о проблеме" dialog (PLAN 4a.6).</summary>
     public Func<BugReportInput, Task>? ReportProblem { get; set; }
 
@@ -217,6 +229,15 @@ public sealed partial class WizardViewModel : PageViewModel
 
     partial void OnGuiUrlChanged(string value) => _host.Settings.GuiUrl = value.Trim();
 
+    /// <summary>The zapret-gui address and token may have been entered in Settings meanwhile: the settings are the source.</summary>
+    public override void OnShown()
+    {
+        if (GuiUrl.Trim() != _host.Settings.GuiUrl)
+            GuiUrl = _host.Settings.GuiUrl;
+        if (GuiToken.Trim() != _host.Settings.GuiToken.Trim())
+            GuiToken = _host.Settings.GuiToken;
+    }
+
     [RelayCommand]
     private void AddPreset(string name)
     {
@@ -251,6 +272,11 @@ public sealed partial class WizardViewModel : PageViewModel
             Error = L["wizard.nothing"];
             return;
         }
+        if (McpBusy?.Invoke() == true)
+        {
+            Error = L["wizard.mcp_busy"];
+            return;
+        }
         Error = "";
         Problem = null;
         if (OnRouter)
@@ -273,6 +299,7 @@ public sealed partial class WizardViewModel : PageViewModel
             Targets.Add(new TargetRowViewModel(p.Name));
         _cts = new CancellationTokenSource();
         _clock.Restart();
+        Volatile.Write(ref _localRunning, true);
         try
         {
             AddLog(L["wizard.agent_start"]);
@@ -304,6 +331,7 @@ public sealed partial class WizardViewModel : PageViewModel
         }
         finally
         {
+            Volatile.Write(ref _localRunning, false);
             Running = false;
             _clock.Stop();
         }
@@ -325,8 +353,8 @@ public sealed partial class WizardViewModel : PageViewModel
             Error = L["wizard.router_domains_only"];
             return;
         }
-        _host.Settings.GuiUrl = GuiUrl.Trim();
-        _host.Settings.GuiToken = GuiToken.Trim();
+        // the fields write through to the settings as they change; writing them back here would wipe a token entered in
+        // Settings after this page was built
         var experiments = _host.Router.Experiments();
         if (experiments is null)
         {
@@ -345,16 +373,28 @@ public sealed partial class WizardViewModel : PageViewModel
                 Error = L.F("wizard.router_missing_tools", string.Join(", ", missing));
                 return;
             }
+            // every candidate goes with the router's current profiles after it: zapret-gui takes 8, nothing is cut
+            if (RouterTuning.DroppedProfiles([(RouterTrialExecutor.ProfileName, "")], current) is { Count: > 0 } dropped)
+            {
+                Error = L.F("wizard.router_too_many", RouterTuning.MaxProfiles, current.Count + 1, string.Join(", ", dropped));
+                return;
+            }
             // R2: one yes for the whole trial session (AGENTS.md rule 7)
             var text = L.F("wizard.router_session_text", _host.Settings.GuiUrl, string.Join(", ", hosts), activeId.Length > 0 ? activeId : "—", current.Count);
             if (Confirm is null || !await Confirm(L["wizard.router_session_title"], text))
                 return;
+            if (McpBusy?.Invoke() == true)
+            {
+                Error = L["wizard.mcp_busy"];
+                return;
+            }
             _routerExperiments = experiments;
             _routerCurrent = current;
             _routerTargets = hosts;
             _host.Settings.AddTargets(hosts);
             Step = 2;
             Running = true;
+            Volatile.Write(ref _routerRunning, true);
             Targets.Clear();
             Log.Clear();
             FoundList.Clear();
@@ -395,8 +435,16 @@ public sealed partial class WizardViewModel : PageViewModel
             Error = L.F("wizard.router_failed", e.Message);
             AddLog(Error);
         }
+        catch (Exception e)
+        {
+            // a command handler must not crash the app: anything else is shown, logged and offered for a report
+            Error = L.F("wizard.router_failed", e.Message);
+            AddLog(Error);
+            Problem = BugReports.From(e);
+        }
         finally
         {
+            Volatile.Write(ref _routerRunning, false);
             Running = false;
             _clock.Stop();
         }
@@ -428,9 +476,20 @@ public sealed partial class WizardViewModel : PageViewModel
             RouterStatus = L.F("wizard.router_cannot", string.Join(Environment.NewLine, problems));
             return;
         }
-        var all = profiles.Concat(_routerCurrent).Take(RouterTuning.MaxProfiles).ToList();
+        if (RouterTuning.DroppedProfiles(profiles, _routerCurrent) is { Count: > 0 } dropped)
+        {
+            RouterStatus = L.F("wizard.router_too_many", RouterTuning.MaxProfiles, profiles.Count + _routerCurrent.Count, string.Join(", ", dropped));
+            return;
+        }
+        if (McpBusy?.Invoke() == true)
+        {
+            RouterStatus = L["wizard.mcp_busy"];
+            return;
+        }
+        var all = profiles.Concat(_routerCurrent).ToList();
         _cts = new CancellationTokenSource();
         Running = true;
+        Volatile.Write(ref _routerRunning, true);
         try
         {
             RouterStatus = L["wizard.router_keeping"];
@@ -481,6 +540,7 @@ public sealed partial class WizardViewModel : PageViewModel
         }
         finally
         {
+            Volatile.Write(ref _routerRunning, false);
             Running = false;
         }
     }

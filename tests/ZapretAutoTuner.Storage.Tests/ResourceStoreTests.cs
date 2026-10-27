@@ -110,6 +110,40 @@ public sealed class ResourceStoreTests : IDisposable
         Assert.Equal(V2, File.ReadAllText(Assert.Single(_store.ApprovedScripts()).Path));
     }
 
+    /// <summary>Review L1: a name with a trailing newline is not a name ($ in .NET matches before it).</summary>
+    [Fact]
+    public void Names_with_a_trailing_newline_are_refused()
+    {
+        Assert.True(ResourceNames.IsValid("yt"));
+        Assert.False(ResourceNames.IsValid("yt\n"));
+        Assert.Null(ResourceNames.LuaNameOf("zt-yt.lua\n"));
+    }
+
+    /// <summary>Review L1: the file is written before the database approves; a broken script is skipped, not fatal for all.</summary>
+    [Fact]
+    public void Approval_writes_the_file_first_and_a_broken_script_does_not_hide_the_others()
+    {
+        const string other = "function zt_other(ctx, desync)\n    return VERDICT_PASS\nend\n";
+        _store.Create(ResourceInput.Lua("twice", V1));
+        _store.Create(ResourceInput.Lua("other", other));
+        _store.Approve("other", 1, confirmedByUser: true);
+        // a directory where the file of "twice" goes: it cannot be written
+        Directory.CreateDirectory(Path.Combine(_store.Root, "lua", "zt-twice.lua"));
+        Assert.ThrowsAny<IOException>(() => _store.Approve("twice", 1, confirmedByUser: true));
+        Assert.Equal(LuaApproval.Draft, _store.List(ResourceKind.LuaScript).Single(i => i.Name == "twice").Approval);
+
+        Directory.Delete(Path.Combine(_store.Root, "lua", "zt-twice.lua"));
+        _store.Approve("twice", 1, confirmedByUser: true);
+        File.Delete(Path.Combine(_store.Root, "lua", "zt-twice.lua"));
+        Directory.CreateDirectory(Path.Combine(_store.Root, "lua", "zt-twice.lua"));
+        var problems = new List<string>();
+        var scripts = _store.ApprovedScripts(problems);
+        Assert.Equal("other", Assert.Single(scripts).Name);
+        Assert.Contains("twice", Assert.Single(problems), StringComparison.Ordinal);
+        Assert.Equal(problems, _store.ScriptProblems);
+        Assert.True(_store.ApprovedLuaPaths().ContainsKey("zt_other"));
+    }
+
     [Fact]
     public void Lua_scripts_cannot_reuse_library_or_each_others_functions()
     {

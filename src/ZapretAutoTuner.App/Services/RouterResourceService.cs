@@ -28,9 +28,33 @@ public static class RouterCredentials
 /// (<see cref="ResourceStore.ForDelivery"/>: a Lua script only in its approved version). SSH keys follow the wizard's
 /// trust on first use: a changed key refuses, a new one is shown in the plan and remembered when the user said yes.
 /// </summary>
-public sealed class RouterResourceService(AppHost host) : IRouterResourceProvider
+public sealed class RouterResourceService(AppHost host) : IRouterResourceProvider, IDisposable
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
+
+    private readonly Lock _lock = new();
+    private readonly Dictionary<Uri, HttpClient> _clients = [];
+
+    /// <summary>One client per zapret-gui address, reused by every operation and disposed with the service.</summary>
+    private HttpClient ClientFor(Uri baseAddress)
+    {
+        lock (_lock)
+        {
+            if (!_clients.TryGetValue(baseAddress, out var http))
+                _clients[baseAddress] = http = new HttpClient { BaseAddress = baseAddress, Timeout = Timeout };
+            return http;
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            foreach (var c in _clients.Values)
+                c.Dispose();
+            _clients.Clear();
+        }
+    }
 
     public string? Describe()
     {
@@ -44,7 +68,7 @@ public sealed class RouterResourceService(AppHost host) : IRouterResourceProvide
         var data = action == RouterResourceAction.Put ? host.Resources.ForDelivery(kind, name) : null;
         if (ZapretGuiClient.BaseAddress(host.Settings.GuiUrl) is { } baseAddress)
         {
-            var http = new HttpClient { BaseAddress = baseAddress, Timeout = Timeout };
+            var http = ClientFor(baseAddress);
             var password = RouterCredentials.GuiPassword;
             var client = new ZapretGuiClient(http, null, string.IsNullOrEmpty(password) ? null : password);
             return data is not null

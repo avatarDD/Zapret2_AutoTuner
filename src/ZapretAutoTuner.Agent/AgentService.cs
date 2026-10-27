@@ -54,7 +54,7 @@ internal sealed class AgentService : Protocol.Agent.AgentBase
 
     public override async Task<CheckEngineArgsReply> CheckEngineArgs(CheckEngineArgsRequest request, ServerCallContext context)
     {
-        var r = await _host.Engines.CheckAsync(request.Argv, context.CancellationToken);
+        var r = await _host.Engines.CheckAsync(request.Argv, LuaFiles(request.LuaFiles), context.CancellationToken);
         var reply = new CheckEngineArgsReply { Ok = r.Ok, Stage = r.Stage };
         reply.Output.AddRange(r.Output);
         return reply;
@@ -65,7 +65,7 @@ internal sealed class AgentService : Protocol.Agent.AgentBase
         try
         {
             var queue = request.Queue is null ? null : EngineManager.ToRule(request.Queue);
-            var inst = _host.Engines.Start(request.Argv, queue, request.Tag);
+            var inst = _host.Engines.Start(request.Argv, LuaFiles(request.LuaFiles), queue, request.Tag);
             return Task.FromResult(new StartEngineReply { EngineId = inst.Id, Pid = inst.Pid });
         }
         catch (EngineStartException e)
@@ -76,7 +76,14 @@ internal sealed class AgentService : Protocol.Agent.AgentBase
         {
             throw new RpcException(new Status(StatusCode.InvalidArgument, e.Message));
         }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, "engine: " + e.Message));
+        }
     }
+
+    private static Dictionary<string, byte[]> LuaFiles(Google.Protobuf.Collections.MapField<string, ByteString> files) =>
+        files.ToDictionary(kv => kv.Key, kv => kv.Value.ToByteArray(), StringComparer.Ordinal);
 
     public override async Task<StopEngineReply> StopEngine(StopEngineRequest request, ServerCallContext context)
     {

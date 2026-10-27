@@ -31,6 +31,8 @@ internal sealed class TrialRunner(McpSession session)
         var (verdict, error) = Blocked(session, target);
         if (error is not null)
             return error;
+        if (session.LocalWorkRefusal() is { } localBusy)
+            return localBusy;
         var profile = ClientProfile.BuiltIn.FirstOrDefault(p => p.Id == ((string?)args["client"] ?? "curl")) ?? ClientProfile.BuiltIn[0];
         var (checkedStrategy, refusal) = McpErrors.StrategyFrom(session, args, profile);
         if (refusal is not null)
@@ -128,7 +130,9 @@ internal sealed class TrialRunner(McpSession session)
                 _pcap = pcap;
             }
 
-            foreach (var r in results)
+            // AGENTS.md rule 5: success is a full download; an L1 handshake proves nothing, so L1 trials stay out of the
+            // knowledge base (its statistics and the learned order); they are kept in trials_history only
+            foreach (var r in level == "L1" ? new List<ProbeResult>() : results)
             {
                 var o = AgentTrialExecutor.ToOutcome(r, trialTarget.MinBytes);
                 session.Host.Kb.RecordTrial(new TrialRecord
@@ -139,7 +143,7 @@ internal sealed class TrialRunner(McpSession session)
                     L4 = checkedStrategy.L4 == L4Kind.Udp ? "udp" : "tcp",
                     ClientProfile = profile.Id,
                     Level = level,
-                    Ok = level == "L1" ? r.Passes(ProbeLevel.L1Handshake, trialTarget.MinBytes) : o.Ok,
+                    Ok = o.Ok,
                     Error = o.Ok ? null : $"{o.Failure}: {o.Detail}",
                     BytesIn = o.BytesIn,
                     Duration = o.Duration,

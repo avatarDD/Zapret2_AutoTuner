@@ -36,9 +36,13 @@ internal sealed class EngineManager : IDisposable
         EnginePath = options.Engine ?? (options.Pkexec ? new Tools.Zapret2Bundle(Path.Combine(AppContext.BaseDirectory, "zapret2")) : Tools.Zapret2Bundle.Locate()).EnginePath;
         if (OperatingSystem.IsWindows())
             _job = new WindowsJob();
+        Lua = new LuaStore(options.LuaDir ?? LuaStore.DefaultRoot(options.DataDir!), Path.GetDirectoryName(Path.GetFullPath(EnginePath)) ?? options.DataDir!);
     }
 
     public string EnginePath { get; }
+
+    /// <summary>The Agent's protected copies of the Lua files the UI sends (user Lua, PLAN 4a.5).</summary>
+    public LuaStore Lua { get; }
 
     public EnginePlatform Platform => OperatingSystem.IsWindows() ? EnginePlatform.Windows : EnginePlatform.Linux;
 
@@ -55,7 +59,7 @@ internal sealed class EngineManager : IDisposable
     /// <param name="extraReadRoots">More directories the argv may read from (the winws2 service directory).</param>
     public CheckResult? Precheck(IReadOnlyList<string> argv, IReadOnlyList<string>? extraReadRoots = null)
     {
-        var policy = EngineArgvPolicy.Check(argv, WriteRoots, [.. ReadRoots, .. extraReadRoots ?? []]);
+        var policy = EngineArgvPolicy.Check(argv, WriteRoots, [.. ReadRoots, .. extraReadRoots ?? []], luaRoots: [.. Lua.AllowedRoots, .. extraReadRoots ?? []]);
         if (policy.Count > 0)
             return new CheckResult(false, "policy", policy);
         var ctx = new ValidationContext { Catalog = LuaCatalog.Default, Platform = Platform };
@@ -67,7 +71,8 @@ internal sealed class EngineManager : IDisposable
 
     /// <summary>
     /// The desync functions of a user Lua file (PLAN 4a.5) the argv loads, so the Validator accepts calls to them. The
-    /// user approved the script in the UI; the Agent only reads which functions the file it will load defines.
+    /// user approved the script in the UI; the Agent only reads which functions its own copy (the file it will load,
+    /// <see cref="LuaStore"/>) defines.
     /// </summary>
     private static IReadOnlyCollection<string>? UserLuaFunctions(string path)
     {
@@ -77,8 +82,20 @@ internal sealed class EngineManager : IDisposable
     }
 
     /// <summary><c>--dry-run</c>, then <c>--intercept=0</c> (catches lua-init errors), nfqws2-engine §9.</summary>
-    public async Task<CheckResult> CheckAsync(IReadOnlyList<string> argv, CancellationToken ct)
+    public async Task<CheckResult> CheckAsync(IReadOnlyList<string> argv, IReadOnlyDictionary<string, byte[]> luaFiles, CancellationToken ct)
     {
+        try
+        {
+            argv = Lua.Prepare(argv, luaFiles);
+        }
+        catch (EngineStartException e)
+        {
+            return new CheckResult(false, e.Stage, e.Problems);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return new CheckResult(false, "engine", [e.Message]);
+        }
         if (Precheck(argv) is { } bad)
             return bad;
         foreach (var (stage, extra) in new[] { ("dry-run", "--dry-run"), ("intercept=0", "--intercept=0") })
@@ -106,8 +123,10 @@ internal sealed class EngineManager : IDisposable
     }
 
     /// <summary>Starts an instance. Throws <see cref="EngineStartException"/> with Russian text on refusal.</summary>
-    public EngineInstance Start(IReadOnlyList<string> argv, NftQueueRule? queue, string tag)
+    /// <param name="luaFiles">The content of the <c>--lua-init=@file</c> files outside the engine's directory, by path.</param>
+    public EngineInstance Start(IReadOnlyList<string> argv, IReadOnlyDictionary<string, byte[]> luaFiles, NftQueueRule? queue, string tag)
     {
+        argv = Lua.Prepare(argv, luaFiles);
         if (Precheck(argv) is { } bad)
             throw new EngineStartException(bad.Stage, bad.Output);
         if (!File.Exists(EnginePath))

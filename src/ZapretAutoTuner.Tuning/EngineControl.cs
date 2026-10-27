@@ -36,6 +36,8 @@ public sealed class AgentEngineControl(Agent.AgentClient client) : IEngineContro
     {
         var req = new StartEngineRequest { Tag = tag, Queue = queue };
         req.Argv.AddRange(argv);
+        // the Agent loads no Lua from the user's folders: it gets the content and runs the engine on its own copy
+        req.WithLuaFiles();
         try
         {
             return (await client.StartEngineAsync(req, cancellationToken: ct)).EngineId;

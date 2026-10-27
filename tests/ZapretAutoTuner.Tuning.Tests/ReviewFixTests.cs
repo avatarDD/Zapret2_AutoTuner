@@ -209,8 +209,9 @@ public sealed class RouterTrialFixTests
         var r = await x.RunBatchAsync([Tcp("--lua-desync=multisplit:pos=1"), Tcp("--lua-desync=multisplit:pos=2")], 3, CancellationToken.None);
         Assert.Contains("движок занят сканером", Assert.Single(r[0]).Detail, StringComparison.Ordinal);
         Assert.All(r[1], o => Assert.True(o.Ok));
-        // the refused batch rolled back; the second started
-        Assert.Equal(["strategy_experiment_start", "strategy_experiment_rollback", "strategy_experiment_start"],
+        // the refused start returned no run id, so nothing of ours is on the router: no rollback (it would revert
+        // whoever holds the router, review M1); the second started
+        Assert.Equal(["strategy_experiment_start", "strategy_experiment_start"],
             gui.Calls.Select(c => c.Tool).Where(t => t is "strategy_experiment_start" or "strategy_experiment_rollback"));
     }
 

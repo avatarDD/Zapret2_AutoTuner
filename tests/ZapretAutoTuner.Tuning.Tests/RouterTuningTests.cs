@@ -182,6 +182,24 @@ public sealed class RouterTuningTests
         Assert.All(kb.LearningHistory(DateTimeOffset.UtcNow.AddDays(-1)), h => Assert.Equal(CandidateSource.Router, h.Source));
     }
 
+    /// <summary>Review L3: an unexpected error of one read does not end the watch silently; it is kept and retried.</summary>
+    [Fact]
+    public async Task The_feedback_watcher_survives_an_unexpected_error()
+    {
+        using var kb = KnowledgeBase.OpenInMemory();
+        int reads = 0;
+        using var cts = new CancellationTokenSource();
+        var watcher = new RouterFeedbackWatcher(kb, (_, _) =>
+        {
+            if (++reads >= 3)
+                cts.Cancel();
+            throw new InvalidOperationException("bad answer");
+        }, ["rutracker.org"]);
+        await watcher.RunAsync(TimeSpan.FromMilliseconds(1), cts.Token).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(reads >= 3);
+        Assert.Equal("bad answer", watcher.LastError);
+    }
+
     [Fact]
     public async Task The_feedback_watcher_journals_failing_new_and_recovered_hosts_once()
     {

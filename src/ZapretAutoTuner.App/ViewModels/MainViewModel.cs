@@ -13,8 +13,10 @@ public sealed partial class MainViewModel : ObservableObject
         Monitor = new MonitorViewModel(host);
         Reports = new ReportsViewModel();
         Expert = new ExpertViewModel { Resources = host.Resources };
-        Resources = new ResourcesViewModel(host.Resources, new RouterResourceService(host));
-        Mcp = new McpService(host, Monitor);
+        Resources = new ResourcesViewModel(host.Resources, host.RouterResources);
+        Mcp = new McpService(host, Monitor, Wizard);
+        // the wizard and the model never tune at the same time (review M6)
+        Wizard.McpBusy = () => Mcp.Session.Busy;
         Reports.McpAudit = Mcp.AuditLines;
         Settings = new SettingsViewModel(host, Mcp);
         Advisor = new AdvisorViewModel(host, Mcp.Tools);
@@ -46,6 +48,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private PageViewModel _current;
+
+    partial void OnCurrentChanged(PageViewModel value) => value.OnShown();
 
     [ObservableProperty]
     private string _agentStatus = "";

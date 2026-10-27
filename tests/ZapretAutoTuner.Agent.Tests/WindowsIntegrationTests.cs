@@ -47,13 +47,13 @@ public sealed class WindowsIntegrationTests
         };
         var check = new CheckEngineArgsRequest();
         check.Argv.AddRange(argv);
-        var cr = await conn.Client.CheckEngineArgsAsync(check);
+        var cr = await conn.Client.CheckEngineArgsAsync(check.WithLuaFiles());
         Assert.True(cr.Ok, cr.Stage + ": " + string.Join("\n", cr.Output));
 
         var capId = (await conn.Client.StartCaptureAsync(new StartCaptureRequest { Addresses = { ip.ToString() }, Ports = { 443 } })).CaptureId;
         var start = new StartEngineRequest { Tag = "win-it" };
         start.Argv.AddRange(argv);
-        var eng = await conn.Client.StartEngineAsync(start);
+        var eng = await conn.Client.StartEngineAsync(start.WithLuaFiles());
         await Task.Delay(1500);
 
         using (var handler = new SocketsHttpHandler

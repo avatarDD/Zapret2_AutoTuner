@@ -3,15 +3,22 @@ name: Release
 # A tag v1.2.3 builds, tests and packages every platform and publishes a GitHub release.
 # Only official upstream binaries go in: nfqws2/winws2, WinDivert, cygwin1.dll and lua from the bol-van/zapret2
 # release archive pinned by SHA-256 in tools/bundle/zapret2.lock.json (bundle.py --strict checks it).
+# Packages go straight to a draft release (release assets do not count against the Actions artifact quota); the
+# last job adds SHA256SUMS.txt and publishes it. A manual run is a dry run unless "publish" is ticked: then it
+# releases v<version>, creating the tag on the commit it ran on if the tag does not exist yet.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version without the v (a dry run: packages are built, no release is made)'
+        description: 'Version without the v'
         required: true
         default: '0.0.0-test'
+      publish:
+        description: 'Publish the release v<version> (otherwise a dry run: packages are built, no release is made)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +28,9 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   AVALONIA_TELEMETRY_OPTOUT: 1
   VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+  TAG: ${{ github.event_name == 'push' && github.ref_name || format('v{0}', inputs.version) }}
+  PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   test:
@@ -37,10 +47,52 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet test ZapretAutoTuner.slnx -c Release
 
+  draft:
+    name: Draft release
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.PUBLISH == 'true'
+      - name: Notes and draft
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          lock = json.load(open("tools/bundle/zapret2.lock.json"))
+          v = os.environ["VERSION"].removeprefix("v")
+          notes = f"""Zapret2 AutoTuner {v}
+
+          Движок: zapret2 {lock['version']} ({lock['repo']} {lock['tag']}), архив SHA-256 `{lock['sha256']}`.
+          В релизе только официальные бинарники апстримов. Телеметрии нет.
+          Engine: zapret2 {lock['version']}, official upstream binaries only. No telemetry.
+
+          - Windows: `*-setup.exe` (установщик) или `*-portable.zip`. Антивирус может ругаться на WinDivert: это драйвер перехвата из zapret2, см. docs/USER.md.
+          - Linux: `.deb`, `.rpm` или `.tar.gz`. Нужны nftables (или iptables) и polkit.
+          - Проверка файлов: `SHA256SUMS.txt`.
+          - Права администратора: для работы с правами безопаснее установщик, `.deb` или `.rpm`; portable-архив распакуйте в папку, которую могут менять только администраторы (см. docs/USER.md).
+          - Admin rights: for privileged use the installer, `.deb` or `.rpm` are the safe choice; unpack a portable archive only into a folder only administrators can write (see docs/USER.md).
+          """
+          open("notes.md", "w").write(notes)
+          PY
+          pre=""; case "$TAG" in *-*) pre="--prerelease";; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # a release made by hand on GitHub for this tag: keep it, fill it in
+            gh release edit "$TAG" --title "Zapret2 AutoTuner ${TAG#v}" --notes-file notes.md $pre
+          else
+            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "Zapret2 AutoTuner ${TAG#v}" --notes-file notes.md $pre
+          fi
+
   package:
     name: Package ${{ matrix.rid }}
-    needs: test
+    needs: draft
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -103,51 +155,39 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq rpm
           packaging/linux/build.sh ${{ matrix.rid }} "$VER" artifacts/publish/ZapretAutoTuner dist
 
+      - name: Upload to the draft release
+        if: env.PUBLISH == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/* --clobber
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        # a dry run keeps the packages for a day, when the artifact quota allows
+        if: env.PUBLISH != 'true'
+        continue-on-error: true
         with:
           name: dist-${{ matrix.rid }}
           path: dist/*
           if-no-files-found: error
-          # handed to the release job of the same run only
           retention-days: 1
 
   release:
     name: GitHub release
     needs: package
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: dist-*
-          path: dist
-          merge-multiple: true
-      - name: Checksums and notes
+      - name: Checksums and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          cd dist && sha256sum * > SHA256SUMS.txt && cd ..
-          python3 - <<'PY'
-          import json, os
-          lock = json.load(open("tools/bundle/zapret2.lock.json"))
-          v = os.environ["VERSION"]
-          notes = f"""Zapret2 AutoTuner {v}
-
-          Движок: zapret2 {lock['version']} ({lock['repo']} {lock['tag']}), архив SHA-256 `{lock['sha256']}`.
-          В релизе только официальные бинарники апстримов. Телеметрии нет.
-          Engine: zapret2 {lock['version']}, official upstream binaries only. No telemetry.
-
-          - Windows: `*-setup.exe` (установщик) или `*-portable.zip`. Антивирус может ругаться на WinDivert: это драйвер перехвата из zapret2, см. docs/USER.md.
-          - Linux: `.deb`, `.rpm` или `.tar.gz`. Нужны nftables (или iptables) и polkit.
-          - Проверка файлов: `SHA256SUMS.txt`.
-          - Права администратора: для работы с правами безопаснее установщик, `.deb` или `.rpm`; portable-архив распакуйте в папку, которую могут менять только администраторы (см. docs/USER.md).
-          - Admin rights: for privileged use the installer, `.deb` or `.rpm` are the safe choice; unpack a portable archive only into a folder only administrators can write (see docs/USER.md).
-          """
-          open("notes.md", "w").write(notes)
-          PY
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-        with:
-          files: dist/*
-          body_path: notes.md
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          mkdir dist && cd dist
+          gh release download "$TAG" --clobber
+          rm -f SHA256SUMS.txt
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --clobber
+          gh release edit "$TAG" --draft=false

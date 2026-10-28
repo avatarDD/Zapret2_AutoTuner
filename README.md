@@ -53,9 +53,12 @@ sudo -E env "PATH=$PATH" ZT_ZAPRET2_DIR=$PWD/runtimes/linux-x64/zapret2 \
 Тег `v1.2.3` запускает `.github/workflows/release.yml`: тесты на Windows и
 Linux, бандл zapret2 по закреплённому SHA-256, self-contained publish, пакеты
 (Windows: установщик Inno Setup и portable zip; Linux x64/arm64: .deb, .rpm,
-tar.gz), `SHA256SUMS.txt` и GitHub-релиз. AppImage в релизе 1 нет (см.
-`docs/PLAN.md`, фаза 9). Ручной запуск
-(workflow_dispatch) собирает пакеты без релиза.
+tar.gz), `SHA256SUMS.txt` и GitHub-релиз. Пакеты сразу загружаются в
+черновик релиза, а не в артефакты Actions, поэтому квота хранилища артефактов
+сборке не мешает. AppImage в релизе 1 нет (см. `docs/PLAN.md`, фаза 9).
+Ручной запуск (workflow_dispatch) собирает пакеты без релиза; с галочкой
+«publish» он выпускает релиз `v<версия>` и сам создаёт тег на текущем коммите,
+если тега ещё нет.
 
 Телеметрии нет и при сборке: статистика Avalonia.BuildServices отключена в
 `Directory.Build.targets`.

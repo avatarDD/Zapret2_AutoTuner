@@ -314,6 +314,32 @@ public sealed class AppSettings
     /// <summary>The provider's API key: a secret, so in memory for this run only, like <see cref="GuiToken"/>.</summary>
     public string AdvisorKey { get; set; } = "";
 
+    /// <summary>
+    /// The wizard's search on this PC that did not finish (paused, the app closed, the PC restarted): kept until the run
+    /// ends or the user drops it, so "Продолжить" picks it up. Null when there is none or the record is unreadable.
+    /// </summary>
+    public PendingRun? PendingRun
+    {
+        get
+        {
+            try
+            {
+                return kb.GetSetting("wizard.pending_run") is { } json ? System.Text.Json.JsonSerializer.Deserialize<PendingRun>(json) : null;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return null;
+            }
+        }
+        set
+        {
+            if (value is null)
+                kb.RemoveSetting("wizard.pending_run");
+            else
+                kb.SetSetting("wizard.pending_run", System.Text.Json.JsonSerializer.Serialize(value));
+        }
+    }
+
     /// <summary>The user's targets (the wizard's domains and the ones added over MCP after a yes).</summary>
     public IReadOnlyList<string> Targets
     {
@@ -346,4 +372,21 @@ public sealed class AppSettings
     private bool Flag(string key) => kb.GetSetting(key) == "1";
 
     private void SetFlag(string key, bool value) => kb.SetSetting(key, value ? "1" : "0");
+}
+
+/// <summary>What an interrupted wizard search needs to go on: its inputs and each domain's knowledge-base session.</summary>
+public sealed record PendingRun
+{
+    public List<string> Hosts { get; init; } = [];
+
+    /// <summary>Provider names (ProviderCatalog); their search starts over, it is short.</summary>
+    public List<string> Providers { get; init; } = [];
+
+    public string Mode { get; init; } = "Standard";
+
+    public bool OpenPages { get; init; }
+
+    public DateTimeOffset Started { get; init; }
+
+    public Dictionary<string, long> Sessions { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 }

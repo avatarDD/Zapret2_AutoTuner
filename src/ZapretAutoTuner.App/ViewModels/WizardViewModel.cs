@@ -65,6 +65,11 @@ public sealed partial class WizardViewModel : PageViewModel
     private readonly AppHost _host;
     private CancellationTokenSource? _cts;
     private readonly Stopwatch _clock = new();
+    private PauseGate? _pause;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Core.Diagnostics.ClassifierVerdict> _verdicts = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The app is closing: an unfinished run stays pending instead of being taken as a stop.</summary>
+    private volatile bool _keepPending;
 
     public WizardViewModel(AppHost host)
     {
@@ -73,6 +78,7 @@ public sealed partial class WizardViewModel : PageViewModel
         _guiUrl = host.Settings.GuiUrl;
         _guiToken = host.Settings.GuiToken;
         _routerHost = host.Settings.RouterHost;
+        RefreshPending();
     }
 
     public override string TitleKey => "nav.wizard";
@@ -177,6 +183,24 @@ public sealed partial class WizardViewModel : PageViewModel
 
     [ObservableProperty]
     private bool _openPages;
+
+    /// <summary>The search waits between trials; the app may be closed and the run continued later.</summary>
+    [ObservableProperty]
+    private bool _paused;
+
+    /// <summary>An interrupted search on this PC can be continued (step 1 shows it).</summary>
+    [ObservableProperty]
+    private bool _hasPending;
+
+    [ObservableProperty]
+    private string _pendingText = "";
+
+    private void RefreshPending()
+    {
+        var p = _host.Settings.PendingRun;
+        HasPending = p is not null && (p.Hosts.Count > 0 || p.Providers.Count > 0);
+        PendingText = p is null ? "" : L.F("wizard.pending", p.Started.ToLocalTime().ToString("g"), string.Join(", ", p.Hosts.Concat(p.Providers).Take(6)));
+    }
 
     public ObservableCollection<string> Results { get; } = [];
 
@@ -290,6 +314,82 @@ public sealed partial class WizardViewModel : PageViewModel
             await RouterAsync(hosts);
             return;
         }
+        var mode = Enum.TryParse<SearchMode>(_host.Settings.SearchMode, out var m) ? m : SearchMode.Standard;
+        var run = new PendingRun
+        {
+            Hosts = hosts,
+            Providers = [.. providers.Select(p => p.Name)],
+            Mode = mode.ToString(),
+            OpenPages = OpenPages,
+            Started = DateTimeOffset.Now,
+        };
+        await RunOnPcAsync(run, providers, resume: false);
+    }
+
+    /// <summary>Continues the interrupted search: same domains and mode; what was tried already is not run again.</summary>
+    [RelayCommand]
+    private async Task ContinuePendingAsync()
+    {
+        if (_host.Settings.PendingRun is not { } run || Running)
+            return;
+        if (McpBusy?.Invoke() == true)
+        {
+            Error = L["wizard.mcp_busy"];
+            return;
+        }
+        Error = "";
+        Problem = null;
+        OnRouter = false;
+        OpenPages = run.OpenPages;
+        InputText = string.Join(Environment.NewLine, run.Hosts);
+        var names = run.Providers.ToHashSet(StringComparer.Ordinal);
+        foreach (var p in Providers)
+            p.Checked = names.Contains(p.Name);
+        await RunOnPcAsync(run, [.. Providers.Where(p => p.Checked).Select(p => p.Provider)], resume: true);
+    }
+
+    [RelayCommand]
+    private void ForgetPending()
+    {
+        _host.Settings.PendingRun = null;
+        RefreshPending();
+    }
+
+    [RelayCommand]
+    private void TogglePause()
+    {
+        if (_pause is not { } gate || !Running)
+            return;
+        if (gate.IsPaused)
+            gate.Resume();
+        else
+            gate.Pause();
+    }
+
+    private void OnPauseChanged(bool paused)
+    {
+        Paused = paused;
+        AddLog(L[paused ? "wizard.paused_log" : "wizard.resumed_log"]);
+        CurrentLine = paused ? L["wizard.paused_line"] : "";
+    }
+
+    private async Task RunOnPcAsync(PendingRun run, List<Provider> providers, bool resume)
+    {
+        var hosts = run.Hosts;
+        var mode = Enum.TryParse<SearchMode>(run.Mode, out var m) ? m : SearchMode.Standard;
+        var sessions = new Dictionary<string, long>(run.Sessions, StringComparer.OrdinalIgnoreCase);
+        var saveLock = new object();
+        void Save()
+        {
+            lock (saveLock)
+                _host.Settings.PendingRun = run with { Sessions = new Dictionary<string, long>(sessions, StringComparer.OrdinalIgnoreCase) };
+        }
+        void SessionStarted(string domain, long id)
+        {
+            lock (saveLock)
+                sessions[domain] = id;
+            Save();
+        }
         _host.Settings.AddTargets(hosts); // the MCP tools probe only the user's targets
         Step = 2;
         Running = true;
@@ -305,24 +405,38 @@ public sealed partial class WizardViewModel : PageViewModel
             Targets.Add(new TargetRowViewModel(p.Name));
         _cts = new CancellationTokenSource();
         _clock.Restart();
+        _keepPending = false;
+        var gate = new PauseGate();
+        gate.Changed += p => Avalonia.Threading.Dispatcher.UIThread.Post(() => OnPauseChanged(p));
+        _pause = gate;
+        Paused = false;
+        HasPending = false;
+        Save();
+        // a run that ends by itself or by "Остановить" is done; one that broke off or the app closed stays pending
+        bool finished = false;
         Volatile.Write(ref _localRunning, true);
         try
         {
+            if (resume)
+                AddLog(L["wizard.resuming"]);
             // no browser on the machine: the final check loads the page by itself (docs/USER.md), said now and not at the end
-            bool openPages = OpenPages && BrowserLocator.Chromium() is not null;
-            if (OpenPages && !openPages)
+            bool openPages = run.OpenPages && BrowserLocator.Chromium() is not null;
+            if (run.OpenPages && !openPages)
                 AddLog(L["wizard.no_browser"]);
             AddLog(L["wizard.agent_start"]);
             var agent = await _host.AgentAsync(_cts.Token);
             var engine = new AgentEngineControl(agent.Client);
-            var mode = Enum.TryParse<SearchMode>(_host.Settings.SearchMode, out var m) ? m : SearchMode.Standard;
             var context = SearchContext.For(_host);
-            var options = new PipelineOptions { Search = new SearchOptions { Generator = new GeneratorOptions { Mode = mode }, Learning = context.Learning } };
-            var pipeline = new TuningPipeline(new PcPipelineServices(_host, engine, openPages, context), options);
-            pipeline.Event += e => Avalonia.Threading.Dispatcher.UIThread.Post(() => OnEvent(e));
+            var options = new PipelineOptions { Search = new SearchOptions { Generator = new GeneratorOptions { Mode = mode }, Learning = context.Learning }, Pause = gate };
+            var pipeline = new TuningPipeline(new PcPipelineServices(_host, engine, openPages, context, sessions, SessionStarted), options);
+            pipeline.Event += Observe;
             var result = await Task.Run(() => pipeline.RunAsync(hosts, _cts.Token));
             if (providers.Count > 0 && !_cts.IsCancellationRequested)
+            {
+                await gate.WaitAsync(_cts.Token);
                 result = await ProvidersAsync(result, providers, engine, _cts.Token);
+            }
+            finished = !_keepPending;
             SessionState.I.Last = result;
             ShowResults(result);
             if (result.Solution is null && result.Targets.Count > 0)
@@ -331,19 +445,26 @@ public sealed partial class WizardViewModel : PageViewModel
         }
         catch (OperationCanceledException)
         {
+            finished = !_keepPending;
             AddLog(L["common.stopped"]);
         }
         catch (Exception e)
         {
             Error = e.Message;
             AddLog(e.Message);
+            AddLog(L["wizard.pending_kept"]);
             Problem = BugReports.From(e);
         }
         finally
         {
+            if (finished)
+                _host.Settings.PendingRun = null;
+            _pause = null;
+            Paused = false;
             Volatile.Write(ref _localRunning, false);
             Running = false;
             _clock.Stop();
+            RefreshPending();
         }
     }
 
@@ -422,7 +543,7 @@ public sealed partial class WizardViewModel : PageViewModel
             var services = new RouterPipelineServices(experiments, new RouterTrialOptions { Targets = hosts, CurrentProfiles = current }, ClassifyAsync,
                 _host.Kb, context.NetworkId, context.Asn, _host.Settings.SearchMode);
             var pipeline = new TuningPipeline(services, options);
-            pipeline.Event += e => Avalonia.Threading.Dispatcher.UIThread.Post(() => OnEvent(e));
+            pipeline.Event += Observe;
             var result = await Task.Run(() => pipeline.RunAsync(hosts, _cts.Token));
             foreach (var (host, x) in services.Executors)
             {
@@ -558,6 +679,8 @@ public sealed partial class WizardViewModel : PageViewModel
     /// <summary>On exit: a running search stops and nothing uncommitted stays on the router (its dead-man switch would revert it anyway).</summary>
     public async Task ShutdownAsync()
     {
+        // a search on this PC is left as it is in the knowledge base and offered for "Продолжить" on the next start
+        _keepPending = true;
         _cts?.Cancel();
         if (_routerExperiments is { } x && (Running || _routerKept))
             await RouterTuning.RollbackQuietlyAsync(x).ConfigureAwait(false);
@@ -601,6 +724,22 @@ public sealed partial class WizardViewModel : PageViewModel
             }
         }
         return result with { Solution = solution.Profiles.Count > 0 ? solution : null };
+    }
+
+    /// <summary>The wizard's diagnosis of a target, for the MCP tools (the model sees what the user's search found).</summary>
+    public Core.Diagnostics.ClassifierVerdict? VerdictOf(string host) => _verdicts.GetValueOrDefault(host);
+
+    /// <summary>The run as the window shows it, for the MCP search_status; read on the UI thread.</summary>
+    public Mcp.WizardSnapshot? Snapshot() => Targets.Count == 0 ? null : new Mcp.WizardSnapshot(Running, Paused, Percent, ElapsedText, RemainingText, CurrentLine,
+        [.. Targets.Select(t => new Mcp.WizardTargetView(t.Host, t.Stage.ToString(), t.Message, t.Found, t.Result.Length > 0 ? t.Result : null))],
+        [.. FoundList]);
+
+    /// <summary>From the pipeline's thread: verdicts are kept at once, everything else goes to the UI thread.</summary>
+    private void Observe(PipelineEvent e)
+    {
+        if (e is TargetClassified c)
+            _verdicts[c.Target] = c.Verdict;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => OnEvent(e));
     }
 
     private void OnEvent(PipelineEvent e)

@@ -110,6 +110,39 @@ public sealed class ViewsTests : IAsyncLifetime
     }
 
     [AvaloniaFact]
+    public void AnInterruptedSearchIsOfferedForContinuing()
+    {
+        Assert.Null(_host!.Settings.PendingRun);
+        _host.Settings.PendingRun = new PendingRun
+        {
+            Hosts = ["www.youtube.com", "i.ytimg.com"],
+            Mode = "Full",
+            OpenPages = true,
+            Started = DateTimeOffset.Now,
+            Sessions = new() { ["www.youtube.com"] = 7 },
+        };
+        var saved = _host.Settings.PendingRun!;
+        Assert.Equal(["www.youtube.com", "i.ytimg.com"], saved.Hosts);
+        Assert.Equal(7, saved.Sessions["www.youtube.com"]);
+        Assert.Equal("Full", saved.Mode);
+
+        var w = new WizardViewModel(_host);
+        Assert.True(w.HasPending);
+        Assert.Contains("i.ytimg.com", w.PendingText);
+        var window = new Avalonia.Controls.Window { Content = new Views.WizardView { DataContext = w } };
+        window.Show();
+        window.UpdateLayout();
+        // pausing does nothing when no search runs
+        w.TogglePauseCommand.Execute(null);
+        Assert.False(w.Paused);
+
+        w.ForgetPendingCommand.Execute(null);
+        Assert.False(w.HasPending);
+        Assert.Null(_host.Settings.PendingRun);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task RouterModeIsOptInAndNeedsZapretGui()
     {
         // the MCP router permission is off by default, and acts only with control and probes

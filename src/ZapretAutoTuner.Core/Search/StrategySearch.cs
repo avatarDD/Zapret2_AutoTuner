@@ -162,6 +162,9 @@ public sealed record SearchOptions
     public IReadOnlyDictionary<string, Efficiency> AlreadyTried { get; init; } = new Dictionary<string, Efficiency>();
 
     public ExportTargets ExportTargets { get; init; } = ExportTargets.Pc;
+
+    /// <summary>Time the user kept the search paused: it counts neither against the refinement time nor in the estimate.</summary>
+    public Func<TimeSpan>? PausedTime { get; init; }
 }
 
 /// <summary>
@@ -181,6 +184,8 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
     private int _nextAsk;
     private TimeSpan _strategyTime;
     private int _strategiesTimed;
+
+    private TimeSpan Elapsed => _sw.Elapsed - (options.PausedTime?.Invoke() ?? TimeSpan.Zero);
 
     public async Task<SearchResult> RunAsync(CancellationToken ct = default)
     {
@@ -210,7 +215,7 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
                     stage == SearchStage.Priors ? $"Проверяю стратегию, которая сработала у вашего провайдера: {c.Family}" : $"Пробую {c.Family}: {c.Strategy}",
                     stage == SearchStage.Priors ? $"Trying a strategy that worked on your provider: {c.Family}" : $"Trying {c.Family}: {c.Strategy}");
 
-                var started = _sw.Elapsed;
+                var started = Elapsed;
                 int seriesBefore = _seriesRun;
                 var eff = await ScreenAsync(c, ct).ConfigureAwait(false);
                 if (eff.Partial)
@@ -221,7 +226,7 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
                 // results taken from an interrupted session cost nothing and would make the estimate collapse
                 if (_seriesRun > seriesBefore)
                 {
-                    _strategyTime += _sw.Elapsed - started;
+                    _strategyTime += Elapsed - started;
                     _strategiesTimed++;
                 }
                 log?.Checkpoint(i);
@@ -256,12 +261,12 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
             MessageEn = ranked.Count > 0 ? $"Done: {ranked.Count} working strategies found" : _bestPartial is not null ? $"Nothing fully works; the best works {_bestPartial.Efficiency.Rate:P0} of the time" : "No working strategy found",
             Done = _done,
             Total = _done,
-            Elapsed = _sw.Elapsed,
+            Elapsed = Elapsed,
             Remaining = TimeSpan.Zero,
             Found = ranked,
             BestPartial = _bestPartial,
         });
-        return new SearchResult(ranked, _bestPartial, _done, reason, _sw.Elapsed);
+        return new SearchResult(ranked, _bestPartial, _done, reason, Elapsed);
     }
 
     /// <summary>Standard mode: a family is not tried once a family it depends on already works (SCANLEVEL=standard).</summary>
@@ -304,17 +309,17 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
         var best = new FoundStrategy(parent, parentEff, Score(parent.Strategy, parentEff));
         var beam = new List<(StrategyCandidate C, Efficiency E, string Path)> { (parent, parentEff, "") };
         int budget = options.RefineBudget;
-        var deadline = _sw.Elapsed + options.RefineTime;
+        var deadline = Elapsed + options.RefineTime;
         try
         {
-        while (budget > 0 && _sw.Elapsed < deadline && beam.Count > 0)
+        while (budget > 0 && Elapsed < deadline && beam.Count > 0)
         {
             var next = new List<(StrategyCandidate C, Efficiency E, string Path)>();
             foreach (var (c, e, path) in beam)
             {
                 foreach (var m in StrategyMutator.Mutate(c.Strategy, options.Generator, l4: c.L4))
                 {
-                    if (budget <= 0 || _sw.Elapsed >= deadline)
+                    if (budget <= 0 || Elapsed >= deadline)
                         break;
                     if (!_tried.Add(m.Strategy.ToString()))
                         continue;
@@ -422,7 +427,7 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
             MessageEn = en,
             Done = _done,
             Total = _done + remaining,
-            Elapsed = _sw.Elapsed,
+            Elapsed = Elapsed,
             Remaining = eta,
             Current = c,
             Found = Ranked(),

@@ -30,6 +30,9 @@ public sealed record TrialStarted(string Target, DateTime Time, StrategyCandidat
 
 public sealed record TrialResult(string Target, DateTime Time, StrategyCandidate Candidate, TrialOutcome Outcome) : PipelineEvent(Target, Time);
 
+/// <summary>A target's diagnosis is in (also when no strategy is needed or can help).</summary>
+public sealed record TargetClassified(string Target, DateTime Time, ClassifierVerdict Verdict) : PipelineEvent(Target, Time);
+
 public sealed record CandidateFound(string Target, DateTime Time, FoundStrategy Found) : PipelineEvent(Target, Time);
 
 public sealed record FamilySkipped(string Target, DateTime Time, string Family, string ReasonRu, string ReasonEn) : PipelineEvent(Target, Time);
@@ -74,6 +77,9 @@ public sealed record PipelineOptions
 
     /// <summary>Run the cross-check and build one config for all domains.</summary>
     public bool Unify { get; init; } = true;
+
+    /// <summary>"Пауза": checked before every target, every trial and the final check; null never pauses.</summary>
+    public PauseGate? Pause { get; init; }
 }
 
 /// <summary>
@@ -96,6 +102,14 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
             if (ct.IsCancellationRequested)
                 break;
             var host = hosts[i];
+            try
+            {
+                await WaitIfPausedAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
             TargetOutcome outcome;
             ITrialExecutor? executor;
             try
@@ -146,6 +160,7 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
             Stage(host, PipelineStage.Failed, "Диагностика не удалась: " + e.Message, "Diagnostics failed: " + e.Message);
             return (new TargetOutcome(host, null, null, [], e.Message), null);
         }
+        Publish(new TargetClassified(host, DateTime.UtcNow, verdict));
         if (verdict.Next != NextStep.SearchStrategy)
         {
             Stage(host, PipelineStage.Skipped, verdict.SummaryRu, verdict.SummaryEn);
@@ -173,10 +188,15 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
             Generator = options.Search.Generator with { Labels = verdict.Labels },
             Learning = options.Search.Learning is { } learning ? learning with { Context = learning.Context with { Label = verdict.Primary.ToString() } } : null,
         };
+        if (options.Pause is { } gate)
+        {
+            var pausedBefore = gate.PausedTime;
+            searchOptions = searchOptions with { PausedTime = () => gate.PausedTime - pausedBefore };
+        }
         var progress = new Progress<SearchProgress>(p => OnSearch(host, p, index, count, sw));
         var log = services.LogFor(host, verdict);
         searchOptions = services.OptionsFor(host, verdict, searchOptions);
-        var search = new StrategySearch(new ObservedExecutor(executor, host, Publish), searchOptions, log, progress);
+        var search = new StrategySearch(new ObservedExecutor(executor, host, Publish, options.Pause), searchOptions, log, progress);
         Stage(host, PipelineStage.Search, $"Подбираю стратегию: {verdict.SummaryRu}", $"Searching a strategy: {verdict.SummaryEn}");
         var result = await search.RunAsync(ct).ConfigureAwait(false);
         services.Finished(host, result);
@@ -184,6 +204,17 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
             Publish(new CandidateFound(host, DateTime.UtcNow, f));
 
         IReadOnlyList<FinalCheckResult> final = [];
+        if (result.Working.Count > 0 && !ct.IsCancellationRequested)
+        {
+            try
+            {
+                await WaitIfPausedAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // stopped while paused: what the search found stays, the final check is skipped like after any stop
+            }
+        }
         if (result.Working.Count > 0 && !ct.IsCancellationRequested && services.FinalCheckAsync(host, executor, result.Working, ct) is { } check)
         {
             Stage(host, PipelineStage.FinalCheck, "Финальная проверка найденных стратегий", "Final check of the found strategies");
@@ -202,19 +233,25 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
         Stage(host, stage, p.MessageRu, p.MessageEn);
         // the targets share the bar evenly; within a target the search's own estimate counts
         double percent = (index + p.Percent / 100.0) / count * 100.0;
-        TimeSpan? remaining = percent > 0.5 ? TimeSpan.FromTicks((long)(sw.Elapsed.Ticks * (100 - percent) / percent)) : null;
-        Publish(new OverallProgress(host, DateTime.UtcNow, percent, sw.Elapsed, remaining, p.MessageRu, p.MessageEn));
+        var elapsed = sw.Elapsed - (options.Pause?.PausedTime ?? TimeSpan.Zero);
+        TimeSpan? remaining = percent > 0.5 ? TimeSpan.FromTicks((long)(elapsed.Ticks * (100 - percent) / percent)) : null;
+        Publish(new OverallProgress(host, DateTime.UtcNow, percent, elapsed, remaining, p.MessageRu, p.MessageEn));
     }
+
+    private Task WaitIfPausedAsync(CancellationToken ct) => options.Pause?.WaitAsync(ct) ?? Task.CompletedTask;
 
     private void Stage(string host, PipelineStage stage, string ru, string en) => Publish(new StageChanged(host, DateTime.UtcNow, stage, ru, en));
 
     private void Publish(PipelineEvent e) => Event?.Invoke(e);
 
-    /// <summary>Publishes every trial of the wrapped executor.</summary>
-    private sealed class ObservedExecutor(ITrialExecutor inner, string host, Action<PipelineEvent> publish) : ITrialExecutor
+    /// <summary>Publishes every trial of the wrapped executor and holds the next one while paused.</summary>
+    private sealed class ObservedExecutor(ITrialExecutor inner, string host, Action<PipelineEvent> publish, PauseGate? pause) : ITrialExecutor
     {
         public async Task<IReadOnlyList<TrialOutcome>> RunAsync(StrategyCandidate candidate, int attempts, Func<IReadOnlyList<TrialOutcome>, bool> stopEarly, CancellationToken ct)
         {
+            // between trials only: the one in progress finishes and stops its engine
+            if (pause is not null)
+                await pause.WaitAsync(ct).ConfigureAwait(false);
             publish(new TrialStarted(host, DateTime.UtcNow, candidate));
             var outcomes = await inner.RunAsync(candidate, attempts, stopEarly, ct).ConfigureAwait(false);
             foreach (var o in outcomes)

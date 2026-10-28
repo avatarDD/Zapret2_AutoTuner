@@ -31,7 +31,11 @@
    YouTube, Discord, Telegram, Instagram) и нажмите «Начать». Программа
    определит тип блокировки, переберёт стратегии и проверит найденное полной
    загрузкой. Видно этап, процент, прошедшее и оставшееся время. Подбор
-   можно остановить в любой момент.
+   можно остановить в любой момент («Остановить» берёт лучшее найденное) или
+   поставить на паузу: текущая проба доработает, и движок остановится.
+   Проверенное сохраняется по ходу, поэтому после паузы, закрытия программы
+   или перезагрузки компьютера на первом шаге будет кнопка «Продолжить
+   подбор»: уже проверенные стратегии заново не запускаются.
 3. **Экспорт.** Выберите, куда установить: этот компьютер, Keenetic
    (nfqws2-keenetic), zapret-gui, zapret2 на Linux/OpenWrt или просто строку
    аргументов. Без адреса роутера сохраняется файл. На роутер и в zapret-gui
@@ -147,7 +151,11 @@ cannot be protected that way: a replaced agent gets the rights on its next start
 
 1. **Home → Check for blocks** shows what is blocked.
 2. **Find a strategy:** enter sites or pick a ready set and press Start. You
-   see the stage, percent, elapsed and remaining time; you can stop any time.
+   see the stage, percent, elapsed and remaining time. Stop any time (Stop takes
+   the best found so far) or Pause: the current trial finishes and the engine
+   stops. What was tried is saved as it goes, so after a pause, closing the
+   program or restarting the computer the first step offers "Continue the
+   search", and strategies already tried are not run again.
 3. **Export** to this PC, Keenetic, zapret-gui, zapret2 or an argument line.
    Nothing goes to a router or zapret-gui without your Yes; applying in
    zapret-gui is a separate second button.

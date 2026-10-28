@@ -61,6 +61,19 @@ public static class TuningSession
     }
 
     /// <summary>
+    /// Takes up a session of an interrupted run (paused, or the app closed or the PC restarted mid-search): it goes on
+    /// when it is this host's and the block is the same, so <see cref="Prepare"/> skips what it already tried; a
+    /// session that finished is replayed from its trials just as well. Null when it does not fit: a new one starts.
+    /// </summary>
+    public static long? Resume(KnowledgeBase kb, long sessionId, string host, string? blockLabel)
+    {
+        if (kb.Session(sessionId) is not { } s || !string.Equals(s.Host, host, StringComparison.OrdinalIgnoreCase) || s.BlockLabel != blockLabel)
+            return null;
+        kb.UpdateSession(sessionId, "running");
+        return sessionId;
+    }
+
+    /// <summary>
     /// The learned search order (PLAN 4a.1) from this base's trials of the last year; the decay makes older ones
     /// count for next to nothing anyway.
     /// </summary>

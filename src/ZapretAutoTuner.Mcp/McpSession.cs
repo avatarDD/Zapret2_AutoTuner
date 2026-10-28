@@ -96,7 +96,8 @@ public sealed class McpSession
 
     public bool IsTarget(string host) => Host.Targets.Contains(host, StringComparer.OrdinalIgnoreCase);
 
-    public ClassifierVerdict? Verdict(string host) => _verdicts.GetValueOrDefault(host);
+    /// <summary>The model's own diagnosis, else the one the wizard made in the user's search.</summary>
+    public ClassifierVerdict? Verdict(string host) => _verdicts.GetValueOrDefault(host) ?? Host.WizardVerdict(host);
 
     public void SetVerdict(ClassifierVerdict v) => _verdicts[v.Host] = v;
 

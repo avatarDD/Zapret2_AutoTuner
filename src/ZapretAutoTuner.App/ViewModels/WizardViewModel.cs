@@ -9,6 +9,7 @@ using ZapretAutoTuner.Core.Providers;
 using ZapretAutoTuner.Core.Search;
 using ZapretAutoTuner.Core.Unify;
 using ZapretAutoTuner.Delivery;
+using ZapretAutoTuner.Probes.Browser;
 using ZapretAutoTuner.Probes.Providers;
 using ZapretAutoTuner.Tuning;
 
@@ -307,13 +308,17 @@ public sealed partial class WizardViewModel : PageViewModel
         Volatile.Write(ref _localRunning, true);
         try
         {
+            // no browser on the machine: the final check loads the page by itself (docs/USER.md), said now and not at the end
+            bool openPages = OpenPages && BrowserLocator.Chromium() is not null;
+            if (OpenPages && !openPages)
+                AddLog(L["wizard.no_browser"]);
             AddLog(L["wizard.agent_start"]);
             var agent = await _host.AgentAsync(_cts.Token);
             var engine = new AgentEngineControl(agent.Client);
             var mode = Enum.TryParse<SearchMode>(_host.Settings.SearchMode, out var m) ? m : SearchMode.Standard;
             var context = SearchContext.For(_host);
             var options = new PipelineOptions { Search = new SearchOptions { Generator = new GeneratorOptions { Mode = mode }, Learning = context.Learning } };
-            var pipeline = new TuningPipeline(new PcPipelineServices(_host, engine, OpenPages, context), options);
+            var pipeline = new TuningPipeline(new PcPipelineServices(_host, engine, openPages, context), options);
             pipeline.Event += e => Avalonia.Threading.Dispatcher.UIThread.Post(() => OnEvent(e));
             var result = await Task.Run(() => pipeline.RunAsync(hosts, _cts.Token));
             if (providers.Count > 0 && !_cts.IsCancellationRequested)

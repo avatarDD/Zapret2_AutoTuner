@@ -60,8 +60,17 @@ public static class BrowserProbe
     {
         using var pw = await Playwright.CreateAsync().ConfigureAwait(false);
         var type = o.Browser == BrowserKind.Firefox ? pw.Firefox : pw.Chromium;
-        await using var browser = await type.LaunchAsync(LaunchOptions(o)).ConfigureAwait(false);
-        return await OpenAsync(browser, o, ct).ConfigureAwait(false);
+        IBrowser browser;
+        try
+        {
+            browser = await type.LaunchAsync(LaunchOptions(o)).ConfigureAwait(false);
+        }
+        catch (PlaywrightException e) when (e.Message.Contains("executable doesn't exist", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BrowserNotFoundException(o.Browser, e);
+        }
+        await using var owned = browser;
+        return await OpenAsync(owned, o, ct).ConfigureAwait(false);
     }
 
     /// <summary>Opens the page in an already running browser, in a new isolated context.</summary>
@@ -301,4 +310,15 @@ public static class BrowserProbe
             Duration = Error is not null ? null : Ended is { } end ? end - Started : Headers is { } h ? h - Started : null,
         };
     }
+}
+
+/// <summary>No browser to open the page with: none bundled and none installed by Playwright.</summary>
+public sealed class BrowserNotFoundException(BrowserKind kind, Exception? inner = null) : Exception(
+    kind == BrowserKind.Firefox
+        ? "не найден браузер Firefox для Playwright / no Playwright Firefox found"
+        : "не найден браузер программы для проверки страницы (папка browsers рядом с ZapretAutoTuner): переустановите программу из релиза или укажите путь к Chromium в ZT_CHROMIUM"
+          + " / the program's browser for the page check is missing (the browsers folder next to ZapretAutoTuner): reinstall from a release or set ZT_CHROMIUM to a Chromium",
+    inner)
+{
+    public BrowserKind Kind { get; } = kind;
 }

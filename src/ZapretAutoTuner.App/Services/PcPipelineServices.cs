@@ -7,8 +7,13 @@ using ZapretAutoTuner.Tuning;
 
 namespace ZapretAutoTuner.App.Services;
 
-/// <summary>The pipeline on this PC: probes from the UI, the engine in the Agent, the knowledge base for memory.</summary>
-public sealed class PcPipelineServices(AppHost host, IEngineControl engine, bool openPages, SearchContext? context = null) : IPipelineServices
+/// <summary>
+/// The pipeline on this PC: probes from the UI, the engine in the Agent, the knowledge base for memory. <paramref name="resume"/>
+/// holds the sessions of an interrupted run to go on with; <paramref name="sessionStarted"/> hears each domain's session so
+/// the run can be continued after a restart.
+/// </summary>
+public sealed class PcPipelineServices(AppHost host, IEngineControl engine, bool openPages, SearchContext? context = null,
+    IReadOnlyDictionary<string, long>? resume = null, Action<string, long>? sessionStarted = null) : IPipelineServices
 {
     private readonly Dictionary<string, (long Session, TrialTarget Target)> _sessions = new(StringComparer.OrdinalIgnoreCase);
 
@@ -38,8 +43,13 @@ public sealed class PcPipelineServices(AppHost host, IEngineControl engine, bool
     public ISearchLog? LogFor(string domain, ClassifierVerdict verdict)
     {
         var target = _sessions.TryGetValue(domain, out var s) ? s.Target : new TrialTarget { Host = domain, Addresses = [] };
-        var id = host.Kb.StartSession(domain, host.Settings.SearchMode, context?.NetworkId, verdict.Primary.ToString());
+        var label = verdict.Primary.ToString();
+        var id = resume?.FirstOrDefault(kv => string.Equals(kv.Key, domain, StringComparison.OrdinalIgnoreCase)) is { Value: > 0 } r
+            && TuningSession.Resume(host.Kb, r.Value, domain, label) is { } resumed
+            ? resumed
+            : host.Kb.StartSession(domain, host.Settings.SearchMode, context?.NetworkId, label);
         _sessions[domain] = (id, target);
+        sessionStarted?.Invoke(domain, id);
         return new KnowledgeBaseSearchLog(host.Kb, id, target, context?.NetworkId, verdict.Primary.ToString());
     }
 

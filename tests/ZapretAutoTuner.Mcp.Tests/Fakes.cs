@@ -114,6 +114,12 @@ internal sealed class FakeHost : IAutoTunerHost, IDisposable
 
     public bool RouterTuningRunning { get; set; }
 
+    public WizardSnapshot? Wizard { get; set; }
+
+    public Dictionary<string, ClassifierVerdict> WizardVerdicts { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public ClassifierVerdict? WizardVerdict(string host) => WizardVerdicts.GetValueOrDefault(host);
+
     public AgentTrialOptions TrialOptions { get; } = new() { LuaDir = "/opt/zapret2/lua", Platform = Core.Validation.EnginePlatform.Linux, Warmup = TimeSpan.Zero, Pause = TimeSpan.Zero };
 
     public Func<string, CancellationToken, Task<PageLoad>>? OpenPage => null;

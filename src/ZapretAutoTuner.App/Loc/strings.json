@@ -1107,6 +1107,46 @@
   "Не найден браузер программы (папка browsers рядом с ZapretAutoTuner): найденное проверю загрузкой страницы самой программой.",
   "The program's browser is missing (the browsers folder next to ZapretAutoTuner): what is found will be checked by loading the page directly."
  ],
+ "wizard.pause": [
+  "Пауза",
+  "Pause"
+ ],
+ "wizard.resume": [
+  "Продолжить",
+  "Continue"
+ ],
+ "wizard.paused_line": [
+  "Пауза: следующая проба ждёт. Программу можно закрыть и даже перезагрузить компьютер, подбор продолжится с этого места.",
+  "Paused: the next trial waits. You can close the program or even restart the computer; the search will continue from here."
+ ],
+ "wizard.paused_log": [
+  "Пауза (текущая проба доработает, движок остановлен)",
+  "Paused (the current trial finishes, the engine is stopped)"
+ ],
+ "wizard.resumed_log": [
+  "Подбор продолжен",
+  "Search continued"
+ ],
+ "wizard.resuming": [
+  "Продолжаю прерванный подбор: уже проверенные стратегии не запускаются заново",
+  "Continuing the interrupted search: strategies already tried are not run again"
+ ],
+ "wizard.pending": [
+  "Есть незаконченный подбор от {0}: {1}. Проверенное сохранено, его можно продолжить.",
+  "There is an unfinished search from {0}: {1}. What was tried is saved, and it can be continued."
+ ],
+ "wizard.pending_continue": [
+  "Продолжить подбор",
+  "Continue the search"
+ ],
+ "wizard.pending_forget": [
+  "Начать заново",
+  "Start over"
+ ],
+ "wizard.pending_kept": [
+  "Проверенное сохранено: подбор можно продолжить на первом шаге.",
+  "What was tried is saved: the search can be continued on the first step."
+ ],
  "wizard.open_pages": [
   "Проверять найденное в браузере (дольше, но надёжнее)",
   "Check what is found in a browser (slower but surer)"

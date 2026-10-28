@@ -23,6 +23,16 @@
       <ScrollViewer IsVisible="{Binding IsStep1}">
         <StackPanel Spacing="10">
           <TextBlock Classes="h2" Text="{l:T wizard.step1}" />
+          <!-- a search that was paused or broke off (the app closed, the PC restarted) goes on from where it stopped -->
+          <Border Classes="card" IsVisible="{Binding HasPending}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding PendingText}" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="accent" Content="{l:T wizard.pending_continue}" Command="{Binding ContinuePendingCommand}" />
+                <Button Content="{l:T wizard.pending_forget}" Command="{Binding ForgetPendingCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
           <!-- where to tune: this PC or the router through zapret-gui (PLAN 4a.4) -->
           <StackPanel Orientation="Horizontal" Spacing="16">
             <TextBlock Text="{l:T wizard.where}" VerticalAlignment="Center" />
@@ -78,6 +88,15 @@
               <TextBlock Text="{Binding Percent, StringFormat={}{0:0}%}" />
               <TextBlock Text="{Binding ElapsedText}" />
               <TextBlock Text="{Binding RemainingText}" Classes="muted" />
+              <Button Content="{l:T wizard.pause}" Command="{Binding TogglePauseCommand}" IsEnabled="{Binding OnPc}">
+                <Button.IsVisible>
+                  <MultiBinding Converter="{x:Static BoolConverters.And}">
+                    <Binding Path="Running" />
+                    <Binding Path="!Paused" />
+                  </MultiBinding>
+                </Button.IsVisible>
+              </Button>
+              <Button Classes="accent" Content="{l:T wizard.resume}" Command="{Binding TogglePauseCommand}" IsVisible="{Binding Paused}" />
               <Button Content="{l:T common.stop}" Command="{Binding StopCommand}" IsVisible="{Binding Running}" />
             </StackPanel>
           </Grid>

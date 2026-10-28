@@ -50,6 +50,12 @@ public interface IAutoTunerHost
     /// <summary>The wizard tunes on this PC: the model's trials, search and experiments would fight it for the traffic.</summary>
     bool LocalTuningRunning => false;
 
+    /// <summary>What the wizard's own search shows the user (read-only for the model); null when it never ran.</summary>
+    WizardSnapshot? Wizard => null;
+
+    /// <summary>The wizard's diagnosis of a target, when it made one.</summary>
+    ClassifierVerdict? WizardVerdict(string host) => null;
+
     /// <summary>The wizard runs trials on the router or holds a kept variant there: zapret-gui runs one experiment at a time.</summary>
     bool RouterTuningRunning => false;
 
@@ -115,3 +121,10 @@ public interface IUserConfirm
 {
     Task<bool> ConfirmAsync(ConfirmRequest request, CancellationToken ct);
 }
+
+/// <summary>A target row of the wizard: its stage, the line under it, how many strategies it found and the chosen one.</summary>
+public sealed record WizardTargetView(string Host, string Stage, string Message, int Found, string? Result);
+
+/// <summary>The wizard's search as the user sees it: running or paused, progress, the current trial, the rows, what was found.</summary>
+public sealed record WizardSnapshot(bool Running, bool Paused, double Percent, string Elapsed, string Remaining, string Current,
+    IReadOnlyList<WizardTargetView> Targets, IReadOnlyList<string> Found);

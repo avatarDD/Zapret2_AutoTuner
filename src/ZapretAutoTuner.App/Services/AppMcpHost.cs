@@ -20,6 +20,11 @@ public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor, WizardVie
 
     public bool RouterTuningRunning => wizard?.RouterTuningRunning ?? false;
 
+    public WizardSnapshot? Wizard => wizard is null ? null
+        : Dispatcher.UIThread.CheckAccess() ? wizard.Snapshot() : Dispatcher.UIThread.Invoke(wizard.Snapshot);
+
+    public ClassifierVerdict? WizardVerdict(string target) => wizard?.VerdictOf(target);
+
     public KnowledgeBase Kb => host.Kb;
 
     public IReadOnlyList<string> Targets => host.Settings.Targets;

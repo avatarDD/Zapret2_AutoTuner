@@ -236,9 +236,33 @@ public sealed class SearchController(McpSession session)
                 ["stop_reason"] = _reason,
                 ["error"] = _error,
                 ["budget_used"] = session.Budget.Used,
+                // the user's own search in the wizard is a different run: this controller is only the model's
+                ["wizard"] = Wizard(session.Host.Wizard),
+                ["hint"] = session.Host.LocalTuningRunning
+                    ? "the user's search runs in the AutoTuner wizard: its progress is under wizard; search_start, trials and experiments wait until it ends"
+                    : null,
             };
         }
     }
+
+    private static JsonObject? Wizard(WizardSnapshot? w) => w is null ? null : new JsonObject
+    {
+        ["running"] = w.Running,
+        ["paused"] = w.Paused,
+        ["percent"] = Math.Round(w.Percent, 1),
+        ["elapsed"] = w.Elapsed,
+        ["remaining_estimate"] = w.Remaining,
+        ["current"] = w.Current,
+        ["targets"] = new JsonArray([.. w.Targets.Select(t => (JsonNode)new JsonObject
+        {
+            ["target"] = t.Host,
+            ["stage"] = t.Stage,
+            ["message"] = t.Message,
+            ["found"] = t.Found,
+            ["result"] = t.Result,
+        })]),
+        ["found"] = new JsonArray([.. w.Found.TakeLast(20).Select(f => (JsonNode)JsonValue.Create(f))]),
+    };
 
     public JsonObject Pause(bool resume)
     {

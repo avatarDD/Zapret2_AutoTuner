@@ -133,7 +133,10 @@ jobs:
       - name: Browser for the page check (Playwright Chromium headless shell)
         shell: bash
         run: |
-          # the L3 check runs in the program's own browser, never in the user's: Playwright's build, next to the app
+          # the L3 check runs in the program's own browser, never in the user's: Playwright's build, next to the app.
+          # Official sources only (AGENTS.md): the bundled Playwright's own installer from its built-in Microsoft CDN,
+          # no download host overrides; the log names the URL and the version.
+          unset PLAYWRIGHT_DOWNLOAD_HOST PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT
           out="artifacts/publish/ZapretAutoTuner"
           node=$(ls "$out"/.playwright/node/*/node "$out"/.playwright/node/*/node.exe 2>/dev/null | head -1)
           PLAYWRIGHT_BROWSERS_PATH="$(pwd -W 2>/dev/null || pwd)/$out/browsers" "$node" "$out/.playwright/package/cli.js" install --only-shell --no-progress chromium

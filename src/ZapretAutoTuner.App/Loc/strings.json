@@ -1103,6 +1103,10 @@
   "Введите хотя бы один сайт или выберите провайдера.",
   "Enter at least one site or pick a provider."
  ],
+ "wizard.no_browser": [
+  "Не найден браузер программы (папка browsers рядом с ZapretAutoTuner): найденное проверю загрузкой страницы самой программой.",
+  "The program's browser is missing (the browsers folder next to ZapretAutoTuner): what is found will be checked by loading the page directly."
+ ],
  "wizard.open_pages": [
   "Проверять найденное в браузере (дольше, но надёжнее)",
   "Check what is found in a browser (slower but surer)"

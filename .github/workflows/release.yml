@@ -2,7 +2,8 @@ name: Release
 
 # A tag v1.2.3 builds, tests and packages every platform and publishes a GitHub release.
 # Only official upstream binaries go in: nfqws2/winws2, WinDivert, cygwin1.dll and lua from the bol-van/zapret2
-# release archive pinned by SHA-256 in tools/bundle/zapret2.lock.json (bundle.py --strict checks it).
+# release archive pinned by SHA-256 in tools/bundle/zapret2.lock.json (bundle.py --strict checks it), and for the
+# page check the Chromium headless shell that the bundled Playwright version installs (Chrome for Testing).
 # Packages go straight to a draft release (release assets do not count against the Actions artifact quota); the
 # last job adds SHA256SUMS.txt and publishes it. A manual run is a dry run unless "publish" is ticked: then it
 # releases v<version>, creating the tag on the commit it ran on if the tag does not exist yet.
@@ -71,6 +72,9 @@ jobs:
           В релизе только официальные бинарники апстримов. Телеметрии нет.
           Engine: zapret2 {lock['version']}, official upstream binaries only. No telemetry.
 
+          Для проверки страниц в комплекте свой браузер (Chromium headless shell из Playwright, папка `browsers`); установленные у вас браузеры программа не запускает.
+          The page check uses the bundled browser (Playwright's Chromium headless shell, the `browsers` folder); your installed browsers are never started.
+
           - Windows: `*-setup.exe` (установщик) или `*-portable.zip`. Антивирус может ругаться на WinDivert: это драйвер перехвата из zapret2, см. docs/USER.md.
           - Linux: `.deb`, `.rpm` или `.tar.gz`. Нужны nftables (или iptables) и polkit.
           - Проверка файлов: `SHA256SUMS.txt`.
@@ -126,6 +130,24 @@ jobs:
             dotnet publish "$p" -c Release -r ${{ matrix.rid }} --self-contained true -p:Version="$VER" -o "$out"
           done
           cp README.md docs/USER.md "$out/" 2>/dev/null || true
+      - name: Browser for the page check (Playwright Chromium headless shell)
+        shell: bash
+        run: |
+          # the L3 check runs in the program's own browser, never in the user's: Playwright's build, next to the app.
+          # Official sources only (AGENTS.md): the bundled Playwright's own installer from its built-in Microsoft CDN,
+          # no download host overrides; the log names the URL and the version.
+          unset PLAYWRIGHT_DOWNLOAD_HOST PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT
+          out="artifacts/publish/ZapretAutoTuner"
+          node=""
+          for n in "$out"/.playwright/node/*/node "$out"/.playwright/node/*/node.exe; do
+            if [ -f "$n" ]; then node=$n; break; fi
+          done
+          [ -n "$node" ] || { echo "no Playwright driver in $out/.playwright" >&2; exit 1; }
+          PLAYWRIGHT_BROWSERS_PATH="$(pwd -W 2>/dev/null || pwd)/$out/browsers" "$node" "$out/.playwright/package/cli.js" install --only-shell --no-progress chromium
+          # ffmpeg only records video, which the check never does
+          rm -rf "$out/browsers/.links" "$out"/browsers/ffmpeg-*
+          find "$out/browsers" -type f \( -name 'chrome-headless-shell*' -o -name 'headless_shell*' \) | grep .
+
       - name: Engine and Agent start
         shell: bash
         run: |

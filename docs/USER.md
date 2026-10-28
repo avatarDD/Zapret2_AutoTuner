@@ -112,9 +112,10 @@ zapret-gui на роутере (например, 192.168.2.1).
 `polkit`) или запустите программу от root.
 
 **Проверка в браузере.** Галочка «Проверять найденное в браузере» открывает
-сайт в установленном Chrome, Chromium или Edge (или в браузере из папки
-`browsers` рядом с программой). Без браузера проверка идёт загрузкой
-страницы самой программой.
+сайт во встроенном браузере программы: Chromium без окна из Playwright в
+папке `browsers` рядом с программой, каждый раз с чистым временным профилем.
+Установленные у вас браузеры, их профили и настройки программа не трогает.
+Если папки `browsers` нет, проверка идёт загрузкой страницы самой программой.
 
 **Телеметрия.** Её нет. Настройки, база знаний и журнал хранятся только
 локально (путь показан в настройках).
@@ -206,4 +207,9 @@ Stop on the banner cuts the bridge too.
   official file; add the program folder to exclusions.
 - **VirtualBox NAT:** tune on the real machine or in bridged mode.
 - **Linux "pkexec not found":** install polkit or run as root.
+- **Browser check:** the site opens in the program's own browser (Playwright's
+  headless Chromium in the `browsers` folder next to the program), with a fresh
+  temporary profile each time. Your installed browsers, their profiles and
+  settings are never touched. Without the `browsers` folder the program checks
+  by loading the page itself.
 - **No telemetry.** All data stays local.

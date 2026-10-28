@@ -39,7 +39,7 @@ Architecture: $deb_arch
 Maintainer: Zapret2_AutoTuner contributors
 Installed-Size: $size
 Depends: nftables | iptables, pkexec | policykit-1, libicu78 | libicu77 | libicu76 | libicu74 | libicu72 | libicu71 | libicu70 | libicu67 | libicu66, libfontconfig1, libfreetype6, libx11-6, libice6, libsm6, libxext6, libxrandr2, libxi6, libxcursor1, zlib1g, libssl3 | libssl3t64 | libssl1.1, ca-certificates
-Recommends: chromium | chromium-browser | google-chrome-stable
+Recommends: libnss3, libnspr4, libatk1.0-0t64 | libatk1.0-0, libatk-bridge2.0-0t64 | libatk-bridge2.0-0, libcups2t64 | libcups2, libdrm2, libxkbcommon0, libxcomposite1, libxdamage1, libxfixes3, libgbm1, libasound2t64 | libasound2, libpango-1.0-0, libcairo2
 Section: net
 Priority: optional
 Homepage: https://github.com/avatarDD/Zapret2_AutoTuner

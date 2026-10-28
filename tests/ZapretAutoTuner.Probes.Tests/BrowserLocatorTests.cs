@@ -55,7 +55,7 @@ public sealed class BrowserLocatorTests
             "/home/u/.cache/ms-playwright/chromium_headless_shell-1200/chrome-headless-shell-linux64/chrome-headless-shell",
             "/home/u/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell");
         fs.Env["HOME"] = "/home/u";
-        Assert.Equal("/home/u/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell", fs.Find(windows: false));
+        Assert.Equal("/home/u/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell", fs.Find(windows: false)?.Replace('\\', '/'));
     }
 
     [Fact]

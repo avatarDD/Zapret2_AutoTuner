@@ -29,7 +29,7 @@ public static class BrowserLocator
             :
             [
                 ("chromium", ["chrome-linux64/chrome", "chrome-linux/chrome"]),
-                ("chromium_headless_shell", ["chrome-headless-shell-linux64/chrome-headless-shell", "chrome-linux/headless_shell"]),
+                ("chromium_headless_shell", ["chrome-headless-shell-linux64/chrome-headless-shell", "chrome-headless-shell-linux-arm64/chrome-headless-shell", "chrome-linux/headless_shell"]),
             ];
         return Find(env("ZT_CHROMIUM"), Roots(env, windows), layouts, fileExists, dirExists, getDirs);
     }

@@ -59,6 +59,14 @@ public sealed class BrowserLocatorTests
     }
 
     [Fact]
+    public void The_arm64_headless_shell_is_found()
+    {
+        var fs = new FakeFs("/home/u/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux-arm64/chrome-headless-shell");
+        fs.Env["HOME"] = "/home/u";
+        Assert.EndsWith("chrome-headless-shell-linux-arm64/chrome-headless-shell", fs.Find(windows: false)?.Replace('\\', '/'));
+    }
+
+    [Fact]
     public void Explicit_path_wins_and_nothing_found_is_null()
     {
         var fs = new FakeFs("/opt/my/chrome");

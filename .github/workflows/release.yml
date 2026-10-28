@@ -138,7 +138,11 @@ jobs:
           # no download host overrides; the log names the URL and the version.
           unset PLAYWRIGHT_DOWNLOAD_HOST PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT
           out="artifacts/publish/ZapretAutoTuner"
-          node=$(ls "$out"/.playwright/node/*/node "$out"/.playwright/node/*/node.exe 2>/dev/null | head -1)
+          node=""
+          for n in "$out"/.playwright/node/*/node "$out"/.playwright/node/*/node.exe; do
+            if [ -f "$n" ]; then node=$n; break; fi
+          done
+          [ -n "$node" ] || { echo "no Playwright driver in $out/.playwright" >&2; exit 1; }
           PLAYWRIGHT_BROWSERS_PATH="$(pwd -W 2>/dev/null || pwd)/$out/browsers" "$node" "$out/.playwright/package/cli.js" install --only-shell --no-progress chromium
           rm -rf "$out/browsers/.links"
           find "$out/browsers" -type f \( -name 'chrome-headless-shell*' -o -name 'headless_shell*' \) | grep .

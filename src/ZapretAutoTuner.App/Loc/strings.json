@@ -215,6 +215,10 @@
   "Формат: {0}, профилей: {1}",
   "Format: {0}, profiles: {1}"
  ],
+ "expert.list_from_resources": [
+  "список {0} взят из «Ресурсов» ({1})",
+  "list {0} is taken from Resources ({1})"
+ ],
  "expert.open": [
   "Открыть файл",
   "Open a file"
@@ -868,8 +872,8 @@
   "Lua scripts"
  ],
  "resources.name": [
-  "Имя (a-z, 0-9, _ и -)",
-  "Name (a-z, 0-9, _ and -)"
+  "Имя (a-z, 0-9, _ и -; «youtube.txt» сохранится как «youtube»)",
+  "Name (a-z, 0-9, _ and -; 'youtube.txt' is saved as 'youtube')"
  ],
  "resources.new": [
   "Новый",
@@ -1306,5 +1310,61 @@
  "wizard.where_router": [
   "Роутер через zapret-gui",
   "Router through zapret-gui"
+ ],
+ "nav.home_hint": [
+  "Что заблокировано",
+  "What is blocked"
+ ],
+ "nav.wizard_hint": [
+  "Найти рабочую стратегию",
+  "Find a working strategy"
+ ],
+ "nav.monitor_hint": [
+  "Держать защиту включённой",
+  "Keep the protection on"
+ ],
+ "nav.reports_hint": [
+  "Итоги подбора, отчёт о проблеме",
+  "Results, problem reports"
+ ],
+ "nav.expert_hint": [
+  "Импорт и ручная правка",
+  "Import and manual editing"
+ ],
+ "nav.resources_hint": [
+  "Списки доменов и IP, блобы, Lua",
+  "Domain and IP lists, blobs, Lua"
+ ],
+ "nav.advisor_hint": [
+  "ИИ-помощник и MCP",
+  "AI assistant and MCP"
+ ],
+ "nav.settings_hint": [
+  "Роутер, глубина подбора, язык",
+  "Router, search depth, language"
+ ],
+ "home.how_title": [
+  "Как пользоваться",
+  "How to use it"
+ ],
+ "home.how_1": [
+  "1. «Проверить блокировки»: программа проверит популярные сайты и покажет, что и как заблокировано.",
+  "1. 'Check for blocks': the program checks popular sites and shows what is blocked and how."
+ ],
+ "home.how_2": [
+  "2. «Подобрать стратегию»: укажите сайты, программа сама переберёт стратегии и проверит их полной загрузкой.",
+  "2. 'Find a strategy': list the sites, the program tries strategies by itself and checks them with a full load."
+ ],
+ "home.how_3": [
+  "3. Найденное включите в «Мониторе» на этом ПК или выгрузите на последнем шаге мастера: zapret2, роутер, zapret-gui.",
+  "3. Turn what was found on in Monitor on this PC, or export it at the wizard's last step: zapret2, a router, zapret-gui."
+ ],
+ "home.how_more": [
+  "Готовую стратегию можно открыть в «Эксперт» → «Импорт». Списки доменов, которые она использует, храните в «Ресурсах».",
+  "A ready strategy opens in Expert → Import. Keep the domain lists it uses in Resources."
+ ],
+ "resources.empty": [
+  "Здесь пока пусто. Нажмите «Новый», введите имя и содержимое, затем «Сохранить».",
+  "Nothing here yet. Press New, type a name and the content, then Save."
  ]
 }

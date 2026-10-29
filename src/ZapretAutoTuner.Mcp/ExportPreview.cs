@@ -21,6 +21,8 @@ internal static class ExportPreview
     {
         var format = (string)a["format"]!;
         var results = new List<DomainResult>();
+        // a target left out is said so, never dropped silently
+        var skipped = new List<string>();
         if (a["items"] is JsonArray items && items.Count > 0)
         {
             foreach (var item in items.Cast<JsonObject>())
@@ -43,7 +45,12 @@ internal static class ExportPreview
             {
                 var best = session.Host.Kb.Results(target).FirstOrDefault(r => r.Status == "working");
                 if (best is null)
+                {
+                    skipped.Add(session.Verdict(target) is null
+                        ? $"{target}: left out, not diagnosed and no working strategy yet (diagnose, then search_start) / пропущен: не диагностирован, рабочей стратегии нет"
+                        : $"{target}: left out, no working strategy yet (search_start finds one) / пропущен: рабочей стратегии нет");
                     continue;
+                }
                 Strategy s;
                 try
                 {
@@ -51,6 +58,7 @@ internal static class ExportPreview
                 }
                 catch (FormatException)
                 {
+                    skipped.Add($"{target}: left out, its saved strategy does not parse / пропущен: сохранённая стратегия не разбирается");
                     continue;
                 }
                 session.Remember(s);
@@ -58,7 +66,11 @@ internal static class ExportPreview
             }
         }
         if (results.Count == 0)
-            return McpErrors.Error("nothing to export: no working strategy for the targets yet / экспортировать нечего");
+        {
+            var none = McpErrors.Error("nothing to export: no working strategy for the targets yet / экспортировать нечего");
+            none["skipped"] = new JsonArray([.. skipped.Select(w => (JsonNode)JsonValue.Create(w))]);
+            return none;
+        }
 
         var solution = Unifier.ToSolution(Unifier.Plan(results));
         var pkg = format switch
@@ -82,7 +94,7 @@ internal static class ExportPreview
             })]),
             ["files"] = new JsonArray([.. pkg.Files.Select(f => (JsonNode)new JsonObject { ["name"] = f.Key, ["bytes"] = f.Value.Length })]),
             ["text"] = pkg.Text.Length > MaxText ? pkg.Text[..MaxText] + "…" : pkg.Text,
-            ["warnings"] = new JsonArray([.. pkg.Warnings.Select(w => (JsonNode)JsonValue.Create(w))]),
+            ["warnings"] = new JsonArray([.. skipped.Concat(pkg.Warnings).Select(w => (JsonNode)JsonValue.Create(w))]),
             ["apply"] = "applying to a router or zapret-gui is done by the user in the AutoTuner window / применяет пользователь",
         };
         if ((bool?)a["save"] != true)

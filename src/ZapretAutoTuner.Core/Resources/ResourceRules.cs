@@ -28,6 +28,20 @@ public static partial class ResourceNames
 
     public static bool IsValid(string? name) => name is not null && NameRe().IsMatch(name);
 
+    /// <summary>
+    /// What a person types or a strategy names as a file, turned into a resource name: the folder and the extension go
+    /// (<c>lists/YouTube.txt</c> is <c>youtube</c>, the file it is written to gets its extension back), letters go lower
+    /// case. The result still has to pass <see cref="IsValid"/>.
+    /// </summary>
+    public static string Normalize(string? input)
+    {
+        var file = (input ?? "").Trim().Trim('"', '\'').Replace('\\', '/').Split('/')[^1];
+        int dot = file.IndexOf('.', StringComparison.Ordinal);
+        if (dot > 0)
+            file = file[..dot];
+        return file.ToLowerInvariant();
+    }
+
     public static string KindNameRu(ResourceKind k) => k switch
     {
         ResourceKind.Hostlist => "хостлист",

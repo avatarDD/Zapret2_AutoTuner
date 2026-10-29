@@ -18,6 +18,8 @@ internal sealed class TrialRunner(McpSession session)
         if (!session.IsTarget(target))
             return (null, McpErrors.NotATarget(target));
         var v = session.Verdict(target);
+        if (v is null && session.Classifying(target))
+            return (null, McpErrors.Error($"{target} is still being diagnosed: call diagnose (refresh=false) until it returns the verdict / цель ещё диагностируется"));
         if (v is null)
             return (null, McpErrors.Error($"{target} has no diagnosis yet: call diagnose with refresh=true first (a strategy is tried only on a resource shown to be blocked) / сначала diagnose с refresh=true"));
         if (v.Next != NextStep.SearchStrategy || v.LiveAddresses.Count == 0)

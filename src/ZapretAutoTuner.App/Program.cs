@@ -22,8 +22,12 @@ internal static class Program
                 return code;
             args = args[1..];
         }
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-        return 0;
+        int exit = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        // the window is closed and the exit steps ran (or ran out of time): nothing of ours stays behind, and a thread
+        // still blocked somewhere (a hung request, a stuck child) does not keep the process alive
+        ChildProcesses.KillLeftovers();
+        Environment.Exit(exit);
+        return exit;
     }
 
     public static AppBuilder BuildAvaloniaApp() =>

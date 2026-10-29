@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using ZapretAutoTuner.App.Services;
 using ZapretAutoTuner.Core.Export;
 using ZapretAutoTuner.Core.Model;
+using ZapretAutoTuner.Core.Resources;
 using ZapretAutoTuner.Core.Validation;
 using ZapretAutoTuner.Tuning;
 
@@ -84,8 +85,12 @@ public sealed partial class ExpertViewModel : PageViewModel
         Issues.Clear();
         var r = StrategyImporter.Import(ImportText, files);
         ImportKind = L.F("expert.kind", r.Kind, r.Solution.Profiles.Count);
-        foreach (var w in r.Warnings)
+        // a list the strategy names by file and that did not come with it is taken from "Ресурсы" when one has its name
+        var fromStore = Resources?.ResolveListPaths(r.Solution) ?? [];
+        foreach (var w in r.Warnings.Where(w => !fromStore.Any(path => w.Contains(path, StringComparison.Ordinal))))
             Issues.Add("⚠ " + w);
+        foreach (var path in fromStore)
+            Issues.Add("✓ " + L.F("expert.list_from_resources", path, ResourceNames.Normalize(path)));
         var validator = Validator(r.Solution);
         bool ok = r.Solution.Profiles.Count > 0;
         foreach (var p in r.Solution.Profiles)

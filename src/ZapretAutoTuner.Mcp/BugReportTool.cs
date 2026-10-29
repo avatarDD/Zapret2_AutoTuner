@@ -33,14 +33,19 @@ public static class BugReportTool
             return McpErrors.NotATarget(about);
         var kind = (BugKind)Array.IndexOf(Kinds, (string)a["kind"]!);
         var context = session.Host.BugReportContext();
+        // the model's own words win; empty strings count as not given
+        static string? Given(JsonNode? n) => (string?)n is { } s && s.Trim().Length > 0 ? s : null;
         var input = context with
         {
             Kind = kind,
-            Summary = (string?)a["summary"] ?? context.Summary,
-            WhatDid = (string?)a["what_did"] ?? context.WhatDid,
-            Expected = (string?)a["expected"] ?? context.Expected,
-            Got = (string?)a["got"] ?? context.Got,
-            Verdict = about is null ? context.Verdict : session.Verdict(about) ?? context.Verdict,
+            Summary = Given(a["summary"]) ?? context.Summary,
+            WhatDid = Given(a["what_did"]) ?? context.WhatDid,
+            Expected = Given(a["expected"]) ?? context.Expected,
+            Got = Given(a["got"]) ?? context.Got,
+            // a report about a target carries that target's diagnosis or none: never another target's from the wizard
+            Verdict = about is null ? context.Verdict : session.Verdict(about),
+            // the app's last error belongs to a report about the app, not to one the model writes about a target
+            Exception = about is null && Given(a["summary"]) is null ? context.Exception : null,
             Domains = [.. context.Domains, .. session.Host.Targets],
             MaskDomains = (bool?)a["mask_domains"] ?? false,
             Russian = (string?)a["language"] != "en",
@@ -60,6 +65,8 @@ public static class BugReportTool
             ["issue_url"] = d.IssueUrl,
             ["url_shortened"] = d.UrlShortened,
             ["notice"] = d.Notice,
+            ["about"] = about,
+            ["verdict_of"] = input.Verdict?.Host,
             ["sent"] = false,
             ["hint"] = "nothing was opened or sent: show the draft to the user; they edit and submit it themselves",
         };

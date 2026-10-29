@@ -128,9 +128,19 @@ internal sealed class FakeHost : IAutoTunerHost, IDisposable
 
     public void AddTarget(string host) => TargetList.Add(host);
 
+    /// <summary>Replaces the classifier (a slow one, a failing one); null: the instant verdict below.</summary>
+    public Func<string, CancellationToken, Task<ClassifierVerdict>>? Classifier { get; set; }
+
+    /// <summary>What "Сообщить о проблеме" would start from (the wizard's last run).</summary>
+    public BugReportInput BugContext { get; set; } = new();
+
+    public BugReportInput BugReportContext() => BugContext;
+
     public Task<ClassifierVerdict> ClassifyAsync(string host, CancellationToken ct)
     {
         Classified++;
+        if (Classifier is { } classifier)
+            return classifier(host, ct);
         var blocked = host.StartsWith("blocked", StringComparison.Ordinal);
         return Task.FromResult(new ClassifierVerdict
         {

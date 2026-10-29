@@ -21,6 +21,8 @@ public sealed class McpSession
     private readonly ConcurrentDictionary<string, ClassifierVerdict> _verdicts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, (DateTime Time, int Successes, int Attempts, string Level, string Reading)> _baselines = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, (Strategy Strategy, L4Kind L4)> _strategies = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Task<ClassifierVerdict>> _classifying = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _classifyErrors = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<McpTrial> _trials = [];
     private readonly Lock _lock = new();
     private int _nextTrial;
@@ -100,6 +102,64 @@ public sealed class McpSession
     public ClassifierVerdict? Verdict(string host) => _verdicts.GetValueOrDefault(host) ?? Host.WizardVerdict(host);
 
     public void SetVerdict(ClassifierVerdict v) => _verdicts[v.Host] = v;
+
+    /// <summary>How long diagnose(refresh) waits for the classifier before answering "running" (probes of a new target take longer than a client's call timeout).</summary>
+    public TimeSpan DiagnoseWait { get; set; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// The classification of <paramref name="host"/> in progress, started now when none runs. It lives on the session
+    /// (the Stop button ends it), not on the call: a client that gives up waiting still gets the verdict cached for its
+    /// next call, and a second call joins the run instead of probing again.
+    /// </summary>
+    public Task<ClassifierVerdict> Classify(string host, out bool started)
+    {
+        lock (_lock)
+        {
+            if (_classifying.TryGetValue(host, out var running))
+            {
+                started = false;
+                return running;
+            }
+            var token = StopToken;
+            var task = Task.Run(() => ClassifyAndKeepAsync(host, token));
+            // the failure is kept in ClassifyError; a run nobody waits for any more must not end up unobserved
+            _ = task.ContinueWith(t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+            _classifying[host] = task;
+            started = true;
+            return task;
+        }
+    }
+
+    /// <summary>A classification of the host is running now.</summary>
+    public bool Classifying(string host)
+    {
+        lock (_lock)
+            return _classifying.ContainsKey(host);
+    }
+
+    /// <summary>Why the last classification of the host failed; null after a success.</summary>
+    public string? ClassifyError(string host) => _classifyErrors.GetValueOrDefault(host);
+
+    private async Task<ClassifierVerdict> ClassifyAndKeepAsync(string host, CancellationToken ct)
+    {
+        try
+        {
+            var v = await Host.ClassifyAsync(host, ct).ConfigureAwait(false);
+            SetVerdict(v);
+            _classifyErrors.TryRemove(host, out _);
+            return v;
+        }
+        catch (Exception e)
+        {
+            _classifyErrors[host] = e is OperationCanceledException ? "stopped / остановлено" : $"{e.GetType().Name}: {e.Message}";
+            throw;
+        }
+        finally
+        {
+            lock (_lock)
+                _classifying.Remove(host);
+        }
+    }
 
     public (DateTime Time, int Successes, int Attempts, string Level, string Reading)? Baseline(string host) =>
         _baselines.TryGetValue(host, out var b) && Time.GetUtcNow().UtcDateTime - b.Time < TimeSpan.FromMinutes(10) ? b : null;

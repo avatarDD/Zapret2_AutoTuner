@@ -130,6 +130,7 @@ public sealed class ModelTests
     [InlineData("--a=1 --b='x y' \"--c=z w\"", new[] { "--a=1", "--b=x y", "--c=z w" })]
     [InlineData(@"--lua-desync=luaexec:code=a\:b", new[] { @"--lua-desync=luaexec:code=a\:b" })]
     [InlineData("  \n --x=1 \t\n", new[] { "--x=1" })]
+    [InlineData(@"--hostlist=C:\zapret\lists\list.txt --x=a\ b", new[] { @"--hostlist=C:\zapret\lists\list.txt", "--x=a b" })]
     public void ArgTokenizer_splits_like_a_shell(string text, string[] expected)
     {
         Assert.Equal(expected, ArgTokenizer.Split(text));

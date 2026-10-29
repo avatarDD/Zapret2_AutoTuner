@@ -65,10 +65,12 @@ jobs:
           python3 - <<'PY'
           import json, os
           lock = json.load(open("tools/bundle/zapret2.lock.json"))
+          glock = json.load(open("tools/bundle/geneva.lock.json"))
           v = os.environ["VERSION"].removeprefix("v")
           notes = f"""Zapret2 AutoTuner {v}
 
           Движок: zapret2 {lock['version']} ({lock['repo']} {lock['tag']}), архив SHA-256 `{lock['sha256']}`.
+          Второй движок обхода: geneva {glock['version']} ({glock['repo']} {glock['tag']}), архивы закреплены по SHA-256.
           В релизе только официальные бинарники апстримов. Телеметрии нет.
           Engine: zapret2 {lock['version']}, official upstream binaries only. No telemetry.
 
@@ -122,6 +124,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python tools/bundle/bundle.py --rid ${{ matrix.rid }} --strict
+      - name: Bundle geneva (official geneva_c release, pinned)
+        run: python tools/bundle/bundle_geneva.py --rid ${{ matrix.rid }} --strict
       - name: Publish
         shell: bash
         run: |
@@ -153,9 +157,9 @@ jobs:
         run: |
           out="artifacts/publish/ZapretAutoTuner"
           if [ "${{ runner.os }}" = "Windows" ]; then
-            "$out/zapret2/winws2.exe" --version | tee v.txt; "$out/ztuner-agent.exe" --version
+            "$out/zapret2/winws2.exe" --version | tee v.txt; "$out/ztuner-agent.exe" --version; "$out/geneva/geneva.exe" version --json
           else
-            "$out/zapret2/nfqws2" --version | tee v.txt; "$out/ztuner-agent" --version
+            "$out/zapret2/nfqws2" --version | tee v.txt; "$out/ztuner-agent" --version; "$out/geneva/geneva" version --json
           fi
           grep -q "lua_compat_ver 6" v.txt
 

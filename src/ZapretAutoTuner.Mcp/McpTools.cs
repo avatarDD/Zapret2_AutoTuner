@@ -144,6 +144,8 @@ public static class McpTools
         // bug report draft (read) and strategy resources (PLAN 4a.5, 4a.6)
         BugReportTool.Definition,
         .. ResourceTools.Definitions,
+        // geneva_c, the second bypass engine
+        .. GenevaTools.Definitions,
     ];
 
     public static McpToolDefinition? Find(string name) => All.FirstOrDefault(t => t.Name == name);

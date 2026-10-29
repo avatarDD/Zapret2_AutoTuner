@@ -44,6 +44,10 @@ public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor, WizardVie
 
     public ResourceStore? Resources => host.Resources;
 
+    public Tuning.Geneva.GenevaController? Geneva => host.Geneva;
+
+    public Tools.GenevaBundle? GenevaBundle => host.GenevaBundle;
+
     /// <summary>The MCP search learns like the wizard's: the provider from Settings, the label of the verdict.</summary>
     public Core.Search.SearchLearning? SearchLearning(string blockLabel) => SearchContext.For(host, blockLabel).Learning;
 

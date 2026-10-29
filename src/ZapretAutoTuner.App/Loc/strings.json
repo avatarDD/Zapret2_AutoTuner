@@ -199,6 +199,298 @@
   "Да",
   "Yes"
  ],
+ "engine.autostart": [
+  "Включать при запуске программы",
+  "Turn on when the program starts"
+ ],
+ "engine.bad_host": [
+  "Не похоже на имя сайта: {0}",
+  "Not a site name: {0}"
+ ],
+ "engine.bad_port": [
+  "Порт должен быть числом 1–65535: {0}",
+  "The port must be a number 1–65535: {0}"
+ ],
+ "engine.baseline_blocked": [
+  "Без обхода: {0} — сайт заблокирован, идёт подбор.",
+  "Without a bypass: {0} — the site is blocked, searching."
+ ],
+ "engine.baseline_open": [
+  "Без обхода сайт открывается: подбирать нечего.",
+  "The site opens without a bypass: nothing to search."
+ ],
+ "engine.baseline_wait": [
+  "Проверка сайта без обхода…",
+  "Checking the site without a bypass…"
+ ],
+ "engine.best": [
+  "Лучшая (фитнес {0}, максимум 400): {1}",
+  "Best (fitness {0}, at most 400): {1}"
+ ],
+ "engine.bundle_bad": [
+  "geneva не готова: {0}",
+  "geneva is not ready: {0}"
+ ],
+ "engine.bundle_missing": [
+  "geneva не найдена рядом с программой (папка geneva). Обновите программу или соберите бандл: python tools/bundle/bundle_geneva.py.",
+  "geneva is missing next to the program (the geneva folder). Update the program or build the bundle: python tools/bundle/bundle_geneva.py."
+ ],
+ "engine.bundle_ok": [
+  "geneva {0} ({1}), возможности: {2}. Файлы совпадают с официальным релизом.",
+  "geneva {0} ({1}), features: {2}. The files match the official release."
+ ],
+ "engine.bundle_proto": [
+  "geneva говорит на протоколе {0}, программа — на {1}: обновите программу.",
+  "geneva speaks protocol {0}, the program speaks {1}: update the program."
+ ],
+ "engine.busy_mcp": [
+  "Модель через MCP сейчас проводит подбор или эксперимент: дождитесь окончания.",
+  "The model runs a search or an experiment over MCP: wait for it to finish."
+ ],
+ "engine.busy_protection": [
+  "Работает защита nfqws2 (Монитор): выключите её, чтобы geneva не мешала ей.",
+  "The nfqws2 protection runs (Monitor): turn it off so geneva does not fight it."
+ ],
+ "engine.busy_wizard": [
+  "Идёт подбор мастером: дождитесь его окончания.",
+  "The wizard is tuning: wait for it to finish."
+ ],
+ "engine.chart_fitness": [
+  "Фитнес по поколениям: зелёный — лучший, серый — средний",
+  "Fitness by generation: green is the best, grey the average"
+ ],
+ "engine.chart_triggered": [
+  "Срабатывания стратегии по интервалам",
+  "Strategy firings per interval"
+ ],
+ "engine.copy": [
+  "Копировать",
+  "Copy"
+ ],
+ "engine.failed": [
+  "Не получилось: {0}",
+  "Failed: {0}"
+ ],
+ "engine.feed": [
+  "Проверенные стратегии",
+  "Strategies checked"
+ ],
+ "engine.generations": [
+  "Поколений",
+  "Generations"
+ ],
+ "engine.geneva": [
+  "geneva (Geneva, генетический подбор)",
+  "geneva (Geneva, genetic search)"
+ ],
+ "engine.geneva_about": [
+  "Подбор, найденные стратегии и обход — всё ниже на этой странице. Прогресс подбора и найденные стратегии сохраняются: после перезапуска подбор можно продолжить.",
+  "Search, found strategies and the bypass are all below on this page. The search progress and the strategies found are kept: after a restart the search continues."
+ ],
+ "engine.idle": [
+  "Стратегия ни разу не сработала, хотя трафик идёт: скорее всего, она ничего не делает с этим трафиком. Попробуйте другую.",
+  "The strategy never fired although traffic flows: it most likely does nothing to this traffic. Try another one."
+ ],
+ "engine.library": [
+  "Готовые стратегии Geneva (библиотека)",
+  "Geneva's ready strategies (library)"
+ ],
+ "engine.library_about": [
+  "Стратегии из исследований Geneva с долей успеха против цензоров Китая, Индии и Казахстана. Против других DPI они могут не работать: проверьте подбором или включите и посмотрите телеметрию.",
+  "Strategies from Geneva's research with their success rate against the censors of China, India and Kazakhstan. They may not work against other DPI: check them with a search, or turn one on and watch the telemetry."
+ ],
+ "engine.library_load": [
+  "Показать",
+  "Show"
+ ],
+ "engine.library_loaded": [
+  "Стратегий: {0}",
+  "Strategies: {0}"
+ ],
+ "engine.log": [
+  "Журнал geneva",
+  "geneva log"
+ ],
+ "engine.nfqws2": [
+  "nfqws2 (zapret2)",
+  "nfqws2 (zapret2)"
+ ],
+ "engine.nfqws2_about": [
+  "Подбор в «Подборе», включение и слежение в «Мониторе», экспорт в zapret2, Keenetic и zapret-gui.",
+  "Search in the Wizard, protection and watching in the Monitor, export to zapret2, Keenetic and zapret-gui."
+ ],
+ "engine.open_monitor": [
+  "Открыть «Монитор»",
+  "Open the Monitor"
+ ],
+ "engine.open_wizard": [
+  "Открыть «Подбор»",
+  "Open the Wizard"
+ ],
+ "engine.pause": [
+  "Пауза",
+  "Pause"
+ ],
+ "engine.population": [
+  "Популяция",
+  "Population"
+ ],
+ "engine.port": [
+  "Порт",
+  "Port"
+ ],
+ "engine.ports": [
+  "Порты",
+  "Ports"
+ ],
+ "engine.progress": [
+  "{4}: поколение {0} из {1} · проверено стратегий {2} · загрузили сайт {3}",
+  "{4}: generation {0} of {1} · strategies checked {2} · loaded the site {3}"
+ ],
+ "engine.restored": [
+  "Обход geneva включён снова, как вы оставили.",
+  "The geneva bypass is on again, as you left it."
+ ],
+ "engine.resume": [
+  "Продолжить подбор",
+  "Continue the search"
+ ],
+ "engine.run": [
+  "Включить обход",
+  "Turn the bypass on"
+ ],
+ "engine.run_ended": [
+  "Обход выключен: {0}.",
+  "The bypass stopped: {0}."
+ ],
+ "engine.run_off": [
+  "Обход geneva выключен.",
+  "The geneva bypass is off."
+ ],
+ "engine.run_ready": [
+  "Работает на портах {0} (перехват: {1}), {2}.",
+  "Running on ports {0} (interception: {1}), {2}."
+ ],
+ "engine.run_starting": [
+  "Запуск geneva…",
+  "Starting geneva…"
+ ],
+ "engine.run_stop": [
+  "Выключить",
+  "Turn off"
+ ],
+ "engine.saved": [
+  "Сохранено: поколение {0} из {1}, лучший фитнес {2} ({3}).",
+  "Saved: generation {0} of {1}, best fitness {2} ({3})."
+ ],
+ "engine.score": [
+  "фитнес {0}, проверок {1}",
+  "fitness {0}, checks {1}"
+ ],
+ "engine.search": [
+  "Найти",
+  "Search"
+ ],
+ "engine.seed": [
+  "Начать с найденных раньше и готовых стратегий Geneva",
+  "Start from the strategies found earlier and Geneva's ready ones"
+ ],
+ "engine.site": [
+  "Сайт",
+  "Site"
+ ],
+ "engine.starting": [
+  "Запуск…",
+  "Starting…"
+ ],
+ "engine.step1": [
+  "1. Найти стратегию для заблокированного сайта",
+  "1. Find a strategy for a blocked site"
+ ],
+ "engine.step1_about": [
+  "Сначала сайт проверяется без обхода: подбирать имеет смысл, только если он не открывается. Затем geneva скрещивает и мутирует стратегии, а программа проверяет каждую полной загрузкой страницы. Нужны права администратора (запрос появится один раз). Подбор можно остановить и продолжить позже.",
+  "First the site is checked without a bypass: a search makes sense only when it does not open. Then geneva crosses and mutates strategies, and the program checks each by downloading the page fully. Administrator rights are needed (asked once). The search can be stopped and continued later."
+ ],
+ "engine.step2": [
+  "2. Найденные стратегии",
+  "2. Strategies found"
+ ],
+ "engine.step2_empty": [
+  "Пока ничего: стратегии, с которыми сайт загрузился полностью, появятся здесь и сохранятся.",
+  "Nothing yet: strategies with which the site loaded fully appear here and are kept."
+ ],
+ "engine.step3": [
+  "3. Обход",
+  "3. Bypass"
+ ],
+ "engine.step3_about": [
+  "geneva применяет стратегию ко всем соединениям на указанные порты этого ПК (списка сайтов у geneva нет). Выключение снимает правила перехвата; при закрытии программы обход выключается сам.",
+  "geneva applies the strategy to every connection to the given ports of this PC (geneva has no site list). Turning it off removes the interception rules; closing the program turns the bypass off."
+ ],
+ "engine.stop_search": [
+  "Остановить (прогресс сохранится)",
+  "Stop (the progress is kept)"
+ ],
+ "engine.strategy": [
+  "Стратегия Geneva",
+  "Geneva strategy"
+ ],
+ "engine.subtitle": [
+  "Чем обходить блокировки на этом ПК. nfqws2 (zapret2) — основной движок: мастер подбора, монитор, экспорт на роутер. geneva — второй движок с генетическим подбором стратегий Geneva и своим языком стратегий; её стратегии не переводятся в zapret2. Работает один движок за раз.",
+  "What bypasses blocks on this PC. nfqws2 (zapret2) is the main engine: the tuning wizard, the monitor, export to a router. geneva is a second engine with Geneva's genetic strategy search and its own strategy language; its strategies do not translate to zapret2. One engine works at a time."
+ ],
+ "engine.switch_running": [
+  "Обход geneva ещё включён: выключите его в шаге 3, чтобы перейти на nfqws2.",
+  "The geneva bypass is still on: turn it off in step 3 to switch to nfqws2."
+ ],
+ "engine.t_dropped": [
+  "Отброшено",
+  "Dropped"
+ ],
+ "engine.t_errors": [
+  "Ошибки",
+  "Errors"
+ ],
+ "engine.t_in": [
+  "Входящие пакеты",
+  "Packets in"
+ ],
+ "engine.t_injected": [
+  "Отправлено своих",
+  "Injected"
+ ],
+ "engine.t_modified": [
+  "Изменено",
+  "Modified"
+ ],
+ "engine.t_out": [
+  "Исходящие пакеты",
+  "Packets out"
+ ],
+ "engine.t_triggered": [
+  "Сработала",
+  "Fired"
+ ],
+ "engine.taken": [
+  "Стратегия перенесена в шаг 3: нажмите «Включить обход».",
+  "The strategy is in step 3: press Turn the bypass on."
+ ],
+ "engine.title": [
+  "Движок обхода",
+  "Bypass engine"
+ ],
+ "engine.tree": [
+  "{0} × {1}",
+  "{0} × {1}"
+ ],
+ "engine.unpause": [
+  "Продолжить",
+  "Resume"
+ ],
+ "engine.use": [
+  "Взять",
+  "Use"
+ ],
  "expert.check": [
   "Проверить",
   "Check"
@@ -611,6 +903,10 @@
   "Отклонить",
   "Dismiss"
  ],
+ "monitor.geneva_running": [
+  "Сейчас обходит geneva (страница «Движок обхода»). Выключите её там, затем включите защиту nfqws2: два движка на одном порту мешают друг другу.",
+  "geneva bypasses now (the Bypass engine page). Turn it off there, then start the nfqws2 protection: two engines on one port get in each other's way."
+ ],
  "monitor.journal": [
   "Журнал изменений",
   "Change journal"
@@ -662,6 +958,10 @@
  "nav.advisor": [
   "Советник",
   "Advisor"
+ ],
+ "nav.engine": [
+  "Движок обхода",
+  "Bypass engine"
  ],
  "nav.expert": [
   "Эксперт",

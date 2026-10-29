@@ -50,6 +50,16 @@
    для Claude. Ничего не отправляется само.
 6. **Эксперт.** Импорт чужой стратегии (config zapret2, nfqws2.conf, .cmd
    winws2, строка аргументов, JSON zapret-gui) с проверкой и использованием.
+7. **Движок.** Выбор, чем обходить блокировки на этом ПК: nfqws2 (zapret2,
+   всё описанное выше) или geneva (geneva_c). У geneva три шага:
+   «Подбор» — генетический поиск стратегии для заблокированного сайта
+   (каждую стратегию программа проверяет полной загрузкой страницы, видно
+   поколение, процент, лучший результат и график); «Найденные» — стратегии,
+   с которыми сайт загрузился; «Обход» — включение выбранной стратегии с
+   живыми счётчиками пакетов и срабатываний. Прогресс подбора, найденное и
+   включённый обход сохраняются: остановленный подбор продолжается кнопкой
+   «Продолжить», а обход с галочкой «Включать при запуске» возвращается
+   после перезапуска программы. Одновременно работает только один движок.
 
 Права администратора нужны только агенту, который запускает движок и правила
 firewall; окно программы работает без них. При выходе агент снимает все свои
@@ -164,6 +174,15 @@ cannot be protected that way: a replaced agent gets the rights on its next start
 5. **Reports** builds an archive for analysis with your IPs masked. Nothing is
    sent anywhere.
 6. **Expert** imports and validates someone else's strategy.
+7. **Engine** chooses what bypasses blocks on this PC: nfqws2 (zapret2, all of
+   the above) or geneva (geneva_c). geneva has three steps: Search (a genetic
+   search for a blocked site, every strategy judged by a full page load, with
+   the generation, percent, best result and a chart), Found (the strategies
+   the site loaded with) and Bypass (turns the chosen strategy on, with live
+   packet and trigger counters). Search progress, found strategies and the
+   bypass are saved: Continue resumes a stopped search, and a bypass with
+   "Turn on at start" comes back after the program restarts. Only one engine
+   runs at a time.
 
 Only the agent runs with administrator rights; it removes its firewall rules
 on exit.

@@ -41,6 +41,21 @@ service Agent {
   rpc RemoveService (RemoveServiceRequest) returns (ServiceReply);
   rpc QueryService (QueryServiceRequest) returns (ServiceReply);
 
+  // geneva_c, the second bypass engine (skill geneva, its docs/INTEGRATION.md). The UI sends typed settings, never a
+  // command line: the Agent builds it (Core.Geneva.GenevaArgv), checks the strategy with "geneva check", keeps the
+  // checkpoint and the strategy database in its own protected folder and stops geneva (rules removed) when it exits.
+  // At most one search and one run at a time.
+  rpc GenevaStart (GenevaStartRequest) returns (GenevaStartReply);
+  rpc GenevaStop (GenevaStopRequest) returns (GenevaStopReply);
+  // geneva's events (JSON Lines) from the start (buffered) and then live, its log lines, and the exit.
+  rpc GenevaWatch (GenevaWatchRequest) returns (stream GenevaOutput);
+  // The answer to an eval_request of a search (the UI ran the probe from the request's local ports).
+  rpc GenevaAnswer (GenevaAnswerRequest) returns (GenevaAnswerReply);
+  // A command for a running "geneva run" over its control socket: stats, pause, resume, reset_stats, set_strategy.
+  rpc GenevaControl (GenevaControlRequest) returns (GenevaControlReply);
+  // What the Agent keeps: the version, the saved searches (resume) and the best strategies of the database.
+  rpc GenevaInfo (GenevaInfoRequest) returns (GenevaInfoReply);
+
   // Stops everything, removes rules and exits.
   rpc Shutdown (ShutdownRequest) returns (ShutdownReply);
 }
@@ -203,4 +218,92 @@ message ServiceReply {
   bool running = 2;
   string directory = 3;
   string output = 4;
+}
+
+message GenevaStartRequest {
+  string mode = 1;              // "run" or "evolve"
+  // run
+  string strategy = 2;
+  string ports = 3;             // "80,443"
+  // evolve
+  string host = 4;
+  int32 port = 5;
+  int32 population = 6;
+  int32 generations = 7;
+  bool resume = 8;
+  repeated string seeds = 9;    // strategies the population starts from
+  string tag = 10;
+}
+
+message GenevaStartReply {
+  string id = 1;
+  int32 pid = 2;
+  string strategy = 3;          // run: the canonical form geneva checked
+}
+
+message GenevaStopRequest {
+  string id = 1;
+}
+
+message GenevaStopReply {
+  bool was_running = 1;
+  int32 exit_code = 2;
+}
+
+message GenevaWatchRequest {
+  string id = 1;
+}
+
+message GenevaOutput {
+  string event = 1;             // one JSON event, or empty
+  string log = 2;               // one log line (stderr), or empty
+  bool exited = 3;              // last message
+  int32 exit_code = 4;
+}
+
+message GenevaAnswerRequest {
+  string id = 1;
+  int64 request_id = 2;
+  int32 fitness = 3;
+  string detail = 4;
+}
+
+message GenevaAnswerReply {
+}
+
+message GenevaControlRequest {
+  string id = 1;
+  string cmd = 2;
+  string strategy = 3;          // set_strategy
+}
+
+message GenevaControlReply {
+  bool ok = 1;
+  string json = 2;              // geneva's answer
+}
+
+message GenevaInfoRequest {
+}
+
+message GenevaSavedSearch {
+  string target = 1;            // external:host:port
+  int64 saved_ms = 2;
+}
+
+message GenevaDbEntry {
+  string strategy = 1;
+  string target = 2;
+  int32 runs = 3;
+  int32 ok = 4;
+  double best_fitness = 5;
+  double avg_fitness = 6;
+  int64 last_ok_ms = 7;
+}
+
+message GenevaInfoReply {
+  string version_json = 1;      // geneva version --json, empty when geneva is missing
+  repeated string problems = 2; // why geneva cannot run (missing, hashes)
+  repeated GenevaSavedSearch searches = 3;
+  repeated GenevaDbEntry best = 4;
+  repeated string running = 5;  // ids
 }

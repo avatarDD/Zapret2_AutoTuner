@@ -22,9 +22,35 @@ public sealed partial class MainViewModel : ObservableObject
         Settings = new SettingsViewModel(host, Mcp);
         Advisor = new AdvisorViewModel(host, Mcp.Tools);
         Mcp.Stopped += Advisor.Cancel;
-        Pages = [Home, Wizard, Monitor, Reports, Expert, Resources, Advisor, Settings];
+        Engine = new EngineViewModel(host)
+        {
+            Navigate = page => Current = page == "monitor" ? Monitor : Wizard,
+        };
+        // one engine bypasses at a time: geneva waits for zapret2's protection, the wizard and the model's runs
+        host.Geneva.Busy = () =>
+            Monitor.Active ? Loc.Loc.I["engine.busy_protection"]
+            : Wizard.LocalTuningRunning ? Loc.Loc.I["engine.busy_wizard"]
+            : Mcp.Session.Busy ? Loc.Loc.I["engine.busy_mcp"]
+            : null;
+        Monitor.GenevaRunning = () => host.Geneva.RunRunning;
+        Pages = [Home, Wizard, Monitor, Engine, Reports, Expert, Resources, Advisor, Settings];
         _current = Home;
         host.AgentLost += m => AgentStatus = Loc.Loc.I.F("agent.lost", m);
+        // the geneva bypass the user left on with "Включать при запуске" comes back (one elevation prompt)
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = RestoreGenevaAsync(host), Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private async Task RestoreGenevaAsync(AppHost host)
+    {
+        try
+        {
+            if (await host.Geneva.RestoreAsync(CancellationToken.None))
+                Engine.Status = Loc.Loc.I["engine.restored"];
+        }
+        catch (Exception e) when (e is Tuning.Geneva.GenevaRefusedException or Protocol.AgentStartException or InvalidOperationException or Grpc.Core.RpcException)
+        {
+            Engine.Status = Loc.Loc.I.F("engine.failed", e.Message);
+        }
     }
 
     public HomeViewModel Home { get; }
@@ -42,6 +68,9 @@ public sealed partial class MainViewModel : ObservableObject
     public SettingsViewModel Settings { get; }
 
     public AdvisorViewModel Advisor { get; }
+
+    /// <summary>"Движок обхода": nfqws2 or geneva, and geneva's search and bypass.</summary>
+    public EngineViewModel Engine { get; }
 
     public McpService Mcp { get; }
 

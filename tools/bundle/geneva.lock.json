@@ -1,0 +1,27 @@
+{
+  "repo": "avatarDD/geneva_c",
+  "tag": "v1.0.0",
+  "version": "1.0.0",
+  "proto": 1,
+  "sums_asset": "SHA256SUMS",
+  "rids": {
+    "linux-x64": {
+      "asset": "geneva-1.0.0-linux-x86_64.tar.gz",
+      "sha256": "c0a29e7e3344d0c49f1cf89341b71b359264a09372e20727d6d68c818f45b022",
+      "files": ["geneva"],
+      "optional": ["LICENSE"]
+    },
+    "linux-arm64": {
+      "asset": "geneva-1.0.0-linux-aarch64.tar.gz",
+      "sha256": "0aa01c463423f39fc57072616ad7e66a0fa28daa272ba693e1c1ce3f54cdc88d",
+      "files": ["geneva"],
+      "optional": ["LICENSE"]
+    },
+    "win-x64": {
+      "asset": "geneva-1.0.0-windows-x86_64.zip",
+      "sha256": "b3e75d2c48a738f1b385bf202d815020859b65a44dd5122f2f7f22d42e5a88f9",
+      "files": ["geneva.exe", "WinDivert.dll", "WinDivert64.sys"],
+      "optional": ["LICENSE", "WinDivert-LICENSE.txt"]
+    }
+  }
+}

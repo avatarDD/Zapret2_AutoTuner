@@ -235,6 +235,74 @@ internal sealed class AgentService : Protocol.Agent.AgentBase
         return new ServiceReply { Installed = installed, Running = running, Directory = WinwsService.Directory, Output = output };
     }
 
+    public override async Task<GenevaStartReply> GenevaStart(GenevaStartRequest request, ServerCallContext context)
+    {
+        try
+        {
+            return await _host.Geneva.StartAsync(request, context.CancellationToken);
+        }
+        catch (Exception e) when (e is Geneva.GenevaStartException or FormatException)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, e.Message));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or global::System.ComponentModel.Win32Exception)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, "geneva: " + e.Message));
+        }
+    }
+
+    public override async Task<GenevaStopReply> GenevaStop(GenevaStopRequest request, ServerCallContext context)
+    {
+        var (was, code) = await _host.Geneva.StopAsync(request.Id);
+        return new GenevaStopReply { WasRunning = was, ExitCode = code };
+    }
+
+    public override async Task GenevaWatch(GenevaWatchRequest request, IServerStreamWriter<GenevaOutput> responseStream, ServerCallContext context)
+    {
+        var inst = _host.Geneva.Find(request.Id)
+            ?? throw new RpcException(new Status(StatusCode.NotFound, "no such geneva instance"));
+        await foreach (var l in inst.WatchAsync(context.CancellationToken))
+            await responseStream.WriteAsync(new GenevaOutput { Event = l.Event ?? "", Log = l.Log ?? "", Exited = l.Exited, ExitCode = l.ExitCode }, context.CancellationToken);
+    }
+
+    public override async Task<GenevaAnswerReply> GenevaAnswer(GenevaAnswerRequest request, ServerCallContext context)
+    {
+        try
+        {
+            await _host.Geneva.AnswerAsync(request.Id, request.RequestId, request.Fitness, request.Detail, context.CancellationToken);
+            return new GenevaAnswerReply();
+        }
+        catch (Exception e) when (e is Geneva.GenevaStartException or IOException or InvalidOperationException)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, e.Message));
+        }
+    }
+
+    public override async Task<GenevaControlReply> GenevaControl(GenevaControlRequest request, ServerCallContext context)
+    {
+        try
+        {
+            var (ok, json) = await _host.Geneva.ControlAsync(request.Id, request.Cmd, request.Strategy, context.CancellationToken);
+            return new GenevaControlReply { Ok = ok, Json = json };
+        }
+        catch (Exception e) when (e is Geneva.GenevaStartException or IOException or global::System.Net.Sockets.SocketException or OperationCanceledException)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, e.Message));
+        }
+    }
+
+    public override Task<GenevaInfoReply> GenevaInfo(GenevaInfoRequest request, ServerCallContext context)
+    {
+        try
+        {
+            return _host.Geneva.InfoAsync(context.CancellationToken);
+        }
+        catch (Exception e) when (e is Geneva.GenevaStartException or IOException or UnauthorizedAccessException)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, e.Message));
+        }
+    }
+
     public override Task<ShutdownReply> Shutdown(ShutdownRequest request, ServerCallContext context)
     {
         _host.RequestStop("shutdown requested");

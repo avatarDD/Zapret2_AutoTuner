@@ -52,6 +52,12 @@ public sealed record HttpProbeOptions
 
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Connect from this local port (0: any). geneva's search applies a strategy only to the connections of its
+    /// worker's port block, so the probe of a strategy must come from there.
+    /// </summary>
+    public int LocalPort { get; init; }
+
     public TimeSpan HandshakeTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
     /// <summary>No incoming bytes for this long after the request means a stall.</summary>
@@ -87,7 +93,7 @@ public static class HttpProbe
         TcpConnectResult conn;
         try
         {
-            conn = await TcpConnector.ConnectAsync(o.Address, o.Port, o.ConnectTimeout, total.Token).ConfigureAwait(false);
+            conn = await TcpConnector.ConnectAsync(o.Address, o.Port, o.ConnectTimeout, total.Token, o.LocalPort).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {

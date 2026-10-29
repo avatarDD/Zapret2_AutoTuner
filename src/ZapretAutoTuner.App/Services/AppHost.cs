@@ -26,6 +26,41 @@ public sealed class AppHost : IAsyncDisposable
         Settings = new AppSettings(Kb);
         Resources = new ResourceStore(Kb);
         _resourceSync = new ResourceSync(Resources, ViewModels.SessionState.I);
+        GenevaBundle = new GenevaBundle(Path.Combine(AppContext.BaseDirectory, "geneva"));
+        Geneva = new Tuning.Geneva.GenevaController(
+            async ct => new Tuning.Geneva.AgentGeneva((await AgentAsync(ct).ConfigureAwait(false)).Client),
+            new KbGenevaStore(Kb),
+            GenevaProbeAsync);
+    }
+
+    /// <summary>geneva_c next to the program: version, library and check run from here without rights.</summary>
+    public GenevaBundle GenevaBundle { get; }
+
+    /// <summary>The second bypass engine: geneva's search and bypass, run by the Agent, shown on the "Движок обхода" page.</summary>
+    public Tuning.Geneva.GenevaController Geneva { get; }
+
+    /// <summary>One strategy of geneva's search: the page downloaded (L2) from the local port the strategy applies to.</summary>
+    private static async Task<Core.Diagnostics.ProbeResult> GenevaProbeAsync(string host, int port, bool tls, int localPort, CancellationToken ct)
+    {
+        System.Net.IPAddress address;
+        try
+        {
+            address = await Tuning.Geneva.GenevaController.ResolveAsync(host, ct).ConfigureAwait(false);
+        }
+        catch (System.Net.Sockets.SocketException e)
+        {
+            return new Core.Diagnostics.ProbeResult { Host = host, Address = "", Port = port, Tls = tls, Error = Core.Diagnostics.ProbeError.Other, ErrorDetail = "DNS: " + e.Message };
+        }
+        return await Probes.Http.HttpProbe.RunAsync(new Probes.Http.HttpProbeOptions
+        {
+            Host = host,
+            Address = address,
+            Port = port,
+            Tls = tls,
+            LocalPort = localPort,
+            Level = Core.Diagnostics.ProbeLevel.L2Body,
+            MaxTime = TimeSpan.FromSeconds(12),
+        }, ct).ConfigureAwait(false);
     }
 
     public static AppHost? Current { get; set; }
@@ -107,6 +142,7 @@ public sealed class AppHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await Geneva.DisposeAsync().ConfigureAwait(false);
         // the Agent removes its firewall rules and stops engines on shutdown (AGENTS.md rule 6)
         if (_agent is not null)
             await _agent.DisposeAsync().ConfigureAwait(false);
@@ -372,6 +408,16 @@ public sealed class AppSettings
     private bool Flag(string key) => kb.GetSetting(key) == "1";
 
     private void SetFlag(string key, bool value) => kb.SetSetting(key, value ? "1" : "0");
+}
+
+/// <summary>geneva's saved state (engine choice, progress, found strategies) in the knowledge base's settings.</summary>
+internal sealed class KbGenevaStore(KnowledgeBase kb) : Tuning.Geneva.IGenevaStore
+{
+    public const string Key = "geneva.state";
+
+    public string? Load() => kb.GetSetting(Key);
+
+    public void Save(string json) => kb.SetSetting(Key, json);
 }
 
 /// <summary>What an interrupted wizard search needs to go on: its inputs and each domain's knowledge-base session.</summary>

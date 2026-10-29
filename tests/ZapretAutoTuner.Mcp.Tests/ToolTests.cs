@@ -8,7 +8,7 @@ public sealed class PermissionTests
     public void OnlyReadingIsListedByDefault()
     {
         using var rig = new Rig();
-        Assert.Equal(["targets_list", "diagnose", "trials_history", "catalog_functions", "strategy_validate", "kb_query", "bug_report_draft"], rig.Tools.ListTools().Select(t => t.Name));
+        Assert.Equal(["targets_list", "diagnose", "trials_history", "catalog_functions", "strategy_validate", "kb_query", "bug_report_draft", "geneva_status", "geneva_library", "geneva_check"], rig.Tools.ListTools().Select(t => t.Name));
         rig.Permissions = new McpPermissions(Probes: true);
         Assert.Contains("trial_run", rig.Tools.ListTools().Select(t => t.Name));
         Assert.DoesNotContain("search_start", rig.Tools.ListTools().Select(t => t.Name));

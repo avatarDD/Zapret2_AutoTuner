@@ -6,7 +6,8 @@
 Steps (skill geneva, "Бандл"):
   1. download the release asset named in geneva.lock.json for the RID from the official geneva_c release
      (https://github.com/<repo>/releases/download/<tag>/<asset>), or use --archive;
-  2. verify SHA-256 against the pin in the lock and against the release's SHA256SUMS;
+  2. verify SHA-256 against the pin in the lock and against the release's SHA256SUMS, and the WinDivert files
+     against WinDivert's own official release (file_sha256 in the lock);
   3. copy the binary (on Windows with WinDivert.dll and WinDivert64.sys, which geneva_c's release takes from the
      official WinDivert release) into the output directory;
   4. run "geneva version --json" when the binary is for this machine and check the protocol version;
@@ -80,10 +81,14 @@ def main():
             os.chmod(dst, 0o755)
         files[rel] = sha256(blob)
 
+    pins = spec.get("file_sha256", {})
     for f in spec["files"]:
         blob = arc.get(f)
         if blob is None:
             fail(f"{f} not in {name}; directories with it: {arc.dirs_containing(f)}")
+        # files geneva_c takes from another author (WinDivert) must be byte for byte that author's release
+        if f in pins and sha256(blob) != pins[f]:
+            fail(f"{f} in {name} differs from its official release ({pins['_source']})")
         put(f, blob, executable=not f.endswith((".dll", ".sys")))
     for f in spec.get("optional", []):
         blob = arc.get(f)

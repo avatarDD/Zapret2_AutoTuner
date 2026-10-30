@@ -217,7 +217,8 @@ internal sealed class GenevaManager : IDisposable
             if (!s.GenevaQueues.Contains(queue))
                 s.GenevaQueues.Add(queue);
         });
-        _ = inst.Exited.ContinueWith(_ => _state.Update(s => s.Engines.RemoveAll(e => e.Pid == inst.Pid)), TaskScheduler.Default);
+        int pid = inst.Pid;
+        _ = inst.Exited.ContinueWith(_ => _state.Update(s => s.Engines.RemoveAll(e => e.Pid == pid)), TaskScheduler.Default);
         return inst;
     }
 
@@ -270,7 +271,11 @@ internal sealed class GenevaManager : IDisposable
         {
             if (GenevaStrategyText.Problem(strategy) is { } bad)
                 throw new GenevaStartException(bad);
-            req["strategy"] = strategy;
+            // a new strategy passes geneva check like one at the start (AGENTS.md rule 4)
+            var check = (await new GenevaBundle(Path.GetDirectoryName(Prepare())!).CheckAsync([strategy!], ct)) is { Count: > 0 } checks ? checks[0] : null;
+            if (check is not { Ok: true, Strategy: { } canonical })
+                throw new GenevaStartException("стратегия не разбирается / the strategy does not parse: " + (check?.Error ?? "?"));
+            req["strategy"] = canonical;
         }
         var answer = await SendControlAsync(inst, req, ct);
         return ((bool?)answer["ok"] ?? false, answer.ToJsonString());

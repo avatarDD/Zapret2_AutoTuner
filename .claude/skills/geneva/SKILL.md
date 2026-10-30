@@ -99,7 +99,9 @@ handshake — не успех.
   `tools/bundle/bundle_geneva.py` качает архив, сверяет его с SHA256SUMS и
   с пином в `geneva.lock.json`, пишет `runtimes/<rid>/geneva/bundle.json`.
   На Windows рядом лежат `WinDivert.dll` и `WinDivert64.sys` из того же
-  архива.
+  архива; их SHA-256 закреплены отдельно (`file_sha256` в lock) по
+  официальному релизу WinDivert (basil00/WinDivert v2.2.2), и бандл не
+  собирается, если байты отличаются.
 - Agent копирует бандл в защищённую папку (`ProtectedBundle.CopyAndVerify`)
   и запускает geneva только оттуда.
 - Правила firewall geneva (`inet geneva_<queue>`, цепочки

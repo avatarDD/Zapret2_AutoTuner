@@ -28,8 +28,9 @@
     <ProjectReference Include="..\ZapretAutoTuner.Protocol\ZapretAutoTuner.Protocol.csproj" />
     <ProjectReference Include="..\ZapretAutoTuner.Mcp\ZapretAutoTuner.Mcp.csproj" />
   </ItemGroup>
-  <!-- The engine bundle produced by tools/bundle is shipped as <app>/zapret2 -->
+  <!-- The engine bundles produced by tools/bundle are shipped as <app>/zapret2 and <app>/geneva -->
   <ItemGroup Condition="'$(RuntimeIdentifier)' != ''">
     <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\$(RuntimeIdentifier)\zapret2\**\*" Link="zapret2\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\$(RuntimeIdentifier)\geneva\**\*" Link="geneva\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

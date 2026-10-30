@@ -5,6 +5,7 @@ obj/
 .idea/
 artifacts/
 runtimes/*/zapret2/
+runtimes/*/geneva/
 *.pcap
 *.pcapng
 !tests/pcaps/*.pcap

@@ -8,5 +8,6 @@
   <ItemGroup>
     <!-- zapret-gui's MCP experiments in memory, shared with the Tuning tests -->
     <Compile Include="..\ZapretAutoTuner.Tuning.Tests\RouterGui.cs" Link="RouterGui.cs" />
+    <Compile Include="..\ZapretAutoTuner.Tuning.Tests\FakeGenevaAgent.cs" Link="FakeGenevaAgent.cs" />
   </ItemGroup>
 </Project>

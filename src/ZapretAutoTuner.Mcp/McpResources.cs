@@ -8,7 +8,7 @@ namespace ZapretAutoTuner.Mcp;
 public sealed record McpResource(string Uri, string Name, string Title, string Description, string MimeType);
 
 /// <summary>
-/// The resources (MCP design, "Ресурсы и промты"): the skills nfqws2-lua, nfqws2-engine and dpi-diagnostics as
+/// The resources (MCP design, "Ресурсы и промты"): the skills nfqws2-lua, nfqws2-engine, dpi-diagnostics and geneva as
 /// <c>ztuner://skills/&lt;name&gt;</c>, and <c>ztuner://trials/&lt;id&gt;/capture</c> for a trial that was captured. Only
 /// these URIs exist: nothing maps a URI to a file.
 /// </summary>
@@ -19,6 +19,7 @@ public static class McpResources
         ("nfqws2-lua", "zapret2 Lua library", "Every --lua-desync function, its arguments and defaults, fooling, markers, blobs, orchestrators: read before writing a strategy."),
         ("nfqws2-engine", "nfqws2 / winws2 engine", "The engine's options, profiles, ranges, payloads and limits (the program builds the engine options itself)."),
         ("dpi-diagnostics", "DPI diagnostics", "How AutoTuner classifies blocks, what counts as success (L2/L3), how the search and refinement work."),
+        ("geneva", "geneva_c engine", "The second bypass engine: Geneva's strategy language, the genetic search judged by the program's full download, the bypass and its counters."),
     ];
 
     public static string SkillUri(string name) => "ztuner://skills/" + name;

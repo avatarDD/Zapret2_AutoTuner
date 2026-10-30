@@ -80,6 +80,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python tools/bundle/bundle.py --rid ${{ matrix.rid }} --strict
+      - name: Bundle geneva (official geneva_c release, pinned)
+        run: python tools/bundle/bundle_geneva.py --rid ${{ matrix.rid }} --strict
       - name: Build tests
         run: |
           dotnet build tests/ZapretAutoTuner.Agent.Tests -c Release
@@ -135,6 +137,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python tools/bundle/bundle.py --rid ${{ matrix.rid }} --strict
+      - name: Bundle geneva (official geneva_c release, pinned)
+        run: python tools/bundle/bundle_geneva.py --rid ${{ matrix.rid }} --strict
       - name: Publish App and Agent
         shell: bash
         run: |

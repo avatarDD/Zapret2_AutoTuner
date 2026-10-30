@@ -75,13 +75,19 @@ internal sealed partial class LuaStore
     /// <summary>The folder of the verified engine copy (final review 9): never pruned, removed with the store.</summary>
     public const string EngineFolderName = "engine";
 
+    /// <summary>The folder of the verified geneva copy: like the engine's, never pruned.</summary>
+    public const string GenevaFolderName = "geneva";
+
     /// <summary>Creates this store (protected) and an empty folder for the engine copy in it, and returns its path.</summary>
-    public string NewEngineFolder()
+    public string NewEngineFolder() => NewToolFolder(EngineFolderName);
+
+    /// <summary>Creates this store (protected) and an empty folder <paramref name="name"/> for a verified tool copy.</summary>
+    public string NewToolFolder(string name)
     {
         lock (_lock)
         {
             EnsureRoot();
-            var dir = Path.Combine(Root, EngineFolderName);
+            var dir = Path.Combine(Root, name);
             if (Directory.Exists(dir))
                 Directory.Delete(dir, recursive: true);
             CreateDir(dir);
@@ -214,7 +220,7 @@ internal sealed partial class LuaStore
     /// </summary>
     private void MakeRoom(long adding)
     {
-        var folders = new DirectoryInfo(Root).GetDirectories().Where(d => d.Name != EngineFolderName)
+        var folders = new DirectoryInfo(Root).GetDirectories().Where(d => d.Name is not (EngineFolderName or GenevaFolderName))
             .Select(d => (Dir: d, Bytes: d.GetFiles().Sum(f => f.Length)))
             .ToList();
         long bytes = folders.Sum(f => f.Bytes);

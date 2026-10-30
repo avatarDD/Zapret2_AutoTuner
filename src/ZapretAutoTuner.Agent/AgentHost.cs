@@ -42,6 +42,7 @@ internal sealed class AgentHost : IAsyncDisposable
                 return null;
             }
         };
+        Geneva = new Geneva.GenevaManager(options, State, Engines.Lua);
         Captures = new CaptureManager();
         Hosts = new HostsManager(options.HostsFile ?? Core.Hosts.HostsFile.DefaultPath, options.DataDir!);
     }
@@ -57,6 +58,9 @@ internal sealed class AgentHost : IAsyncDisposable
     public EngineManager Engines { get; }
 
     public CaptureManager Captures { get; }
+
+    /// <summary>geneva_c: the second bypass engine and its search.</summary>
+    public Geneva.GenevaManager Geneva { get; }
 
     public HostsManager Hosts { get; }
 
@@ -121,6 +125,9 @@ internal sealed class AgentHost : IAsyncDisposable
         }
         if (s.Engines.Count > 0)
             State.Update(x => x.Engines.Clear());
+        Geneva.RecoverFirewall(s.GenevaQueues);
+        if (s.GenevaQueues.Count > 0)
+            State.Update(x => x.GenevaQueues.Clear());
         // remove our table/chains even if the state file was lost: they are ours by name
         Firewall?.RemoveAll();
         Sysctl.RestoreAll();
@@ -138,6 +145,14 @@ internal sealed class AgentHost : IAsyncDisposable
         catch (Exception e)
         {
             Console.Error.WriteLine("stop engines: " + e.Message);
+        }
+        try
+        {
+            await Geneva.StopAllAsync();
+        }
+        catch (Exception e)
+        {
+            Console.Error.WriteLine("stop geneva: " + e.Message);
         }
         Captures.StopAll();
         Firewall?.RemoveAll();
@@ -159,6 +174,7 @@ internal sealed class AgentHost : IAsyncDisposable
     {
         await CleanupAsync();
         Engines.Dispose();
+        Geneva.Dispose();
         Stopping.Dispose();
     }
 }

@@ -1118,5 +1118,213 @@
       ],
       "additionalProperties": false
     }
+  },
+  {
+    "name": "geneva_status",
+    "scope": "read",
+    "confirms": false,
+    "description": "The bypass engine in use (nfqws2 or geneva) and geneva's state: whether the bundled geneva is ready, the running or last search (generation, strategies checked, best fitness, baseline), the saved searches that can be continued, the strategies found, and the bypass with its live counters (packets, how often each tree fired).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_library",
+    "scope": "read",
+    "confirms": false,
+    "description": "Geneva's library of published strategies with their success rate against the censors of China, India and Kazakhstan. A starting point, not a promise for another DPI.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "country": {
+          "type": "string",
+          "description": "Only this country's censor",
+          "enum": [
+            "china",
+            "india",
+            "kazakhstan"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Rows at most (default 20)",
+          "minimum": 1,
+          "maximum": 60
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_check",
+    "scope": "read",
+    "confirms": false,
+    "description": "Parses Geneva strategies with geneva itself: the canonical form and the number of actions, or why one does not parse. Nothing runs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategies": {
+          "type": "array",
+          "description": "Strategies",
+          "items": {
+            "type": "string",
+            "description": "A strategy in Geneva's language (geneva_c docs/STRATEGY.md), e.g. [TCP:flags:PA]-fragment{tcp:8:True}-| \\/. Checked by geneva itself before anything runs.",
+            "maxLength": 2048
+          },
+          "maxItems": 10,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "strategies"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "engine_select",
+    "scope": "control",
+    "confirms": false,
+    "description": "Chooses which engine bypasses on this PC: nfqws2 (zapret2: the wizard, the monitor, exports) or geneva. Only the choice: nothing starts or stops.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "engine": {
+          "type": "string",
+          "description": "The engine",
+          "enum": [
+            "nfqws2",
+            "geneva"
+          ]
+        }
+      },
+      "required": [
+        "engine"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_search_start",
+    "scope": "control",
+    "confirms": false,
+    "description": "Starts geneva's genetic search for a blocked target: the site is first checked without a bypass (a search only makes sense when it is blocked), then every strategy geneva breeds is judged by the program's full download of the page. Progress is saved; resume=true continues the saved search of the target. Long: poll geneva_status.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "A target from targets_list (a host name, never a URL)",
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+        },
+        "port": {
+          "type": "integer",
+          "description": "Service port (default 443; 80 means plain HTTP)",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "population": {
+          "type": "integer",
+          "description": "Population size (default 30)",
+          "minimum": 4,
+          "maximum": 200
+        },
+        "generations": {
+          "type": "integer",
+          "description": "Generations (default 15)",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "resume": {
+          "type": "boolean",
+          "description": "Continue the saved search of this target"
+        },
+        "seeds": {
+          "type": "array",
+          "description": "Strategies the population starts from (found ones, the library's)",
+          "items": {
+            "type": "string",
+            "description": "A strategy in Geneva's language (geneva_c docs/STRATEGY.md), e.g. [TCP:flags:PA]-fragment{tcp:8:True}-| \\/. Checked by geneva itself before anything runs.",
+            "maxLength": 2048
+          },
+          "maxItems": 50
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_search_stop",
+    "scope": "control",
+    "confirms": false,
+    "description": "Stops geneva's search; geneva saves its progress, and geneva_search_start with resume=true continues it.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_run_start",
+    "scope": "control",
+    "confirms": true,
+    "description": "Turns the bypass with geneva on: the strategy applies to every connection of this PC to the ports. Needs the user's yes in the AutoTuner window; the answer is pending until then. zapret2's protection must be off. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "description": "A strategy in Geneva's language (geneva_c docs/STRATEGY.md), e.g. [TCP:flags:PA]-fragment{tcp:8:True}-| \\/. Checked by geneva itself before anything runs.",
+          "maxLength": 2048
+        },
+        "ports": {
+          "type": "string",
+          "description": "Service ports (default 80,443)",
+          "maxLength": 100,
+          "pattern": "^[0-9]{1,5}(-[0-9]{1,5})?(,[0-9]{1,5}(-[0-9]{1,5})?){0,15}$"
+        },
+        "auto_start": {
+          "type": "boolean",
+          "description": "Turn it on again when the program starts"
+        }
+      },
+      "required": [
+        "strategy"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_run_pause",
+    "scope": "control",
+    "confirms": false,
+    "description": "Pauses the geneva bypass (packets pass unchanged, the interception stays) or resumes it with resume=true.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "resume": {
+          "type": "boolean",
+          "description": "Resume a paused bypass"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_run_stop",
+    "scope": "control",
+    "confirms": false,
+    "description": "Turns the geneva bypass off and removes its interception rules.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
   }
 ]

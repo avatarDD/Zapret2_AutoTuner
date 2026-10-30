@@ -15,6 +15,9 @@ internal sealed class AgentState
 
     public List<EngineRecord> Engines { get; set; } = [];
 
+    /// <summary>NFQUEUE numbers geneva ran on: their rules are removed after a crash (<c>geneva fw down</c>).</summary>
+    public List<int> GenevaQueues { get; set; } = [];
+
     public sealed record EngineRecord(int Pid, string Path, DateTime StartTimeUtc);
 }
 

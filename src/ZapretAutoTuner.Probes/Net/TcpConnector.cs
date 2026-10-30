@@ -16,12 +16,19 @@ public sealed record TcpConnectResult(Socket? Socket, ProbeError Error, string? 
 public static class TcpConnector
 {
     /// <summary>Connects with a timeout; never throws for network errors. The caller owns the socket.</summary>
-    public static async Task<TcpConnectResult> ConnectAsync(IPAddress address, int port, TimeSpan timeout, CancellationToken ct)
+    /// <param name="localPort">Bind to this local port first (0: any).</param>
+    public static async Task<TcpConnectResult> ConnectAsync(IPAddress address, int port, TimeSpan timeout, CancellationToken ct, int localPort = 0)
     {
         var started = DateTime.UtcNow;
         var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
         try
         {
+            if (localPort != 0)
+            {
+                // the port may linger in TIME_WAIT from the previous probe of the block
+                socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                socket.Bind(new IPEndPoint(address.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, localPort));
+            }
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(timeout);
             await socket.ConnectAsync(new IPEndPoint(address, port), cts.Token).ConfigureAwait(false);

@@ -60,6 +60,16 @@
    из «Ресурсов» с тем же именем (`list-general`).
 7. **Ресурсы.** Свои хостлисты, ipset'ы, блобы и Lua-скрипты. Имя можно
    ввести с расширением: «youtube.txt» сохранится как «youtube».
+8. **Движок.** Выбор, чем обходить блокировки на этом ПК: nfqws2 (zapret2,
+   всё описанное выше) или geneva (geneva_c). У geneva три шага:
+   «Подбор» — генетический поиск стратегии для заблокированного сайта
+   (каждую стратегию программа проверяет полной загрузкой страницы, видно
+   поколение, процент, лучший результат и график); «Найденные» — стратегии,
+   с которыми сайт загрузился; «Обход» — включение выбранной стратегии с
+   живыми счётчиками пакетов и срабатываний. Прогресс подбора, найденное и
+   включённый обход сохраняются: остановленный подбор продолжается кнопкой
+   «Продолжить», а обход с галочкой «Включать при запуске» возвращается
+   после перезапуска программы. Одновременно работает только один движок.
 
 Под каждым пунктом меню написано, для чего он. При закрытии программы
 вместе с ней завершаются все запущенные ею процессы (браузер проверки и
@@ -186,6 +196,15 @@ cannot be protected that way: a replaced agent gets the rights on its next start
    is taken from Resources under the same name (`list-general`).
 7. **Resources** keeps your hostlists, ipsets, blobs and Lua scripts. A name may
    have an extension: "youtube.txt" is saved as "youtube".
+8. **Engine** chooses what bypasses blocks on this PC: nfqws2 (zapret2, all of
+   the above) or geneva (geneva_c). geneva has three steps: Search (a genetic
+   search for a blocked site, every strategy judged by a full page load, with
+   the generation, percent, best result and a chart), Found (the strategies
+   the site loaded with) and Bypass (turns the chosen strategy on, with live
+   packet and trigger counters). Search progress, found strategies and the
+   bypass are saved: Continue resumes a stopped search, and a bypass with
+   "Turn on at start" comes back after the program restarts. Only one engine
+   runs at a time.
 
 Every menu item says what it is for. Closing the program ends every process it
 started (the check's browser and others); the agent stops the engine and

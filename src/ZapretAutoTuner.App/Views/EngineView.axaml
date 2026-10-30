@@ -1,0 +1,227 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.EngineView"
+             x:DataType="vm:EngineViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="10" Margin="0,0,12,12">
+      <TextBlock Classes="h1" Text="{l:T engine.title}" />
+      <TextBlock Classes="muted" Text="{l:T engine.subtitle}" />
+
+      <!-- which engine bypasses -->
+      <Grid ColumnDefinitions="*,12,*">
+        <Border Classes="card">
+          <StackPanel Spacing="6">
+            <RadioButton GroupName="engine" IsChecked="{Binding IsNfqws2}" FontWeight="SemiBold" Content="{l:T engine.nfqws2}" />
+            <TextBlock Classes="muted" Text="{l:T engine.nfqws2_about}" />
+            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsNfqws2}">
+              <Button Content="{l:T engine.open_wizard}" Command="{Binding OpenWizardCommand}" />
+              <Button Content="{l:T engine.open_monitor}" Command="{Binding OpenMonitorCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+        <Border Grid.Column="2" Classes="card">
+          <StackPanel Spacing="6">
+            <RadioButton GroupName="engine" IsChecked="{Binding IsGeneva}" FontWeight="SemiBold" Content="{l:T engine.geneva}" />
+            <TextBlock Classes="muted" Text="{l:T engine.geneva_about}" />
+            <TextBlock Text="{Binding BundleStatus}" FontSize="12" TextWrapping="Wrap" Classes.error="{Binding !BundleOk}" Classes.muted="{Binding BundleOk}" />
+          </StackPanel>
+        </Border>
+      </Grid>
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontWeight="SemiBold" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+      <StackPanel Spacing="10" IsVisible="{Binding IsGeneva}">
+        <!-- 1. search -->
+        <Border Classes="card">
+          <StackPanel Spacing="8">
+            <TextBlock Classes="h2" Text="{l:T engine.step1}" />
+            <TextBlock Classes="muted" Text="{l:T engine.step1_about}" />
+            <WrapPanel>
+              <StackPanel Margin="0,0,12,6" Spacing="2">
+                <TextBlock Text="{l:T engine.site}" FontSize="12" />
+                <AutoCompleteBox Width="260" Text="{Binding SearchHost}" ItemsSource="{Binding Targets}" FilterMode="Contains" Watermark="example.com" />
+              </StackPanel>
+              <StackPanel Margin="0,0,12,6" Spacing="2">
+                <TextBlock Text="{l:T engine.port}" FontSize="12" />
+                <TextBox Width="80" Text="{Binding Port}" />
+              </StackPanel>
+              <StackPanel Margin="0,0,12,6" Spacing="2">
+                <TextBlock Text="{l:T engine.population}" FontSize="12" />
+                <NumericUpDown Width="130" Minimum="4" Maximum="500" Increment="5" FormatString="0" Value="{Binding Population}" />
+              </StackPanel>
+              <StackPanel Margin="0,0,12,6" Spacing="2">
+                <TextBlock Text="{l:T engine.generations}" FontSize="12" />
+                <NumericUpDown Width="130" Minimum="1" Maximum="500" Increment="1" FormatString="0" Value="{Binding Generations}" />
+              </StackPanel>
+            </WrapPanel>
+            <CheckBox Content="{l:T engine.seed}" IsChecked="{Binding SeedLibrary}" />
+            <WrapPanel>
+              <Button Classes="accent" Padding="18,8" Margin="0,0,8,0" Content="{l:T engine.search}" Command="{Binding SearchCommand}" IsVisible="{Binding !Searching}" />
+              <Button Padding="18,8" Margin="0,0,8,0" Content="{l:T engine.resume}" Command="{Binding ResumeCommand}" IsVisible="{Binding CanResume}" />
+              <Button Padding="18,8" Margin="0,0,8,0" Content="{l:T engine.stop_search}" Command="{Binding StopSearchCommand}" IsVisible="{Binding Searching}" />
+            </WrapPanel>
+            <TextBlock Classes="muted" FontSize="12" Text="{Binding ResumeText}" IsVisible="{Binding ResumeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+            <!-- search telemetry -->
+            <StackPanel Spacing="4" IsVisible="{Binding SearchProgress, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+              <ProgressBar Value="{Binding SearchPercent}" Minimum="0" Maximum="100" Height="8" />
+              <TextBlock Text="{Binding SearchProgress}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SearchBaseline}" TextWrapping="Wrap" Classes="muted" />
+              <SelectableTextBlock Text="{Binding SearchBest}" TextWrapping="Wrap" FontFamily="monospace" FontSize="12" />
+              <TextBlock Text="{Binding SearchEnded}" TextWrapping="Wrap" FontWeight="SemiBold" />
+              <StackPanel Orientation="Horizontal" Spacing="16">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{l:T engine.chart_fitness}" FontSize="12" Classes="muted" />
+                  <Border BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" Width="364" Height="64" Padding="2">
+                    <Panel>
+                      <Polyline Points="{Binding AvgChart}" Stroke="#8A8A8A" StrokeThickness="1" />
+                      <Polyline Points="{Binding BestChart}" Stroke="#2E9E5B" StrokeThickness="2" />
+                    </Panel>
+                  </Border>
+                </StackPanel>
+              </StackPanel>
+            </StackPanel>
+
+            <Expander Header="{l:T engine.feed}" IsVisible="{Binding !!Feed.Count}">
+              <ItemsControl ItemsSource="{Binding Feed}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:TrialRow">
+                    <Grid ColumnDefinitions="70,60,170,*" Margin="0,1">
+                      <TextBlock Text="{Binding Time}" FontSize="12" Classes="muted" />
+                      <TextBlock Grid.Column="1" Text="{Binding Fitness}" FontSize="12" Foreground="{Binding Brush}" />
+                      <TextBlock Grid.Column="2" Text="{Binding Outcome}" FontSize="12" />
+                      <TextBlock Grid.Column="3" Text="{Binding Strategy}" FontSize="12" FontFamily="monospace" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Strategy}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Expander>
+          </StackPanel>
+        </Border>
+
+        <!-- 2. found -->
+        <Border Classes="card">
+          <StackPanel Spacing="8">
+            <TextBlock Classes="h2" Text="{l:T engine.step2}" />
+            <TextBlock Classes="muted" Text="{l:T engine.step2_empty}" IsVisible="{Binding !Found.Count}" />
+            <ItemsControl ItemsSource="{Binding Found}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:FoundRow">
+                  <Grid ColumnDefinitions="160,150,*,Auto,Auto" Margin="0,2">
+                    <TextBlock Text="{Binding Host}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{Binding Score}" FontSize="12" VerticalAlignment="Center" ToolTip.Tip="{Binding When}" />
+                    <SelectableTextBlock Grid.Column="2" Text="{Binding Strategy}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    <Button Grid.Column="3" Margin="8,0,0,0" Content="{l:T engine.use}"
+                            Command="{Binding $parent[ItemsControl].((vm:EngineViewModel)DataContext).UseFoundCommand}" CommandParameter="{Binding}" />
+                    <Button Grid.Column="4" Margin="4,0,0,0" Content="{l:T engine.copy}"
+                            Command="{Binding $parent[ItemsControl].((vm:EngineViewModel)DataContext).CopyCommand}" CommandParameter="{Binding Strategy}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <!-- 3. bypass -->
+        <Border Classes="card">
+          <StackPanel Spacing="8">
+            <TextBlock Classes="h2" Text="{l:T engine.step3}" />
+            <TextBlock Classes="muted" Text="{l:T engine.step3_about}" />
+            <TextBlock Text="{l:T engine.strategy}" FontSize="12" />
+            <TextBox Text="{Binding RunStrategy}" FontFamily="monospace" TextWrapping="Wrap" AcceptsReturn="False" Watermark="[TCP:flags:PA]-fragment{tcp:8:True}-| \/" />
+            <WrapPanel>
+              <StackPanel Margin="0,0,12,6" Spacing="2">
+                <TextBlock Text="{l:T engine.ports}" FontSize="12" />
+                <TextBox Width="160" Text="{Binding RunPorts}" />
+              </StackPanel>
+              <CheckBox VerticalAlignment="Bottom" Margin="0,0,0,8" Content="{l:T engine.autostart}" IsChecked="{Binding AutoStart}" />
+            </WrapPanel>
+            <WrapPanel>
+              <Button Classes="accent" Padding="18,8" Margin="0,0,8,0" Content="{l:T engine.run}" Command="{Binding StartRunCommand}" IsVisible="{Binding !Running}" />
+              <Button Padding="18,8" Margin="0,0,8,0" Content="{l:T engine.run_stop}" Command="{Binding StopRunCommand}" IsVisible="{Binding Running}" />
+              <Button Padding="18,8" Margin="0,0,8,0" Command="{Binding PauseCommand}" IsVisible="{Binding Running}">
+                <Panel>
+                  <TextBlock Text="{l:T engine.pause}" IsVisible="{Binding !Paused}" />
+                  <TextBlock Text="{l:T engine.unpause}" IsVisible="{Binding Paused}" />
+                </Panel>
+              </Button>
+            </WrapPanel>
+            <TextBlock Text="{Binding RunStatus}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding RunIdle}" Classes="error" IsVisible="{Binding RunIdle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+            <!-- bypass telemetry -->
+            <ItemsControl ItemsSource="{Binding Tiles}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:StatTile">
+                  <Border Classes="card" Margin="0,0,8,8" Padding="10,6" MinWidth="120">
+                    <StackPanel>
+                      <TextBlock Text="{Binding Label}" FontSize="11" Classes="muted" />
+                      <TextBlock Text="{Binding Value}" FontSize="16" FontWeight="SemiBold" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <StackPanel Spacing="2" IsVisible="{Binding Running}">
+              <TextBlock Text="{l:T engine.chart_triggered}" FontSize="12" Classes="muted" />
+              <Border BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" Width="364" Height="64" Padding="2" HorizontalAlignment="Left">
+                <Polyline Points="{Binding TriggeredChart}" Stroke="#2F7FD0" StrokeThickness="2" />
+              </Border>
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding TreeLines}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Text="{Binding}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <!-- Geneva's library -->
+        <Expander Header="{l:T engine.library}">
+          <StackPanel Spacing="6">
+            <TextBlock Classes="muted" Text="{l:T engine.library_about}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="{l:T engine.library_load}" Command="{Binding LoadLibraryCommand}" />
+              <TextBlock Text="{Binding LibraryStatus}" VerticalAlignment="Center" Classes="muted" />
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding Library}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:LibraryRow">
+                  <Grid ColumnDefinitions="50,170,*,Auto" Margin="0,2">
+                    <TextBlock Text="{Binding Rate}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding Where}" FontSize="12" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2">
+                      <TextBlock Text="{Binding Description}" FontSize="12" TextWrapping="Wrap" />
+                      <SelectableTextBlock Text="{Binding Strategy}" FontFamily="monospace" FontSize="11" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="3" Margin="8,0,0,0" Content="{l:T engine.use}"
+                            Command="{Binding $parent[ItemsControl].((vm:EngineViewModel)DataContext).UseLibraryCommand}" CommandParameter="{Binding}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Expander>
+
+        <!-- log -->
+        <Expander Header="{l:T engine.log}">
+          <ItemsControl ItemsSource="{Binding Log}" MaxHeight="300">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <SelectableTextBlock Text="{Binding}" FontFamily="monospace" FontSize="11" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Expander>
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

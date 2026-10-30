@@ -23,7 +23,7 @@ tar -C "$(dirname "$pub")" --transform "s|^$(basename "$pub")|ZapretAutoTuner-$v
 root="$work/root"
 install -d "$root/opt/$name" "$root/usr/bin" "$root/usr/share/applications" "$root/usr/share/icons/hicolor/scalable/apps" "$root/usr/share/polkit-1/actions"
 cp -a "$pub/." "$root/opt/$name/"
-chmod 755 "$root/opt/$name/ZapretAutoTuner" "$root/opt/$name/ztuner-agent" "$root/opt/$name/zapret2/nfqws2"
+chmod 755 "$root/opt/$name/ZapretAutoTuner" "$root/opt/$name/ztuner-agent" "$root/opt/$name/zapret2/nfqws2" "$root/opt/$name/geneva/geneva"
 ln -s "/opt/$name/ZapretAutoTuner" "$root/usr/bin/$name"
 install -m 644 "$here/zapret-autotuner.desktop" "$root/usr/share/applications/"
 install -m 644 "$here/../icon.svg" "$root/usr/share/icons/hicolor/scalable/apps/$name.svg"

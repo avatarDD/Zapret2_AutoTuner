@@ -138,10 +138,13 @@ public sealed partial class SchemaTests
     public void TheToolsAreTheDesignTable()
     {
         Assert.Equal(
-            ["targets_list", "diagnose", "trials_history", "catalog_functions", "strategy_validate", "kb_query", "bug_report_draft"],
+            ["targets_list", "diagnose", "trials_history", "catalog_functions", "strategy_validate", "kb_query", "bug_report_draft", "geneva_status", "geneva_library", "geneva_check"],
             McpTools.All.Where(t => t.Scope == McpScope.Read).Select(t => t.Name));
         Assert.Equal(["target_add", "trial_run"], McpTools.All.Where(t => t.Scope == McpScope.Probes).Select(t => t.Name));
-        Assert.Equal(["search_start", "search_status", "search_pause", "search_stop", "search_enqueue", "search_prune_family"], McpTools.All.Where(t => t.Scope == McpScope.Control).Select(t => t.Name));
+        Assert.Equal(["search_start", "search_status", "search_pause", "search_stop", "search_enqueue", "search_prune_family",
+            "engine_select", "geneva_search_start", "geneva_search_stop", "geneva_run_start", "geneva_run_pause", "geneva_run_stop"], McpTools.All.Where(t => t.Scope == McpScope.Control).Select(t => t.Name));
+        // geneva's bypass changes this PC's live traffic: it waits for the user's yes (AGENTS.md rule 7)
+        Assert.Equal(["geneva_run_start"], McpTools.All.Where(t => t.Scope == McpScope.Control && t.Confirms).Select(t => t.Name));
         Assert.Equal(["strategy_experiment_start", "strategy_experiment_status", "strategy_experiment_result", "strategy_experiment_commit", "strategy_experiment_rollback"],
             McpTools.All.Where(t => t.Scope == McpScope.Experiments).Select(t => t.Name));
         Assert.Equal(["export_preview"], McpTools.All.Where(t => t.Scope == McpScope.Export).Select(t => t.Name));

@@ -98,6 +98,12 @@ public interface IAutoTunerHost
     Task<RouterResourceOperation> PrepareRouterResourceAsync(RouterResourceAction action, ResourceKind kind, string name, CancellationToken ct) =>
         throw new InvalidOperationException("no router is configured in AutoTuner / роутер не настроен в AutoTuner");
 
+    /// <summary>geneva_c, the second bypass engine: its search and bypass (geneva_* tools); null when the program has none.</summary>
+    Tuning.Geneva.GenevaController? Geneva => null;
+
+    /// <summary>The bundled geneva for what needs no rights (library, check, version); null when there is none.</summary>
+    Tools.GenevaBundle? GenevaBundle => null;
+
     /// <summary>What the program knows for a bug report draft (event log, environment); the tool adds the caller's description.</summary>
     BugReportInput BugReportContext() => new();
 }

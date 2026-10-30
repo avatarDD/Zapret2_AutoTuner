@@ -12,10 +12,12 @@ zapret-gui. План работ — `docs/PLAN.md`.
 | функции `--lua-desync`, аргументы, генерация и проверка стратегий | `.claude/skills/nfqws2-lua` |
 | классификатор блокировок, критерии успеха, перебор, объединение, мониторинг | `.claude/skills/dpi-diagnostics` |
 | экспорт и импорт: zapret2, nfqws2-keenetic, zapret-gui, бандл | `.claude/skills/strategy-export` |
+| второй движок geneva_c: язык Geneva, run/evolve, внешний пробник, бандл | `.claude/skills/geneva` |
 
 ## Жёсткие правила
 
 1. Только синтаксис nfqws2 (`--lua-desync=`). Никакого `--dpi-desync`.
+   Стратегии geneva (язык Geneva) — отдельный движок и в nfqws2 не попадают.
 2. Факты о движке берутся из исходников бандлимой версии zapret2. Если skill
    расходится с исходником, исправь skill в том же PR.
 3. Каталог функций и аргументов — данные, а не код, и сверяется тестом с

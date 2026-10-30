@@ -11,12 +11,14 @@
   <ItemGroup>
     <ProjectReference Include="..\ZapretAutoTuner.Core\ZapretAutoTuner.Core.csproj" />
     <ProjectReference Include="..\ZapretAutoTuner.Tuning\ZapretAutoTuner.Tuning.csproj" />
+    <ProjectReference Include="..\ZapretAutoTuner.Tools\ZapretAutoTuner.Tools.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- the skills are the model's reference: served as ztuner://skills/<name> -->
     <EmbeddedResource Include="..\..\.claude\skills\nfqws2-lua\SKILL.md" LogicalName="ZapretAutoTuner.Mcp.skills.nfqws2-lua.md" />
     <EmbeddedResource Include="..\..\.claude\skills\nfqws2-engine\SKILL.md" LogicalName="ZapretAutoTuner.Mcp.skills.nfqws2-engine.md" />
     <EmbeddedResource Include="..\..\.claude\skills\dpi-diagnostics\SKILL.md" LogicalName="ZapretAutoTuner.Mcp.skills.dpi-diagnostics.md" />
+    <EmbeddedResource Include="..\..\.claude\skills\geneva\SKILL.md" LogicalName="ZapretAutoTuner.Mcp.skills.geneva.md" />
     <InternalsVisibleTo Include="ZapretAutoTuner.Mcp.Tests" />
   </ItemGroup>
 </Project>

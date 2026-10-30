@@ -61,7 +61,8 @@ internal static class ProtectedBundle
     /// Copies the bundle (bundle.json and every file it lists) into <paramref name="target"/> and verifies the copy.
     /// Throws <see cref="EngineStartException"/> (stage "engine") when it does not match.
     /// </summary>
-    public static void CopyAndVerify(string source, string target, string engineFileName)
+    /// <param name="verify">Checks the copy (default: <see cref="Zapret2Bundle.Verify"/>; geneva has its own).</param>
+    public static void CopyAndVerify(string source, string target, string engineFileName, Func<string, BundleCheck>? verify = null)
     {
         var src = new Zapret2Bundle(source);
         BundleManifest? manifest;
@@ -89,7 +90,7 @@ internal static class ProtectedBundle
             Copy(from, to, executable: rel == engineFileName);
         }
         // the hashes are checked on the copy: what was verified is what runs, nobody can swap it in between
-        var check = new Zapret2Bundle(target).Verify();
+        var check = verify is null ? new Zapret2Bundle(target).Verify() : verify(target);
         if (!manifest.Files.ContainsKey(engineFileName))
             throw Refusal(source, [$"bundle.json не содержит {engineFileName} / does not list the engine"]);
         if (!check.Ok)

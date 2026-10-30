@@ -123,8 +123,16 @@ public sealed partial class MonitorViewModel : PageViewModel
         await StartAsync(solution);
     }
 
+    /// <summary>geneva's bypass runs (the "Движок обхода" page): two engines on one port would both handle every packet.</summary>
+    public Func<bool>? GenevaRunning { get; set; }
+
     private async Task StartAsync(Solution solution)
     {
+        if (GenevaRunning?.Invoke() == true)
+        {
+            Status = L["monitor.geneva_running"];
+            return;
+        }
         _cts = new CancellationTokenSource();
         try
         {

@@ -27,7 +27,16 @@ public static class TcpConnector
             {
                 // the port may linger in TIME_WAIT from the previous probe of the block
                 socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                socket.Bind(new IPEndPoint(address.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, localPort));
+                try
+                {
+                    socket.Bind(new IPEndPoint(address.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, localPort));
+                }
+                catch (SocketException e)
+                {
+                    // not the network's answer: the caller picks another port (the message is localized, the code is not)
+                    socket.Dispose();
+                    return new TcpConnectResult(null, ProbeError.Other, $"{ProbeDetail.LocalPortPrefix}{localPort} {e.SocketErrorCode}", DateTime.UtcNow - started);
+                }
             }
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(timeout);

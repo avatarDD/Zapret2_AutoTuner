@@ -7,7 +7,12 @@ using ZapretAutoTuner.Probes.Raw;
 
 namespace ZapretAutoTuner.Probes.Tests;
 
-/// <summary>The replay probe for protocols without a page (PLAN 6.3), against loopback servers.</summary>
+/// <summary>
+/// The replay probe for protocols without a page (PLAN 6.3), against loopback servers. Its timeouts are short and
+/// measured, so the class runs alone: next to the other tests' CPU work (certificates, parallel servers) a Windows
+/// runner delayed its timers by seconds.
+/// </summary>
+[Collection(TimingCollection.Name)]
 public sealed class ReplayProbeTests
 {
     /// <summary>A UDP server on loopback that records datagrams and answers them unless silent.</summary>
@@ -90,7 +95,7 @@ public sealed class ReplayProbeTests
         Assert.Equal("no answer", r.ErrorEn);
         Assert.Equal(0, r.PacketsIn);
         Assert.True(r.PacketsOut >= 2, $"sent {r.PacketsOut}");
-        Assert.True(r.Duration < TimeSpan.FromSeconds(3));
+        Assert.True(r.Duration < TimeSpan.FromSeconds(3), $"took {r.Duration.TotalMilliseconds:0} ms with a 600 ms timeout");
     }
 
     [Fact]
@@ -203,4 +208,11 @@ public sealed class ReplayProbeTests
         Assert.Equal(ReplayError.NoConnection, refused.Error);
         Assert.Equal(SocketError.ConnectionRefused, refused.Socket);
     }
+}
+
+/// <summary>Tests that measure time: they run after the parallel ones, one at a time.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class TimingCollection
+{
+    public const string Name = "timing";
 }

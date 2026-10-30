@@ -112,6 +112,8 @@ public sealed class GenevaController : IAsyncDisposable
     private GenevaRunView _run = new();
     private string? _searchId;
     private CancellationTokenSource? _probeCts;
+    private string? _stopRequested;
+    private (string Ru, string En)? _portsUnavailable;
     private string? _runId;
     private Task? _searchWatch;
     private Task? _runWatch;
@@ -218,6 +220,11 @@ public sealed class GenevaController : IAsyncDisposable
     /// </summary>
     public async Task StartSearchAsync(GenevaSearchSettings settings, CancellationToken ct)
     {
+        if (settings.Resume && State.ProgressOf(settings.Host, settings.Port) is { Population: > 0 } saved)
+        {
+            // geneva refuses to resume a search whose population changed; more generations are fine
+            settings = settings with { Population = saved.Population, Generations = Math.Max(settings.Generations, saved.Generations) };
+        }
         if (settings.Problems() is { Count: > 0 } bad)
             throw new GenevaRefusedException(string.Join("; ", bad));
         await _gate.WaitAsync(ct).ConfigureAwait(false);
@@ -247,6 +254,7 @@ public sealed class GenevaController : IAsyncDisposable
                 _searchId = reply.Id;
                 _probeCts?.Dispose();
                 _probeCts = probeCts;
+                _portsUnavailable = null;
                 _trials.Clear();
                 _search = new GenevaSearchView
                 {
@@ -280,6 +288,8 @@ public sealed class GenevaController : IAsyncDisposable
             (id, probe) = (_searchId, _probeCts);
         if (id is null)
             return;
+        lock (_lock)
+            _stopRequested = id;
         // the probe in flight is not waited for: geneva stops after its current step anyway
         await (probe?.CancelAsync() ?? Task.CompletedTask).ConfigureAwait(false);
         AddLog("Остановка подбора: geneva сохраняет прогресс…");
@@ -326,7 +336,13 @@ public sealed class GenevaController : IAsyncDisposable
             AddLog("Ошибка подбора / search error: " + e.Message);
             await agent.StopAsync(id, CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default).ConfigureAwait(false);
         }
-        var ended = GenevaText.Exit(exitCode, reason);
+        bool stopped;
+        (string Ru, string En)? ports;
+        lock (_lock)
+            (stopped, ports, _portsUnavailable) = (_stopRequested == id, _portsUnavailable, null);
+        // the Agent stops a search by closing its input, which geneva reports as a failed evaluation (code 1): the
+        // user pressed Stop, the checkpoint is saved
+        var ended = ports ?? (stopped && reason != "done" ? GenevaText.Exit(0, "signal") : GenevaText.Exit(exitCode, reason));
         lock (_lock)
         {
             if (_searchId == id)
@@ -346,6 +362,8 @@ public sealed class GenevaController : IAsyncDisposable
             Updated = DateTimeOffset.Now,
             Finished = exitCode == 0 && reason == "done",
         }));
+        if (_dispose.IsCancellationRequested)
+            return;
         AddLog(ended.Ru);
         Changed?.Invoke();
     }
@@ -464,13 +482,23 @@ public sealed class GenevaController : IAsyncDisposable
         try
         {
             ProbeResult? r = null;
-            for (int attempt = 0; attempt < 3; attempt++)
+            for (int attempt = 0; attempt < MaxPortAttempts; attempt++)
             {
                 int port = GenevaArgv.LocalPort(lports, Interlocked.Increment(ref _probeSeq));
                 using var both = CancellationTokenSource.CreateLinkedTokenSource(probeCt, ct);
                 r = await _probe(settings.Host, settings.Port, settings.Tls, port, both.Token).ConfigureAwait(false);
-                if (!(r.Error == ProbeError.Other && r.ErrorDetail is { } d && d.Contains("in use", StringComparison.OrdinalIgnoreCase)))
+                if (!LocalPortUnavailable(r))
                     break;
+            }
+            if (LocalPortUnavailable(r!))
+            {
+                // every port of the block is taken or reserved (Windows excludes ranges for Hyper-V): no strategy can
+                // be judged, and a made-up failure would mislead the search
+                AddLog($"Локальные порты {lports} заняты или зарезервированы системой: подбор остановлен ({r!.ErrorDetail})");
+                lock (_lock)
+                    _portsUnavailable = ($"локальные порты {lports} заняты или зарезервированы системой", $"local ports {lports} are busy or reserved by the system");
+                await agent.StopAsync(id, CancellationToken.None).ConfigureAwait(false);
+                return;
             }
             (fitness, var outcome) = GenevaFitness.FromProbe(r!);
             detail = outcome + ": " + r;
@@ -497,6 +525,12 @@ public sealed class GenevaController : IAsyncDisposable
             // the search was stopped while the probe ran
         }
     }
+
+    /// <summary>Ports of the block the probe tries for one strategy before it gives up on the block.</summary>
+    public const int MaxPortAttempts = 8;
+
+    private static bool LocalPortUnavailable(ProbeResult r) =>
+        r.Error == ProbeError.Other && r.ErrorDetail?.StartsWith(ProbeDetail.LocalPortPrefix, StringComparison.Ordinal) == true;
 
     // ---- the bypass
 
@@ -599,6 +633,10 @@ public sealed class GenevaController : IAsyncDisposable
                     continue;
                 switch (e.Ev)
                 {
+                    case "start" when e.Long("proto") != GenevaEvent.Proto:
+                        AddLog($"geneva говорит на протоколе {e.Long("proto")}, нужен {GenevaEvent.Proto}: выключаю");
+                        await agent.StopAsync(id, CancellationToken.None).ConfigureAwait(false);
+                        break;
                     case "ready":
                         lock (_lock)
                             _run = _run with { Ready = true, Firewall = e.Str("firewall") };
@@ -654,6 +692,8 @@ public sealed class GenevaController : IAsyncDisposable
                 _runId = null;
             _run = _run with { Running = false, Ready = false, Ended = ended };
         }
+        if (_dispose.IsCancellationRequested)
+            return;
         AddLog("Обход geneva выключен: " + ended.Ru);
         Changed?.Invoke();
     }
@@ -665,8 +705,14 @@ public sealed class GenevaController : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        // the Agent stops geneva on its own when the UI goes; this only ends the watchers
+        // the Agent stops geneva on its own when the UI goes; this only ends the watchers, and waits for them so none
+        // writes the state after the program closed its store
         await _dispose.CancelAsync().ConfigureAwait(false);
+        foreach (var w in new[] { _searchWatch, _runWatch })
+        {
+            if (w is not null)
+                await Task.WhenAny(w, Task.Delay(TimeSpan.FromSeconds(3))).ConfigureAwait(false);
+        }
         _dispose.Dispose();
         _probeCts?.Dispose();
         _gate.Dispose();

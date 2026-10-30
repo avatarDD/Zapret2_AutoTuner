@@ -78,6 +78,19 @@ public sealed class GenevaToolTests
     }
 
     [Fact]
+    public async Task The_models_local_work_waits_while_geneva_runs()
+    {
+        var (rig, _) = Make();
+        using var _r = rig;
+        Assert.Null(rig.Session.LocalWorkRefusal());
+        const string args = """{"strategy":"[TCP:flags:PA]-fragment{tcp:8:True}-| \\/","ports":"443"}""";
+        await rig.Call("geneva_run_start", args);
+        rig.Confirm.Answer(true);
+        await Rig.Until(() => Task.FromResult(rig.Host.Geneva!.RunRunning));
+        Assert.Contains("geneva", (string?)rig.Session.LocalWorkRefusal()?["error"], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Control_tools_need_the_control_switch()
     {
         var (rig, agent) = Make(new McpPermissions());

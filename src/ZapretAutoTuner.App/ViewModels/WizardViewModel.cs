@@ -95,6 +95,9 @@ public sealed partial class WizardViewModel : PageViewModel
     /// <summary>Set by the main view model: the MCP session works on the model's behalf (search, trials, experiments).</summary>
     public Func<bool>? McpBusy { get; set; }
 
+    /// <summary>geneva bypasses or searches on this PC (page «Движок обхода»): the wizard's trials would pass both engines.</summary>
+    public Func<bool>? GenevaBusy { get; set; }
+
     /// <summary>Set by the main view model: the model's router experiment runs or its kept variant awaits a commit.</summary>
     public Func<bool>? McpRouterBusy { get; set; }
 
@@ -375,6 +378,11 @@ public sealed partial class WizardViewModel : PageViewModel
 
     private async Task RunOnPcAsync(PendingRun run, List<Provider> providers, bool resume)
     {
+        if (GenevaBusy?.Invoke() == true)
+        {
+            Error = L["wizard.geneva_busy"];
+            return;
+        }
         var hosts = run.Hosts;
         var mode = Enum.TryParse<SearchMode>(run.Mode, out var m) ? m : SearchMode.Standard;
         var sessions = new Dictionary<string, long>(run.Sessions, StringComparer.OrdinalIgnoreCase);

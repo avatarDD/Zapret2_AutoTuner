@@ -48,6 +48,13 @@ public enum ProbeError
     Other,
 }
 
+/// <summary>Texts of <see cref="ProbeResult.ErrorDetail"/> that callers match on: fixed English, never the system's localized message.</summary>
+public static class ProbeDetail
+{
+    /// <summary>The probe could not bind the local port it was given (busy, in TIME_WAIT without reuse, reserved by Windows).</summary>
+    public const string LocalPortPrefix = "local port unavailable: ";
+}
+
 /// <summary>Who sent the reset that broke the attempt, judged from a capture (FlowAnalyzer).</summary>
 public enum RstOrigin
 {

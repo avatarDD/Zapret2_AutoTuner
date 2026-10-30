@@ -133,9 +133,27 @@ public sealed class GenevaControllerTests
         Assert.NotNull(p);
         Assert.False(p.Finished);
 
-        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3, Resume = true }, default);
+        // the population of the saved search, whatever the fields say now: geneva refuses a changed one
+        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 50, Generations = 2, Resume = true }, default);
         Assert.True(rig.Agent.Started[^1].Resume);
+        Assert.Equal(10, rig.Agent.Started[^1].Population);
+        Assert.Equal(3, rig.Agent.Started[^1].Generations);
         await g.StopSearchAsync();
+    }
+
+    [Fact]
+    public async Task Busy_local_ports_stop_the_search_instead_of_failing_strategies()
+    {
+        var rig = new Rig
+        {
+            Probe = (n, host) => n == 0 ? Reset(host) : new ProbeResult { Host = host, Address = "", Error = ProbeError.Other, ErrorDetail = ProbeDetail.LocalPortPrefix + "30001 AccessDenied" },
+        };
+        await using var g = rig.Make();
+        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3 }, default);
+        await Until(() => !g.SearchRunning);
+        Assert.Single(rig.Agent.Answers); // the baseline only
+        Assert.Contains("local ports", g.Search.Ended?.En, StringComparison.Ordinal);
+        Assert.Equal(1 + GenevaController.MaxPortAttempts, rig.LocalPorts.Count);
     }
 
     [Fact]

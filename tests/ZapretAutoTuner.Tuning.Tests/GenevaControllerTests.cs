@@ -102,6 +102,18 @@ public sealed class GenevaControllerTests
     }
 
     [Fact]
+    public async Task A_probe_that_throws_still_answers_geneva()
+    {
+        var rig = new Rig { Probe = (n, host) => n == 0 ? Reset(host) : throw new InvalidOperationException("broken probe") };
+        await using var g = rig.Make();
+        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3 }, default);
+        await Until(() => !g.SearchRunning);
+        Assert.Equal([-360, -400, -400], rig.Agent.Answers.Select(a => a.Fitness));
+        Assert.Contains("broken probe", rig.Agent.Answers[1].Detail, StringComparison.Ordinal);
+        Assert.Empty(GenevaState.Parse(rig.Store.Json).Found);
+    }
+
+    [Fact]
     public async Task A_stopped_search_can_be_continued()
     {
         var rig = new Rig();

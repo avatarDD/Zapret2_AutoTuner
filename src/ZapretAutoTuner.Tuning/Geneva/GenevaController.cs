@@ -320,6 +320,12 @@ public sealed class GenevaController : IAsyncDisposable
         {
             AddLog("Связь с Agent потеряна / the Agent connection was lost: " + e.Message);
         }
+        catch (Exception e)
+        {
+            // anything else must not leave the search shown as running with geneva waiting for an answer
+            AddLog("Ошибка подбора / search error: " + e.Message);
+            await agent.StopAsync(id, CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default).ConfigureAwait(false);
+        }
         var ended = GenevaText.Exit(exitCode, reason);
         lock (_lock)
         {
@@ -477,8 +483,9 @@ public sealed class GenevaController : IAsyncDisposable
         {
             (fitness, detail) = (-400, "bad lports " + lports);
         }
-        catch (Exception ex) when (ex is System.Net.Sockets.SocketException or IOException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // geneva waits for every answer: a probe that throws still gets one
             (fitness, detail) = (-400, "failed: " + ex.Message);
         }
         try
@@ -634,6 +641,11 @@ public sealed class GenevaController : IAsyncDisposable
         catch (Exception e) when (e is Grpc.Core.RpcException or OperationCanceledException or IOException)
         {
             AddLog("Связь с Agent потеряна / the Agent connection was lost: " + e.Message);
+        }
+        catch (Exception e)
+        {
+            AddLog("Ошибка обхода / bypass error: " + e.Message);
+            await agent.StopAsync(id, CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default).ConfigureAwait(false);
         }
         var ended = GenevaText.Exit(exitCode, reason);
         lock (_lock)

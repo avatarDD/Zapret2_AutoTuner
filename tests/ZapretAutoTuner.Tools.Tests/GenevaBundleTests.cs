@@ -51,7 +51,14 @@ public sealed class GenevaBundleTests
             var files = spec["files"]!.AsArray().Select(f => (string?)f).ToList();
             Assert.Equal(rid.StartsWith("win", StringComparison.Ordinal) ? "geneva.exe" : "geneva", files[0]);
             if (rid.StartsWith("win", StringComparison.Ordinal))
+            {
+                // WinDivert inside geneva_c's archive is pinned to WinDivert's own release, file by file
                 Assert.Contains("WinDivert64.sys", files);
+                var pins = spec["file_sha256"]!.AsObject();
+                Assert.Contains("github.com/basil00/WinDivert/releases", (string?)pins["_source"], StringComparison.Ordinal);
+                foreach (var f in files.Where(f => f!.StartsWith("WinDivert", StringComparison.Ordinal)))
+                    Assert.Matches("^[0-9a-f]{64}$", (string?)pins[f!]);
+            }
         }
     }
 

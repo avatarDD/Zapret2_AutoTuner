@@ -10,3 +10,4 @@ runtimes/*/geneva/
 *.pcapng
 !tests/pcaps/*.pcap
 .claude/worktrees/
+__pycache__/

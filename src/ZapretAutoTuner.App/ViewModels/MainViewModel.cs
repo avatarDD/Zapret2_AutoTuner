@@ -32,7 +32,9 @@ public sealed partial class MainViewModel : ObservableObject
             : Wizard.LocalTuningRunning ? Loc.Loc.I["engine.busy_wizard"]
             : Mcp.Session.Busy ? Loc.Loc.I["engine.busy_mcp"]
             : null;
-        Monitor.GenevaRunning = () => host.Geneva.RunRunning;
+        // and zapret2 waits for geneva: its bypass, and its search (the probe's packets would pass both engines)
+        Monitor.GenevaRunning = () => host.Geneva.RunRunning || host.Geneva.SearchRunning;
+        Wizard.GenevaBusy = () => host.Geneva.RunRunning || host.Geneva.SearchRunning;
         Pages = [Home, Wizard, Monitor, Engine, Reports, Expert, Resources, Advisor, Settings];
         _current = Home;
         host.AgentLost += m => AgentStatus = Loc.Loc.I.F("agent.lost", m);

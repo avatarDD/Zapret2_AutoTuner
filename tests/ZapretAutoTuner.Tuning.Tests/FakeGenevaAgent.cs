@@ -119,8 +119,10 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
         }
         if (ch is not null)
         {
-            Event(ch.Writer, new JsonObject { ["ev"] = "exit", ["code"] = 0, ["reason"] = "signal" });
-            ch.Writer.TryWrite(new GenevaOutput { Exited = true, ExitCode = 0 });
+            // as geneva: a search whose input closed fails its evaluation (code 1); a run leaves on the stop command
+            bool search = Started[int.Parse(id[1..], System.Globalization.CultureInfo.InvariantCulture) - 1].Mode == "evolve";
+            Event(ch.Writer, new JsonObject { ["ev"] = "exit", ["code"] = search ? 1 : 0, ["reason"] = search ? "error" : "control" });
+            ch.Writer.TryWrite(new GenevaOutput { Exited = true, ExitCode = search ? 1 : 0 });
         }
         return Task.CompletedTask;
     }

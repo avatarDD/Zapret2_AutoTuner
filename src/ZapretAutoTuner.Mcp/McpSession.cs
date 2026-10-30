@@ -93,6 +93,8 @@ public sealed class McpSession
             return McpErrors.Error("busy: the user is tuning in the AutoTuner wizard on this PC; wait until it finishes / занято: идёт подбор в мастере AutoTuner");
         if (Host.ProtectionActive)
             return McpErrors.Error("busy: «Защита активна» runs on this PC; the user stops it first / занято: работает защита");
+        if (Host.Geneva is { } g && (g.RunRunning || g.SearchRunning))
+            return McpErrors.Error("busy: geneva bypasses or searches on this PC (geneva_status); stop it first / занято: работает geneva");
         return null;
     }
 

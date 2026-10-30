@@ -4,12 +4,19 @@ namespace ZapretAutoTuner.App.ViewModels;
 
 public abstract class PageViewModel : ObservableObject
 {
-    protected PageViewModel() => Loc.Loc.I.PropertyChanged += (_, _) => OnPropertyChanged(nameof(Title));
+    protected PageViewModel() => Loc.Loc.I.PropertyChanged += (_, _) =>
+    {
+        OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(Hint));
+    };
 
     /// <summary>The key of the page title in strings.json.</summary>
     public abstract string TitleKey { get; }
 
     public string Title => Loc.Loc.I[TitleKey];
+
+    /// <summary>What the page is for, in a few words under its name in the menu (the key <c>TitleKey_hint</c>); null without one.</summary>
+    public string? Hint => Loc.Loc.I.Keys.Contains(TitleKey + "_hint") ? Loc.Loc.I[TitleKey + "_hint"] : null;
 
     protected static Loc.Loc L => Loc.Loc.I;
 

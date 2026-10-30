@@ -22,7 +22,11 @@
         <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding Current}" Background="Transparent">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:PageViewModel">
-              <TextBlock Text="{Binding Title}" />
+              <StackPanel>
+                <TextBlock Text="{Binding Title}" />
+                <TextBlock Text="{Binding Hint}" Classes="muted" FontSize="11" TextWrapping="Wrap"
+                           IsVisible="{Binding Hint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>

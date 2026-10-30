@@ -14,7 +14,7 @@
     "name": "diagnose",
     "scope": "read",
     "confirms": false,
-    "description": "The block classifier's verdict for a target with its evidence (DNS, IP, SNI, 16 KB cut-off, QUIC…). refresh=true probes the target again and needs the probes permission.",
+    "description": "The block classifier's verdict for a target with its evidence (DNS, IP, SNI, 16 KB cut-off, QUIC…). refresh=true probes the target again and needs the probes permission; when the probes take longer than about 20 s the answer is state running and the verdict is cached for the next call (refresh=false), which makes no new probes.",
     "inputSchema": {
       "type": "object",
       "properties": {

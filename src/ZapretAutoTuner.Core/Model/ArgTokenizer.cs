@@ -5,7 +5,8 @@ namespace ZapretAutoTuner.Core.Model;
 /// <summary>
 /// Splits an argument string the way a POSIX shell (or nfqws2's wordexp in @config) would for the
 /// subset we produce and import: whitespace separates words, single and double quotes group,
-/// backslash escapes the next character outside single quotes.
+/// backslash escapes the next character outside single quotes (unquoted, only a character a shell would treat
+/// specially: elsewhere it is a Windows path separator and stays).
 /// </summary>
 public static class ArgTokenizer
 {
@@ -49,7 +50,9 @@ public static class ArgTokenizer
             inWord = true;
             if (c is '\'' or '"')
                 quote = c;
-            else if (c == '\\' && i + 1 < text.Length && text[i + 1] != ':')
+            // a shell escape only before what a shell would otherwise eat (a space, a quote, $, `, a backslash): a
+            // Windows path from a .cmd (--hostlist=C:\zapret\lists\list.txt) keeps its backslashes
+            else if (c == '\\' && i + 1 < text.Length && (char.IsWhiteSpace(text[i + 1]) || text[i + 1] is '"' or '\'' or '\\' or '$' or '`'))
                 sb.Append(text[++i]);
             else
                 sb.Append(c);

@@ -222,7 +222,8 @@ public sealed partial class ResourcesViewModel : PageViewModel
 
     private ResourceInput Input()
     {
-        var name = Name.Trim();
+        // "youtube.txt" or "lists/YouTube.txt" is the list "youtube": the file gets its extension when it is written
+        var name = ResourceNames.Normalize(Name);
         var lines = Content.ReplaceLineEndings("\n").Split('\n');
         return Kind switch
         {

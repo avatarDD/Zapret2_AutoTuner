@@ -243,4 +243,20 @@ public sealed class ResourceStoreTests : IDisposable
             Assert.Single(new ResourceStore(again).List());
         }
     }
+
+    [Fact]
+    public void Imported_list_files_resolve_to_the_stores_lists_by_file_name()
+    {
+        _store.Create(ResourceInput.Hostlist("list-general", ["youtube.com"]));
+        var profile = new Profile { Name = "p", Strategy = Strategy.Parse("--lua-desync=multisplit:pos=1") };
+        profile.Hostlists.Add(new ListRef("list-general", @"C:\zapret\lists\list-general.txt"));
+        profile.Hostlists.Add(new ListRef("other", "/opt/zapret2/lists/other.txt"));
+        var solution = new Solution { Profiles = [profile] };
+
+        var replaced = _store.ResolveListPaths(solution);
+
+        Assert.Equal([@"C:\zapret\lists\list-general.txt"], replaced);
+        Assert.Equal(new ListRef("list-general"), profile.Hostlists[0]);
+        Assert.Equal("/opt/zapret2/lists/other.txt", profile.Hostlists[1].Path);
+    }
 }

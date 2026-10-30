@@ -296,6 +296,34 @@ public sealed class ResourceStore
     // ---- solutions ----
 
     /// <summary>
+    /// An imported strategy names its lists by file (<c>--hostlist=lists/youtube.txt</c>); when the file did not come
+    /// with it, the store's list of that name (<see cref="ResourceNames.Normalize"/>) takes its place as a reference by
+    /// name, which every exporter then carries. Returns the paths it replaced.
+    /// </summary>
+    public IReadOnlyList<string> ResolveListPaths(Solution s)
+    {
+        var replaced = new List<string>();
+        ListRef Resolve(ListRef r, ResourceKind kind)
+        {
+            if (r.Path is null)
+                return r;
+            var name = ResourceNames.Normalize(r.Path);
+            if (!ResourceNames.IsValid(name) || Get(kind, name) is null)
+                return r;
+            replaced.Add(r.Path);
+            return new ListRef(name);
+        }
+        foreach (var p in s.Profiles)
+        {
+            p.Hostlists = [.. p.Hostlists.Select(r => Resolve(r, ResourceKind.Hostlist))];
+            p.HostlistExcludes = [.. p.HostlistExcludes.Select(r => Resolve(r, ResourceKind.Hostlist))];
+            p.Ipsets = [.. p.Ipsets.Select(r => Resolve(r, ResourceKind.Ipset))];
+            p.IpsetExcludes = [.. p.IpsetExcludes.Select(r => Resolve(r, ResourceKind.Ipset))];
+        }
+        return [.. replaced.Distinct(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
     /// Fills a solution with the store's resources it uses and does not carry yet: lists by name, blobs it names, and
     /// the approved scripts whose functions it calls (as <c>LuaFiles</c>), so every exporter and delivery takes them
     /// along. Refused when it calls a function that exists only in an unapproved draft.

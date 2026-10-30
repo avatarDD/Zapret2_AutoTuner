@@ -39,16 +39,26 @@ public sealed partial class App : Application
                 main.Advisor.Cancel();
                 var mcp = main.Mcp.DisposeAsync().AsTask();
                 // the protection engine and the Agent's firewall rules go away with the app (AGENTS.md rule 6)
-                Task.Run(async () =>
+                var steps = Task.Run(async () =>
                 {
                     // the router steps are bounded: an unreachable router must not hold the exit for a minute (its
                     // dead-man switch reverts an uncommitted experiment anyway)
                     await BoundedAsync(() => mcp).ConfigureAwait(false);
                     // an uncommitted router experiment of the wizard is rolled back (AGENTS.md rule 7)
                     await BoundedAsync(main.Wizard.ShutdownAsync).ConfigureAwait(false);
-                    await main.Monitor.ShutdownAsync().ConfigureAwait(false);
-                    await host.DisposeAsync().ConfigureAwait(false);
-                }).GetAwaiter().GetResult();
+                    // an Agent that stopped answering must not hold the exit: it stops by itself once this process is gone
+                    await BoundedAsync(main.Monitor.ShutdownAsync, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                    await BoundedAsync(() => host.DisposeAsync().AsTask(), TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                });
+                try
+                {
+                    // the window waits for the steps, but not forever: Program.Main kills what is left after it
+                    steps.Wait(TimeSpan.FromSeconds(45));
+                }
+                catch (AggregateException e)
+                {
+                    Console.Error.WriteLine("shutdown: " + e.InnerException?.Message);
+                }
             };
         }
         base.OnFrameworkInitializationCompleted();
@@ -64,7 +74,8 @@ public sealed partial class App : Application
         {
             await step().WaitAsync(timeout ?? ShutdownStepTimeout).ConfigureAwait(false);
         }
-        catch (Exception e) when (e is TimeoutException or OperationCanceledException or HttpRequestException or IOException or InvalidOperationException or Delivery.ZapretGuiException)
+        catch (Exception e) when (e is TimeoutException or OperationCanceledException or HttpRequestException or IOException or InvalidOperationException
+            or Delivery.ZapretGuiException or Grpc.Core.RpcException or ObjectDisposedException)
         {
             Console.Error.WriteLine("shutdown: " + e.Message);
         }

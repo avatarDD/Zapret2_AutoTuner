@@ -26,6 +26,8 @@
           <Button Content="{l:T resources.new}" Command="{Binding NewCommand}" Margin="0,0,8,0" />
           <Button Content="{l:T resources.reload}" Command="{Binding ReloadCommand}" />
         </WrapPanel>
+        <TextBlock DockPanel.Dock="Top" Text="{l:T resources.empty}" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,6"
+                   IsVisible="{Binding !Items.Count}" />
         <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ResourceRowViewModel">
@@ -39,7 +41,8 @@
       </DockPanel>
       <DockPanel Grid.Column="1">
         <StackPanel DockPanel.Dock="Top" Spacing="6">
-          <TextBox Text="{Binding Name}" IsEnabled="{Binding IsNew}" Watermark="{l:T resources.name}" />
+          <TextBlock Text="{l:T resources.name}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+          <TextBox Text="{Binding Name}" IsEnabled="{Binding IsNew}" Watermark="youtube" />
           <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsBlob}">
             <TextBlock Text="{l:T resources.encoding}" VerticalAlignment="Center" />
             <ComboBox ItemsSource="{Binding BlobEncodings}" SelectedIndex="{Binding BlobEncodingIndex}" />

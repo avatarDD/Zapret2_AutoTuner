@@ -221,10 +221,29 @@ public sealed class TuningPipeline(IPipelineServices services, PipelineOptions o
             final = await check.ConfigureAwait(false);
         }
         var outcome = new TargetOutcome(host, verdict, result, final, null);
-        Stage(host, outcome.Best is null ? PipelineStage.Failed : PipelineStage.Done,
-            outcome.Best is null ? "Рабочая стратегия не найдена" : $"Найдено: {outcome.Best.Candidate.Strategy}",
-            outcome.Best is null ? "No working strategy found" : $"Found: {outcome.Best.Candidate.Strategy}");
+        var (ru, en) = Summary(outcome);
+        Stage(host, outcome.Best is null ? PipelineStage.Failed : PipelineStage.Done, ru, en);
         return (outcome, executor);
+    }
+
+    /// <summary>The target's last line: what was found, or why the found strategies did not hold up in the final check.</summary>
+    internal static (string Ru, string En) Summary(TargetOutcome outcome)
+    {
+        if (outcome.Best is { } best)
+        {
+            var others = outcome.Final.FirstOrDefault(f => f.Passed)?.OtherBrokenDomains ?? [];
+            return others.Count == 0
+                ? ($"Найдено: {best.Candidate.Strategy}", $"Found: {best.Candidate.Strategy}")
+                : ($"Найдено: {best.Candidate.Strategy}. Странице нужны ещё домены, добавьте их целями: {string.Join(", ", others)}",
+                   $"Found: {best.Candidate.Strategy}. The page also needs these domains, add them as targets: {string.Join(", ", others)}");
+        }
+        if (outcome.Final.Count == 0)
+            return ("Рабочая стратегия не найдена", "No working strategy found");
+        // the search found some, the final check did not confirm them: say how they failed instead of "nothing found"
+        var why = string.Join("; ", outcome.Final.Select(f => f.Error ?? (f.PageOk == false ? "страница не открылась" : $"L2 {f.L2.Successes}/{f.L2.Attempts}")));
+        var whyEn = string.Join("; ", outcome.Final.Select(f => f.Error ?? (f.PageOk == false ? "the page did not open" : $"L2 {f.L2.Successes}/{f.L2.Attempts}")));
+        return ($"Найдено {outcome.Final.Count}, но финальная проверка их не подтвердила ({why}). Запустите подбор ещё раз или с глубиной «Полностью» (Настройки)",
+                $"Found {outcome.Final.Count}, but the final check did not confirm them ({whyEn}). Run the search again or with the Full depth (Settings)");
     }
 
     private void OnSearch(string host, SearchProgress p, int index, int count, Stopwatch sw)

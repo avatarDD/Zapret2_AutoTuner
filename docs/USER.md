@@ -36,6 +36,11 @@
    Проверенное сохраняется по ходу, поэтому после паузы, закрытия программы
    или перезагрузки компьютера на первом шаге будет кнопка «Продолжить
    подбор»: уже проверенные стратегии заново не запускаются.
+   Найденное перепроверяется в конце: пять полных загрузок (одна случайная
+   неудача допускается) и, с галочкой браузера, открытие страницы. Если
+   странице нужны другие домены (CDN, картинки), программа назовёт их:
+   добавьте их отдельными целями, стратегия для основного сайта при этом
+   сохраняется.
 3. **Экспорт.** Выберите, куда установить: этот компьютер, Keenetic
    (nfqws2-keenetic), zapret-gui, zapret2 на Linux/OpenWrt или просто строку
    аргументов. Без адреса роутера сохраняется файл. На роутер и в zapret-gui
@@ -50,7 +55,12 @@
    для Claude. Ничего не отправляется само.
 6. **Эксперт.** Импорт чужой стратегии (config zapret2, nfqws2.conf, .cmd
    winws2, строка аргументов, JSON zapret-gui) с проверкой и использованием.
-7. **Движок.** Выбор, чем обходить блокировки на этом ПК: nfqws2 (zapret2,
+   Если стратегия ссылается на файл списка, которого нет рядом (например
+   `--hostlist=C:\zapret\lists\list-general.txt`), программа берёт список
+   из «Ресурсов» с тем же именем (`list-general`).
+7. **Ресурсы.** Свои хостлисты, ipset'ы, блобы и Lua-скрипты. Имя можно
+   ввести с расширением: «youtube.txt» сохранится как «youtube».
+8. **Движок.** Выбор, чем обходить блокировки на этом ПК: nfqws2 (zapret2,
    всё описанное выше) или geneva (geneva_c). У geneva три шага:
    «Подбор» — генетический поиск стратегии для заблокированного сайта
    (каждую стратегию программа проверяет полной загрузкой страницы, видно
@@ -60,6 +70,10 @@
    включённый обход сохраняются: остановленный подбор продолжается кнопкой
    «Продолжить», а обход с галочкой «Включать при запуске» возвращается
    после перезапуска программы. Одновременно работает только один движок.
+
+Под каждым пунктом меню написано, для чего он. При закрытии программы
+вместе с ней завершаются все запущенные ею процессы (браузер проверки и
+другие), агент сам останавливает движок и снимает правила.
 
 Права администратора нужны только агенту, который запускает движок и правила
 firewall; окно программы работает без них. При выходе агент снимает все свои
@@ -166,6 +180,10 @@ cannot be protected that way: a replaced agent gets the rights on its next start
    stops. What was tried is saved as it goes, so after a pause, closing the
    program or restarting the computer the first step offers "Continue the
    search", and strategies already tried are not run again.
+   What was found is checked again at the end: five full loads (one stray miss
+   is allowed) and, with the browser box ticked, the page. When the page needs
+   other domains (a CDN, images), the program names them: add them as targets
+   of their own, the strategy for the main site is kept.
 3. **Export** to this PC, Keenetic, zapret-gui, zapret2 or an argument line.
    Nothing goes to a router or zapret-gui without your Yes; applying in
    zapret-gui is a separate second button.
@@ -173,8 +191,12 @@ cannot be protected that way: a replaced agent gets the rights on its next start
    asking first unless you allowed automatic fixes.
 5. **Reports** builds an archive for analysis with your IPs masked. Nothing is
    sent anywhere.
-6. **Expert** imports and validates someone else's strategy.
-7. **Engine** chooses what bypasses blocks on this PC: nfqws2 (zapret2, all of
+6. **Expert** imports and validates someone else's strategy. A list file the
+   strategy names but that is not there (`--hostlist=C:\zapret\lists\list-general.txt`)
+   is taken from Resources under the same name (`list-general`).
+7. **Resources** keeps your hostlists, ipsets, blobs and Lua scripts. A name may
+   have an extension: "youtube.txt" is saved as "youtube".
+8. **Engine** chooses what bypasses blocks on this PC: nfqws2 (zapret2, all of
    the above) or geneva (geneva_c). geneva has three steps: Search (a genetic
    search for a blocked site, every strategy judged by a full page load, with
    the generation, percent, best result and a chart), Found (the strategies
@@ -183,6 +205,10 @@ cannot be protected that way: a replaced agent gets the rights on its next start
    bypass are saved: Continue resumes a stopped search, and a bypass with
    "Turn on at start" comes back after the program restarts. Only one engine
    runs at a time.
+
+Every menu item says what it is for. Closing the program ends every process it
+started (the check's browser and others); the agent stops the engine and
+removes its rules by itself.
 
 Only the agent runs with administrator rights; it removes its firewall rules
 on exit.

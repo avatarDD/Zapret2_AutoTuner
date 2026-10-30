@@ -164,7 +164,7 @@ public sealed class AutoTunerTools(McpSession session)
     {
         if (!session.IsTarget(target))
             return McpErrors.NotATarget(target);
-        if (refresh)
+        if (refresh && !session.Classifying(target))
         {
             var p = session.Permissions();
             if (!p.Granted(McpScope.Probes))
@@ -172,10 +172,33 @@ public sealed class AutoTunerTools(McpSession session)
             var (ok, why, retry) = session.Budget.TryTake(target);
             if (!ok)
                 return McpErrors.Budget(why!, retry);
-            session.SetVerdict(await session.Host.ClassifyAsync(target, ct).ConfigureAwait(false));
+        }
+        if (refresh || session.Classifying(target))
+        {
+            var run = session.Classify(target, out _);
+            // a new target's probes can outlast the client's call: the run goes on and the verdict waits in the cache
+            await Task.WhenAny(run, Task.Delay(session.DiagnoseWait, ct)).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            if (!run.IsCompleted)
+            {
+                return new JsonObject
+                {
+                    ["ok"] = true,
+                    ["target"] = target,
+                    ["diagnosed"] = session.Verdict(target) is not null,
+                    ["state"] = "running",
+                    ["hint"] = "the classifier is still probing this target; call diagnose again with refresh=false in a few seconds for the verdict (no new probes are made) / классификатор ещё проверяет цель",
+                };
+            }
+            if (!run.IsCompletedSuccessfully)
+                return McpErrors.Error($"the classifier failed for {target}: {session.ClassifyError(target)} / классификатор не смог проверить цель");
         }
         if (session.Verdict(target) is not { } v)
-            return new JsonObject { ["ok"] = true, ["target"] = target, ["diagnosed"] = false, ["hint"] = "refresh=true runs the classifier (needs the probes permission)" };
+        {
+            return session.ClassifyError(target) is { } error
+                ? McpErrors.Error($"the last classification of {target} failed: {error}; refresh=true tries again / последняя проверка не удалась")
+                : new JsonObject { ["ok"] = true, ["target"] = target, ["diagnosed"] = false, ["hint"] = "refresh=true runs the classifier (needs the probes permission)" };
+        }
         return new JsonObject
         {
             ["ok"] = true,

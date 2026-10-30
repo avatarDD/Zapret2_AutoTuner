@@ -19,6 +19,15 @@ public sealed class ResourceRulesTests
         Assert.Equal(ok, ResourceRules.CheckName(ResourceKind.Hostlist, name).Count == 0);
 
     [Theory]
+    [InlineData("youtube.txt", "youtube")]
+    [InlineData("YouTube.list.txt", "youtube")]
+    [InlineData(@"C:\zapret\lists\list-general.txt", "list-general")]
+    [InlineData("\"/opt/zapret2/ipset/my_ips.txt\"", "my_ips")]
+    [InlineData("discord", "discord")]
+    [InlineData(".hidden", ".hidden")]
+    public void A_file_name_becomes_a_resource_name(string input, string name) => Assert.Equal(name, ResourceNames.Normalize(input));
+
+    [Theory]
     [InlineData("tls_wl", true)]
     [InlineData("my-fake", false)] // engine: bad identifier
     [InlineData("1st", false)]

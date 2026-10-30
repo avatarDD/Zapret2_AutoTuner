@@ -244,6 +244,20 @@ public sealed class ResourcesTests : IAsyncLifetime
         report.Close();
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void A_name_with_an_extension_is_saved_and_an_imported_strategy_finds_the_list()
+    {
+        var vm = new ResourcesViewModel(Host.Resources) { Name = "video.txt", Content = "example.com" };
+        vm.SaveCommand.Execute(null);
+        Assert.NotNull(Host.Resources.Get(ResourceKind.Hostlist, "video"));
+
+        var e = new ExpertViewModel { Resources = Host.Resources, ImportText = @"--filter-tcp=443 --hostlist=C:\zapret\lists\video.txt --lua-desync=multisplit:pos=1" };
+        e.ImportCommand.Execute(null);
+        Assert.True(e.CanUse, string.Join("\n", e.Issues));
+        Assert.True(e.Issues.Any(i => i.StartsWith("✓", StringComparison.Ordinal) && i.Contains("video", StringComparison.Ordinal)), string.Join("\n", e.Issues) + " / " + string.Join(";", e.Profiles));
+        Assert.DoesNotContain(e.Issues, i => i.StartsWith("⚠", StringComparison.Ordinal));
+    }
 }
 
 /// <summary>"Сообщить о проблеме" (PLAN 4a.6): the draft, the tracker choice, and nothing opened or sent without a button.</summary>

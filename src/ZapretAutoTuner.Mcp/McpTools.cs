@@ -33,7 +33,7 @@ public static class McpTools
             "The targets the user put in AutoTuner, with the last diagnosis. Probes go only to these; a new one is added by the user (target_add asks).",
             S.Empty()),
         new("diagnose", McpScope.Read,
-            "The block classifier's verdict for a target with its evidence (DNS, IP, SNI, 16 KB cut-off, QUIC…). refresh=true probes the target again and needs the probes permission.",
+            "The block classifier's verdict for a target with its evidence (DNS, IP, SNI, 16 KB cut-off, QUIC…). refresh=true probes the target again and needs the probes permission; when the probes take longer than about 20 s the answer is state running and the verdict is cached for the next call (refresh=false), which makes no new probes.",
             S.Obj([("target", Target()), ("refresh", S.Bool("Run the classifier again (probes the target; needs the probes permission)"))], "target")),
         new("trials_history", McpScope.Read,
             "What was tried: the knowledge base's results per strategy (successes/attempts) and this session's trials.",

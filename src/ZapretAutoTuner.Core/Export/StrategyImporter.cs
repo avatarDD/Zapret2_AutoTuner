@@ -290,7 +290,8 @@ public static partial class StrategyImporter
             return r;
         if (Find(files, r.Path) is not { } bytes)
         {
-            warnings.Add($"список {r.Path} не найден, ссылка оставлена как есть / list {r.Path} not found, kept as a path");
+            var hint = Resources.ResourceNames.Normalize(r.Path);
+            warnings.Add($"список {r.Path} не найден, ссылка оставлена как есть: добавьте его в «Ресурсы» под именем «{hint}» / list {r.Path} not found, kept as a path: add it in Resources as '{hint}'");
             return r;
         }
         var name = r.Name;

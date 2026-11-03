@@ -336,6 +336,7 @@ message GenevaAutoGroupState {
   string id = 2;                 // the instance: GenevaWatch, GenevaControl
   int32 queue = 3;
   int32 pid = 4;
+  repeated string requested = 5; // the request's spellings this process serves (one canonical form, several texts)
 }
 
 message GenevaAutoApplyReply {

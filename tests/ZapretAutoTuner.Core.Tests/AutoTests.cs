@@ -123,6 +123,16 @@ public class AutoTests
         Assert.False(AutoObserver.CanReplay("udp", AppProtocol.Unknown, []));
     }
 
+    [Fact]
+    public void Plain_and_unknown_payloads_are_neither_kept_nor_replayed()
+    {
+        // a plain HTTP request carries cookies, an unknown protocol may log in: only handshakes are sent again
+        Assert.False(AutoObserver.CanReplay("http", AppProtocol.Http, ["GET / HTTP/1.1\r\nCookie: s=1\r\n\r\n"u8.ToArray()]));
+        Assert.False(AutoObserver.CanReplay("tcp", AppProtocol.Unknown, [[1, 2, 3]]));
+        Assert.False(AutoObserver.CanReplay("udp", AppProtocol.Unknown, [[1, 2, 3]]));
+        Assert.True(AutoObserver.CanReplay("dns", AppProtocol.Dns, [TestPackets.DnsQuery("example.com")]));
+    }
+
     // ---- the book
 
     [Fact]
@@ -272,6 +282,29 @@ public class AutoTests
         Assert.Equal("53", groups[0].Targets[0].TcpPorts);
         Assert.Equal("53", groups[0].Targets[0].UdpPorts);
         Assert.Equal(["web:a.com", "web:b.com"], groups[1].Services.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Two_groups_never_queue_the_same_address_and_transport()
+    {
+        // two sites behind one CDN address with different strategies, and a resolver on the same address
+        var book = new AutoBook();
+        book.Feed([Sample("web:a.com", AutoHealth.Ok, T0, ip: "203.0.113.5"), Sample("web:b.com", AutoHealth.Ok, T0, ip: "203.0.113.5"),
+            Sample("web:c.com", AutoHealth.Ok, T0, ip: "203.0.113.5"),
+            Sample("dns:203.0.113.5", AutoHealth.Ok, T0, AutoKind.Dns, L4Kind.Udp, "203.0.113.5", 53, "dns")], T0);
+        book.Applied("web:a.com", AutoCandidates.Tcp[0], 400, T0);
+        book.Applied("web:b.com", AutoCandidates.Tcp[0], 400, T0);
+        book.Applied("web:c.com", AutoCandidates.Tcp[1], 400, T0);
+        book.Applied("dns:203.0.113.5", AutoCandidates.Dns[0], 400, T0);
+        var groups = AutoPlan.Groups(book.Services);
+        // the bigger group keeps the address for TCP; the resolver keeps it for UDP only
+        var tcp = groups.Single(g => g.Strategy == AutoCandidates.Tcp[0]);
+        Assert.Contains(tcp.Targets, t => t.TcpPorts.Length > 0 && t.Addresses.Contains(IPAddress.Parse("203.0.113.5")));
+        Assert.DoesNotContain(groups, g => g.Strategy == AutoCandidates.Tcp[1]);
+        var dns = groups.Single(g => g.Strategy == AutoCandidates.Dns[0]);
+        var t = Assert.Single(dns.Targets);
+        Assert.Equal("", t.TcpPorts);
+        Assert.Equal("53", t.UdpPorts);
     }
 
     [Fact]

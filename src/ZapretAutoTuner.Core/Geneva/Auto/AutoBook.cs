@@ -128,8 +128,12 @@ public sealed class AutoBook
     {
         foreach (var s in saved ?? [])
         {
-            if (s.Key.Length > 0)
-                _services[s.Key] = s;
+            if (s.Key.Length == 0)
+                continue;
+            // a book saved by an older version may hold the first packets of a protocol that is no longer replayed
+            if (!AutoObserver.ReplayableApps.Contains(s.App))
+                s.Replay = "";
+            _services[s.Key] = s;
         }
     }
 

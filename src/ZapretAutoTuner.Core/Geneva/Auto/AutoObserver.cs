@@ -141,12 +141,21 @@ public static class AutoObserver
     }
 
     /// <summary>
+    /// The protocols whose first client message is a handshake that any server answers again and that carries nothing
+    /// of the user's: a TLS, QUIC or DTLS hello, a DNS question, a STUN binding request, OpenVPN's hard reset, MTProto's
+    /// obfuscated init. Anything else (plain HTTP with its cookies, an unknown protocol that may log in) is neither
+    /// kept on disk nor sent again: its service is judged by its own traffic.
+    /// </summary>
+    public static IReadOnlySet<string> ReplayableApps { get; } = new HashSet<string>(StringComparer.Ordinal) { "tls", "quic", "dtls", "dns", "stun", "openvpn", "mtproto" };
+
+    /// <summary>
     /// Whether the client's first packets, sent again, show a working strategy: stateless first messages are answered
-    /// by any server (dpi-diagnostics §8); WireGuard drops a replayed handshake, Discord and ICE are session-bound.
+    /// by any server (dpi-diagnostics §8); WireGuard drops a replayed handshake, Discord and ICE are session-bound, and
+    /// only the handshakes of <see cref="ReplayableApps"/> are replayed at all.
     /// </summary>
     public static bool CanReplay(string app, AppProtocol detected, IReadOnlyList<byte[]> payloads)
     {
-        if (payloads.Count == 0 || app is "wireguard" or "discord" or "dht")
+        if (payloads.Count == 0 || !ReplayableApps.Contains(app))
             return false;
         if (detected == AppProtocol.Stun)
             return !IsIceCheck(payloads[0]);

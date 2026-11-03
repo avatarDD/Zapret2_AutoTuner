@@ -42,7 +42,7 @@ internal sealed class AgentHost : IAsyncDisposable
                 return null;
             }
         };
-        Geneva = new Geneva.GenevaManager(options, State, Engines.Lua);
+        Geneva = new Geneva.GenevaManager(options, State, Engines.Lua, Firewall);
         Captures = new CaptureManager();
         Hosts = new HostsManager(options.HostsFile ?? Core.Hosts.HostsFile.DefaultPath, options.DataDir!);
     }

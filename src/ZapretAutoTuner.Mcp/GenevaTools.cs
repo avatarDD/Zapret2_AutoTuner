@@ -61,6 +61,18 @@ public sealed class GenevaTools(McpSession session)
         new("geneva_run_stop", McpScope.Control,
             "Turns the geneva bypass off and removes its interception rules.",
             S.Empty()),
+        new("geneva_auto_status", McpScope.Read,
+            "geneva's \"Авто\" mode: whether it is on, what it does now, every service it watches (sites, QUIC, DNS, WireGuard, OpenVPN, DHT, any endpoint) with its state (watching, suspected, blocked, searching, applied, degraded, not_found, ip_blocked, ...), the strategy applied to it, the running strategies with their counters, and the mode's log.",
+            S.Obj([("all", S.Bool("Also the services that work fine (default: only those with a problem or a bypass)"))])),
+        new("geneva_auto_enable", McpScope.Control,
+            "Turns the \"Авто\" mode on: AutoTuner watches all of this PC's traffic, confirms each block without a bypass first, finds a geneva strategy for each blocked service and applies it to that service's traffic only. It stays on across restarts. Needs the user's yes in the AutoTuner window; the answer is pending until then.",
+            S.Empty(), Confirms: true),
+        new("geneva_auto_disable", McpScope.Control,
+            "Turns the \"Авто\" mode off: every strategy it applied stops and its interception rules go; what it learned stays for the next time.",
+            S.Empty()),
+        new("geneva_auto_reset", McpScope.Control,
+            "Forgets what the \"Авто\" mode knows about one service (its key from geneva_auto_status): its bypass goes and watching starts over.",
+            S.Obj([("key", S.Str("The service's key", 300))], "key")),
     ];
 
     public IEnumerable<KeyValuePair<string, Func<JsonObject, CancellationToken, Task<JsonObject>>>> Handlers() =>
@@ -92,7 +104,119 @@ public sealed class GenevaTools(McpSession session)
                 await g.StopRunAsync(forget: true, ct).ConfigureAwait(false);
                 return new JsonObject { ["ok"] = true, ["status"] = "stopped" };
             }),
+            ["geneva_auto_status"] = (a, ct) => Task.FromResult(AutoStatus((bool?)a["all"] ?? false)),
+            ["geneva_auto_enable"] = (a, ct) => Task.FromResult(AutoEnable()),
+            ["geneva_auto_disable"] = async (a, ct) =>
+            {
+                if (session.Host.GenevaAuto is not { } auto)
+                    return NoGeneva();
+                if (!auto.Running && !auto.Enabled)
+                    return McpErrors.Error("the Auto mode is off / режим «Авто» выключен");
+                await auto.DisableAsync(ct).ConfigureAwait(false);
+                return new JsonObject { ["ok"] = true, ["status"] = "off" };
+            },
+            ["geneva_auto_reset"] = async (a, ct) =>
+            {
+                if (session.Host.GenevaAuto is not { } auto)
+                    return NoGeneva();
+                var key = (string)a["key"]!;
+                if (auto.View.Services.All(x => x.Key != key))
+                    return McpErrors.Error($"no such service: {key} (geneva_auto_status lists them) / нет такого сервиса");
+                await auto.ResetServiceAsync(key, ct).ConfigureAwait(false);
+                return new JsonObject { ["ok"] = true, ["key"] = key, ["status"] = "watching" };
+            },
         };
+
+    private static string Snake(Core.Geneva.Auto.AutoStatus s) => s switch
+    {
+        Core.Geneva.Auto.AutoStatus.NotBlocked => "not_blocked",
+        Core.Geneva.Auto.AutoStatus.IpBlocked => "ip_blocked",
+        Core.Geneva.Auto.AutoStatus.NotFound => "not_found",
+        _ => s.ToString().ToLowerInvariant(),
+    };
+
+    private JsonObject AutoStatus(bool all)
+    {
+        if (session.Host.GenevaAuto is not { } auto)
+            return NoGeneva();
+        var v = auto.View;
+        var services = new JsonArray();
+        foreach (var x in v.Services.Where(x => all || x.Status is not (Core.Geneva.Auto.AutoStatus.Watching or Core.Geneva.Auto.AutoStatus.NotBlocked)).Take(200))
+        {
+            services.Add((JsonNode)new JsonObject
+            {
+                ["key"] = x.Key,
+                ["name"] = x.Name,
+                ["kind"] = x.Kind.ToString().ToLowerInvariant(),
+                ["protocol"] = x.App,
+                ["status"] = Snake(x.Status),
+                ["why"] = x.Why.Length > 0 ? x.Why : null,
+                ["strategy"] = x.Strategy,
+                ["addresses"] = x.Addresses.Count,
+                ["since"] = x.Since == default ? null : new DateTimeOffset(x.Since, TimeSpan.Zero).ToString("o"),
+            });
+        }
+        var groups = new JsonArray();
+        foreach (var g in v.Groups)
+        {
+            groups.Add((JsonNode)new JsonObject
+            {
+                ["strategy"] = g.Strategy,
+                ["services"] = new JsonArray([.. g.Services.Select(n => (JsonNode)n)]),
+                ["packets"] = g.Stats is { } st ? st.PktsOut + st.PktsIn : null,
+                ["triggered"] = g.Stats?.Triggered,
+                ["rate"] = Math.Round(g.Rate, 1),
+            });
+        }
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["enabled"] = v.Enabled,
+            ["running"] = v.Running,
+            ["phase"] = v.Phase.En,
+            ["slices"] = v.Slices,
+            ["flows_last_slice"] = v.Flows,
+            ["services_total"] = v.Services.Count,
+            ["searching"] = v.Current,
+            ["trying"] = v.Trying,
+            ["limited"] = v.Limited ? "Windows with geneva_c older than 1.1: strategies are found but not applied" : null,
+            ["problems"] = new JsonArray([.. v.Problems.Select(p => (JsonNode)p)]),
+            ["services"] = services,
+            ["groups"] = groups,
+            ["log"] = new JsonArray([.. auto.Log.TakeLast(30).Select(l => (JsonNode)l)]),
+        };
+    }
+
+    private JsonObject AutoEnable()
+    {
+        if (session.Host.GenevaAuto is not { } auto)
+            return NoGeneva();
+        const string key = "geneva_auto_enable";
+        if (session.Confirmations.Report(key) is { } known)
+            return known;
+        if (auto.Running)
+            return new JsonObject { ["ok"] = true, ["status"] = "running" };
+        if (session.Host.ProtectionActive)
+            return McpErrors.Error("zapret2's protection is on: turn it off in the Monitor first / сначала выключите защиту nfqws2");
+        if (session.Host.Geneva is { RunRunning: true })
+            return McpErrors.Error("the single-strategy geneva bypass is on: geneva_run_stop first / сначала выключите обход geneva");
+        var request = new ConfirmRequest("geneva_auto_enable",
+            "Внешний агент хочет включить режим «Авто» geneva", "An external agent wants to turn geneva's Auto mode on",
+            "AutoTuner будет следить за всем трафиком этого ПК, проверять блокировки, подбирать стратегии geneva и применять их к заблокированным сервисам. Режим остаётся включённым после перезапуска.",
+            "AutoTuner will watch all of this PC's traffic, check blocks, find geneva strategies and apply them to the blocked services. The mode stays on across restarts.");
+        return session.Confirmations.Request(key, request, async ct =>
+        {
+            try
+            {
+                await auto.EnableAsync(ct).ConfigureAwait(false);
+            }
+            catch (GenevaRefusedException e)
+            {
+                return McpErrors.Error(e.Message);
+            }
+            return new JsonObject { ["ok"] = true, ["status"] = "running", ["hint"] = "geneva_auto_status shows what it finds" };
+        });
+    }
 
     private static JsonObject NoGeneva() => McpErrors.Error("geneva is not available in this program / geneva недоступна");
 

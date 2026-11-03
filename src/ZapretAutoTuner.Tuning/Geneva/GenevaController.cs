@@ -9,6 +9,15 @@ namespace ZapretAutoTuner.Tuning.Geneva;
 /// <summary>One strategy geneva's search tried, as the page's feed shows it.</summary>
 public sealed record GenevaTrial(DateTimeOffset Time, string Strategy, double Fitness, string Outcome, string Detail);
 
+/// <summary>A probe's verdict on one strategy of a search: the fitness for geneva, or that the local port was unusable.</summary>
+public sealed record GenevaJudgement(int Fitness, string Detail, bool PortUnavailable = false);
+
+/// <summary>
+/// Judges one strategy of a search from a local port of geneva's block (the "Авто" mode's probes for protocols without
+/// a page: a replay of the program's first packets). The default is the page's full download.
+/// </summary>
+public delegate Task<GenevaJudgement> GenevaJudge(int localPort, CancellationToken ct);
+
 /// <summary>The search as the page and MCP see it.</summary>
 public sealed record GenevaSearchView
 {
@@ -113,6 +122,7 @@ public sealed class GenevaController : IAsyncDisposable
     private string? _searchId;
     private CancellationTokenSource? _probeCts;
     private string? _stopRequested;
+    private GenevaJudge? _judge;
     private (string Ru, string En)? _portsUnavailable;
     private string? _runId;
     private Task? _searchWatch;
@@ -132,8 +142,14 @@ public sealed class GenevaController : IAsyncDisposable
     /// <summary>Why geneva may not start now (zapret2's protection runs, the wizard tunes), or null.</summary>
     public Func<string?>? Busy { get; set; }
 
+    /// <summary>The "Авто" mode runs: it applies its own strategies, so the single-strategy bypass waits.</summary>
+    public Func<bool>? AutoRunning { get; set; }
+
     /// <summary>Something the page or MCP shows changed.</summary>
     public event Action? Changed;
+
+    /// <summary>A search ended (done, stopped, failed): its last view.</summary>
+    public event Action<GenevaSearchView>? SearchEnded;
 
     public GenevaState State
     {
@@ -218,7 +234,8 @@ public sealed class GenevaController : IAsyncDisposable
     /// Starts geneva's search for a blocked site. <paramref name="settings"/>.Resume continues the saved one. Returns
     /// when geneva started; the search goes on in the background. Throws <see cref="GenevaRefusedException"/>.
     /// </summary>
-    public async Task StartSearchAsync(GenevaSearchSettings settings, CancellationToken ct)
+    /// <param name="judge">How each strategy is judged; null: the page's full download (<see cref="GenevaSearchSettings.Tls"/>).</param>
+    public async Task StartSearchAsync(GenevaSearchSettings settings, CancellationToken ct, GenevaJudge? judge = null)
     {
         if (settings.Resume && State.ProgressOf(settings.Host, settings.Port) is { Population: > 0 } saved)
         {
@@ -244,6 +261,8 @@ public sealed class GenevaController : IAsyncDisposable
                 Generations = settings.Generations,
                 Resume = settings.Resume,
                 Tag = "geneva-search:" + settings.Host,
+                Protos = settings.Protos,
+                Probe = settings.Probe,
             };
             req.Seeds.AddRange(settings.Seeds);
             var reply = await agent.StartAsync(req, CancellationToken.None).ConfigureAwait(false);
@@ -252,6 +271,7 @@ public sealed class GenevaController : IAsyncDisposable
             lock (_lock)
             {
                 _searchId = reply.Id;
+                _judge = judge;
                 _probeCts?.Dispose();
                 _probeCts = probeCts;
                 _portsUnavailable = null;
@@ -366,6 +386,7 @@ public sealed class GenevaController : IAsyncDisposable
             return;
         AddLog(ended.Ru);
         Changed?.Invoke();
+        SearchEnded?.Invoke(Search);
     }
 
     private async Task OnSearchEventAsync(IGenevaAgent agent, string id, GenevaSearchSettings settings, GenevaEvent e, CancellationToken probeCt, CancellationToken ct)
@@ -481,27 +502,29 @@ public sealed class GenevaController : IAsyncDisposable
         string detail;
         try
         {
-            ProbeResult? r = null;
+            GenevaJudge judge;
+            lock (_lock)
+                judge = _judge ?? ((port, c) => PageJudgeAsync(settings, port, c));
+            GenevaJudgement? j = null;
             for (int attempt = 0; attempt < MaxPortAttempts; attempt++)
             {
                 int port = GenevaArgv.LocalPort(lports, Interlocked.Increment(ref _probeSeq));
                 using var both = CancellationTokenSource.CreateLinkedTokenSource(probeCt, ct);
-                r = await _probe(settings.Host, settings.Port, settings.Tls, port, both.Token).ConfigureAwait(false);
-                if (!LocalPortUnavailable(r))
+                j = await judge(port, both.Token).ConfigureAwait(false);
+                if (!j.PortUnavailable)
                     break;
             }
-            if (LocalPortUnavailable(r!))
+            if (j!.PortUnavailable)
             {
                 // every port of the block is taken or reserved (Windows excludes ranges for Hyper-V): no strategy can
                 // be judged, and a made-up failure would mislead the search
-                AddLog($"Локальные порты {lports} заняты или зарезервированы системой: подбор остановлен ({r!.ErrorDetail})");
+                AddLog($"Локальные порты {lports} заняты или зарезервированы системой: подбор остановлен ({j.Detail})");
                 lock (_lock)
                     _portsUnavailable = ($"локальные порты {lports} заняты или зарезервированы системой", $"local ports {lports} are busy or reserved by the system");
                 await agent.StopAsync(id, CancellationToken.None).ConfigureAwait(false);
                 return;
             }
-            (fitness, var outcome) = GenevaFitness.FromProbe(r!);
-            detail = outcome + ": " + r;
+            (fitness, detail) = (j.Fitness, j.Detail);
         }
         catch (OperationCanceledException) when (probeCt.IsCancellationRequested)
         {
@@ -526,6 +549,16 @@ public sealed class GenevaController : IAsyncDisposable
         }
     }
 
+    /// <summary>The default judge: the page's full download (L2) from the local port.</summary>
+    private async Task<GenevaJudgement> PageJudgeAsync(GenevaSearchSettings settings, int port, CancellationToken ct)
+    {
+        var r = await _probe(settings.Host, settings.Port, settings.Tls, port, ct).ConfigureAwait(false);
+        if (LocalPortUnavailable(r))
+            return new GenevaJudgement(0, r.ErrorDetail ?? "", PortUnavailable: true);
+        var (fitness, outcome) = GenevaFitness.FromProbe(r);
+        return new GenevaJudgement(fitness, outcome + ": " + r);
+    }
+
     /// <summary>Ports of the block the probe tries for one strategy before it gives up on the block.</summary>
     public const int MaxPortAttempts = 8;
 
@@ -545,6 +578,8 @@ public sealed class GenevaController : IAsyncDisposable
         {
             if (RunRunning)
                 throw new GenevaRefusedException("обход geneva уже включён: сначала выключите / the geneva bypass is already on");
+            if (AutoRunning?.Invoke() == true)
+                throw new GenevaRefusedException("включён режим «Авто»: сначала выключите его / the \"Auto\" mode is on: turn it off first");
             if (Busy?.Invoke() is { } why)
                 throw new GenevaRefusedException(why);
             var agent = await _agent(ct).ConfigureAwait(false);
@@ -604,7 +639,7 @@ public sealed class GenevaController : IAsyncDisposable
     /// <summary>Brings back the bypass the user left on (Settings: "Включать при запуске"); null when there is nothing to start.</summary>
     public async Task<bool> RestoreAsync(CancellationToken ct)
     {
-        if (State is not { Engine: BypassEngine.Geneva, Active: { AutoStart: true } a } || RunRunning)
+        if (State is not { Engine: BypassEngine.Geneva, Active: { AutoStart: true } a } || RunRunning || AutoRunning?.Invoke() == true)
             return false;
         await StartRunAsync(a.Strategy, a.Ports, autoStart: true, ct).ConfigureAwait(false);
         return true;
@@ -699,6 +734,9 @@ public sealed class GenevaController : IAsyncDisposable
     }
 
     // ---- what the Agent keeps
+
+    /// <summary>Saves the "Авто" mode's state with the rest (one settings key).</summary>
+    public void SaveAuto(GenevaAutoState auto) => Update(s => s with { Auto = auto });
 
     /// <summary>The Agent's view: version, saved searches, the database's best strategies.</summary>
     public async Task<GenevaInfoReply> InfoAsync(CancellationToken ct) => await (await _agent(ct).ConfigureAwait(false)).InfoAsync(ct).ConfigureAwait(false);

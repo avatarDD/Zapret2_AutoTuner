@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using ZapretAutoTuner.Core.Diagnostics;
 using ZapretAutoTuner.Core.Model;
 
@@ -59,6 +60,17 @@ public sealed record GenevaSearchSettings
     /// <summary>Strategies to start the population from (the library, the found ones); at most <see cref="GenevaArgv.MaxSeeds"/>.</summary>
     public IReadOnlyList<string> Seeds { get; init; } = [];
 
+    /// <summary>The packet layers the search may use (geneva's <c>--protos</c>): TCP for sites, UDP and IP for the rest.</summary>
+    public string Protos { get; init; } = "TCP";
+
+    /// <summary>
+    /// What the UI's probe checks: <c>web</c> (the page's full download, the default) or <c>replay</c> (the program's
+    /// first packets sent again, the "Авто" mode's probe for protocols without a page). Part of the target key.
+    /// </summary>
+    public string Probe { get; init; } = GenevaArgv.WebProbe;
+
+    public static IReadOnlySet<string> Layers { get; } = new HashSet<string>(StringComparer.Ordinal) { "IP", "TCP", "UDP", "DNS", "DNSQR" };
+
     public static (int Min, int Max) PopulationRange => (4, 500);
 
     public static (int Min, int Max) GenerationsRange => (1, 500);
@@ -66,8 +78,14 @@ public sealed record GenevaSearchSettings
     public IReadOnlyList<string> Problems()
     {
         var p = new List<string>();
-        if (!Target.IsValidHostName(Host))
+        // a server without a name (the "Авто" mode's WireGuard, DNS) is searched by its address
+        if (!Target.IsValidHostName(Host) && !(Probe == GenevaArgv.ReplayProbe && IPAddress.TryParse(Host, out _)))
             p.Add($"не имя сайта: {Host} / not a host name");
+        if (Probe is not (GenevaArgv.WebProbe or GenevaArgv.ReplayProbe))
+            p.Add($"неизвестная проба {Probe} / unknown probe");
+        var layers = Protos.Split(',');
+        if (layers.Length == 0 || layers.Any(l => !Layers.Contains(l)))
+            p.Add($"слои {Protos}: только {string.Join(",", Layers)} / layers out of {string.Join(",", Layers)}");
         if (Port is < 1 or > 65535)
             p.Add($"порт {Port} вне 1–65535 / port out of range");
         if (Population < PopulationRange.Min || Population > PopulationRange.Max)
@@ -85,7 +103,7 @@ public sealed record GenevaSearchSettings
     }
 
     /// <summary>The target profile in geneva's strategy database: the same host and port share their results.</summary>
-    public string TargetKey => GenevaArgv.TargetKey(Host, Port);
+    public string TargetKey => GenevaArgv.TargetKey(Host, Port, Probe);
 }
 
 /// <summary>The strategy that bypasses on this PC: one strategy for every connection to the ports (geneva has no hostlist).</summary>
@@ -133,7 +151,13 @@ public static class GenevaArgv
     /// <summary>Seconds between stats events of <c>geneva run</c>: the page's telemetry.</summary>
     public const int StatsInterval = 2;
 
-    public static string TargetKey(string host, int port) => $"external:{host.ToLowerInvariant()}:{port.ToString(CultureInfo.InvariantCulture)}";
+    public const string WebProbe = "web";
+
+    public const string ReplayProbe = "replay";
+
+    /// <summary>The profile in geneva's database and the checkpoint's folder: a replay of a server is another target than its page.</summary>
+    public static string TargetKey(string host, int port, string probe = WebProbe) =>
+        $"external:{(probe == ReplayProbe ? "replay:" : "")}{host.ToLowerInvariant()}:{port.ToString(CultureInfo.InvariantCulture)}";
 
     /// <summary><c>geneva run</c> with events on stdout and the control socket on loopback (the token goes in the environment).</summary>
     public static List<string> Run(GenevaRunSettings s, int controlPort)
@@ -170,6 +194,11 @@ public static class GenevaArgv
             "--checkpoint", checkpoint, "--db", db, "--target", s.TargetKey,
             "--top", "10", "-e", "-", "--quiet",
         };
+        if (s.Protos != "TCP")
+        {
+            a.Add("--protos");
+            a.Add(s.Protos);
+        }
         if (s.Resume)
             a.Add("--resume");
         if (seedsFile is not null && !s.Resume)

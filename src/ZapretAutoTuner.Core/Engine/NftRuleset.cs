@@ -29,6 +29,15 @@ public sealed record NftQueueRule
     public int TcpInPackets { get; init; } = 10;
 
     public int UdpInPackets { get; init; } = 3;
+
+    /// <summary>
+    /// Packets carrying this mark skip the rule: the engine's own packets (geneva_c sends with 0x20000000, which the
+    /// table's common return for zapret2's mark does not cover). 0: none.
+    /// </summary>
+    public uint SkipMark { get; init; }
+
+    /// <summary>The ports are the client's local ports (a peer-to-peer program's port), not the server's.</summary>
+    public bool BySourcePort { get; init; }
 }
 
 /// <summary>
@@ -95,10 +104,12 @@ public static class NftRuleset
         if (hasV6)
             addrMatches.Add($"ip6 {dir} @t6_{i} ");
 
-        var portDir = outgoing ? "dport" : "sport";
+        var portDir = outgoing != r.BySourcePort ? "dport" : "sport";
         var ct = outgoing ? "ct original packets" : "ct reply packets";
-        foreach (var addr in addrMatches)
+        var skip = r.SkipMark == 0 ? "" : $"meta mark & 0x{r.SkipMark.ToString("X8", CultureInfo.InvariantCulture)} == 0 ";
+        foreach (var match in addrMatches)
         {
+            var addr = skip + match;
             if (r.TcpPorts.Length > 0)
             {
                 int n = outgoing ? r.TcpOutPackets : r.TcpInPackets;

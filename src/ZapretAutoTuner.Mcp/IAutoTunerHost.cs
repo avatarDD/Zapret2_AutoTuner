@@ -101,6 +101,9 @@ public interface IAutoTunerHost
     /// <summary>geneva_c, the second bypass engine: its search and bypass (geneva_* tools); null when the program has none.</summary>
     Tuning.Geneva.GenevaController? Geneva => null;
 
+    /// <summary>geneva's "Авто" mode (geneva_auto_* tools); null when the program has none.</summary>
+    Tuning.Geneva.GenevaAuto? GenevaAuto => null;
+
     /// <summary>The bundled geneva for what needs no rights (library, check, version); null when there is none.</summary>
     Tools.GenevaBundle? GenevaBundle => null;
 

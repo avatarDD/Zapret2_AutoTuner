@@ -271,6 +271,9 @@ internal sealed class GenevaManager : IDisposable
     /// <summary>The commands the UI may send to a run (the control socket also has stop and log_level: those are the Agent's).</summary>
     public static readonly IReadOnlySet<string> ControlCommands = new HashSet<string>(StringComparer.Ordinal) { "status", "stats", "pause", "resume", "reset_stats", "set_strategy" };
 
+    /// <summary>What may be asked of a group of the "Авто" mode: its counters only.</summary>
+    public static readonly IReadOnlySet<string> AutoControlCommands = new HashSet<string>(StringComparer.Ordinal) { "status", "stats" };
+
     public async Task<(bool Ok, string Json)> ControlAsync(string id, string cmd, string? strategy, CancellationToken ct)
     {
         var inst = Find(id) ?? throw new GenevaStartException("нет такого экземпляра / no such instance");
@@ -278,6 +281,10 @@ internal sealed class GenevaManager : IDisposable
             throw new GenevaStartException("geneva не работает / geneva is not running");
         if (!ControlCommands.Contains(cmd))
             throw new GenevaStartException($"команда {cmd} не разрешена / command not allowed");
+        // the "Авто" mode's groups are named by their strategy and managed by AutoApply: a strategy changed or a group
+        // paused from outside would leave the mode applying something else than it shows
+        if (inst.Mode == "auto" && !AutoControlCommands.Contains(cmd))
+            throw new GenevaStartException($"режимом «Авто» управляет он сам: команда {cmd} недоступна / the \"Auto\" mode manages its groups itself");
         var req = new JsonObject { ["id"] = 2, ["cmd"] = cmd };
         if (cmd == "set_strategy")
         {
@@ -353,13 +360,20 @@ internal sealed class GenevaManager : IDisposable
 
     public async Task StopAllAsync()
     {
-        await Task.WhenAll(_running.Keys.ToList().Select(StopAsync));
-        lock (_auto)
+        // an AutoApply under way finishes first: else it could start a group after everything stopped
+        bool gate = await _autoGate.WaitAsync(TimeSpan.FromSeconds(30));
+        try
         {
+            await Task.WhenAll(_running.Keys.ToList().Select(StopAsync));
             _auto.Clear();
             _autoFilters.Clear();
+            _firewall?.Replace(AutoOwner, new Dictionary<string, NftQueueRule>());
         }
-        _firewall?.Replace(AutoOwner, new Dictionary<string, NftQueueRule>());
+        finally
+        {
+            if (gate)
+                _autoGate.Release();
+        }
     }
 
     // ---- the "Авто" mode (skill geneva, §9)
@@ -393,12 +407,14 @@ internal sealed class GenevaManager : IDisposable
                     if (f is JsonValue fv && fv.TryGetValue<string>(out var name))
                         set.Add(name);
                 }
+                // only an answer is kept: a timeout or a broken start is asked again next time
+                _features = set;
             }
         }
         catch (Exception e) when (e is JsonException or OperationCanceledException or InvalidOperationException or IOException)
         {
         }
-        return _features = set;
+        return set;
     }
 
     /// <summary>
@@ -448,6 +464,7 @@ internal sealed class GenevaManager : IDisposable
 
         // the canonical form names a group: the same strategy in two spellings is one process
         var wanted = new Dictionary<string, List<AutoTarget>>(StringComparer.Ordinal);
+        var spellings = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         if (r.Groups.Count > 0)
         {
             var checks = await new GenevaBundle(Path.GetDirectoryName(geneva!)!).CheckAsync([.. r.Groups.Select(g => g.Strategy)], ct);
@@ -469,8 +486,13 @@ internal sealed class GenevaManager : IDisposable
                 if (targets.Count == 0)
                     continue;
                 if (!wanted.TryGetValue(canonical, out var list))
+                {
                     wanted[canonical] = list = [];
+                    spellings[canonical] = [];
+                }
                 list.AddRange(targets);
+                if (!spellings[canonical].Contains(g.Strategy))
+                    spellings[canonical].Add(g.Strategy);
             }
         }
 
@@ -480,6 +502,16 @@ internal sealed class GenevaManager : IDisposable
         var rules = new Dictionary<string, NftQueueRule>(StringComparer.Ordinal);
         foreach (var (strategy, targets) in wanted)
         {
+            if (windows && _auto.TryGetValue(strategy, out var running))
+            {
+                var filter = AutoPlan.WinDivertFilter(targets);
+                if (_autoFilters.GetValueOrDefault(running.Queue) != filter && !await SetFilterAsync(running, filter, ct))
+                {
+                    // a process still on its old filter would miss the new targets (and a trial would be judged
+                    // without its strategy): it starts again with the new one
+                    await StopAutoAsync([strategy]);
+                }
+            }
             if (!_auto.TryGetValue(strategy, out var inst))
             {
                 int queue = Enumerable.Range(AutoQueueBase, AutoRules.MaxGroups).FirstOrDefault(q => _auto.Values.All(i => i.Queue != q));
@@ -499,24 +531,14 @@ internal sealed class GenevaManager : IDisposable
                 }
                 _auto[strategy] = inst;
             }
-            else if (windows)
-            {
-                var filter = AutoPlan.WinDivertFilter(targets);
-                if (_autoFilters.GetValueOrDefault(inst.Queue) != filter)
-                {
-                    var answer = await SendControlAsync(inst, new JsonObject { ["id"] = 2, ["cmd"] = "set_filter", ["filter"] = filter }, ct);
-                    if ((bool?)answer["ok"] ?? false)
-                        _autoFilters[inst.Queue] = filter;
-                    else
-                        reply.Problems.Add($"set_filter: {(string?)answer["error"]}");
-                }
-            }
             if (!windows)
             {
                 for (int i = 0; i < targets.Count; i++)
                     rules[$"{AutoOwner}{inst.Queue.ToString(CultureInfo.InvariantCulture)}/{i.ToString(CultureInfo.InvariantCulture)}"] = Rule(targets[i], inst.Queue);
             }
-            reply.Groups.Add(new GenevaAutoGroupState { Strategy = strategy, Id = inst.Id, Queue = inst.Queue, Pid = inst.Pid });
+            var state = new GenevaAutoGroupState { Strategy = strategy, Id = inst.Id, Queue = inst.Queue, Pid = inst.Pid };
+            state.Requested.AddRange(spellings[strategy]);
+            reply.Groups.Add(state);
         }
         if (_firewall is not null && !windows && _firewall.Replace(AutoOwner, rules) is { } err)
         {
@@ -526,6 +548,26 @@ internal sealed class GenevaManager : IDisposable
             reply.Problems.Add("firewall: " + err);
         }
         return reply;
+    }
+
+    /// <summary>geneva's <c>set_filter</c> on a running group (Windows); false when it refused or did not answer.</summary>
+    private async Task<bool> SetFilterAsync(GenevaInstance inst, string filter, CancellationToken ct)
+    {
+        try
+        {
+            var answer = await SendControlAsync(inst, new JsonObject { ["id"] = 2, ["cmd"] = "set_filter", ["filter"] = filter }, ct);
+            if ((bool?)answer["ok"] ?? false)
+            {
+                _autoFilters[inst.Queue] = filter;
+                return true;
+            }
+            Console.Error.WriteLine($"geneva set_filter: {(string?)answer["error"]}");
+        }
+        catch (Exception e) when (e is IOException or SocketException or GenevaStartException || (e is OperationCanceledException && !ct.IsCancellationRequested))
+        {
+            Console.Error.WriteLine($"geneva set_filter: {e.Message}");
+        }
+        return false;
     }
 
     private static AutoTarget? ToTarget(GenevaAutoTarget t)

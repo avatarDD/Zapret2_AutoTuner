@@ -36,18 +36,66 @@ public static class AutoPlan
     {
         var active = services.Where(s => s.IsActive && (trial is null || s.Key != trial.Value.Service.Key))
             .Select(s => (Service: s, Strategy: s.Strategy!)).ToList();
-        if (trial is { } t)
-            active.Add((t.Service, t.Strategy));
-        return active
+        if (trial is { } tried)
+            active.Add((tried.Service, tried.Strategy));
+        var ordered = active
             .GroupBy(x => x.Strategy, StringComparer.Ordinal)
             .Select(g => new AutoGroup(g.Key, [.. g.Select(x => x.Service.Key)], [.. g.Select(x => Target(x.Service)).Where(x => x is not null).Select(x => x!)]))
             .Where(g => g.Targets.Count > 0)
             // the tried strategy always gets its group: it is what is being checked
             .OrderByDescending(g => trial is not null && g.Strategy == trial.Value.Strategy && g.Services.Contains(trial.Value.Service.Key))
             .ThenByDescending(g => g.Services.Count)
-            .ThenBy(g => g.Strategy, StringComparer.Ordinal)
-            .Take(AutoRules.MaxGroups)
-            .ToList();
+            .ThenBy(g => g.Strategy, StringComparer.Ordinal);
+        // One packet meets one strategy: two sites behind one CDN address would otherwise queue the same packets to two
+        // groups, and which one gets them would depend on the rules' order (Linux) or on WinDivert (Windows). An
+        // address and transport (or a local port) belongs to the first group that names it.
+        var claimed = new HashSet<(string Proto, IPAddress Address)>();
+        var claimedPorts = new HashSet<(string Proto, string Ports)>();
+        var result = new List<AutoGroup>();
+        foreach (var g in ordered)
+        {
+            var targets = new List<AutoTarget>();
+            foreach (var t in g.Targets)
+            {
+                if (t.ByLocalPort)
+                {
+                    var tcp = t.TcpPorts.Length > 0 && claimedPorts.Add(("tcp", t.TcpPorts)) ? t.TcpPorts : "";
+                    var udp = t.UdpPorts.Length > 0 && claimedPorts.Add(("udp", t.UdpPorts)) ? t.UdpPorts : "";
+                    if (tcp.Length > 0 || udp.Length > 0)
+                        targets.Add(t with { TcpPorts = tcp, UdpPorts = udp });
+                    continue;
+                }
+                List<IPAddress> Free(string proto, string ports) =>
+                    ports.Length == 0 ? [] : [.. t.Addresses.Distinct().Where(a => !claimed.Contains((proto, a)))];
+                var tcpFree = Free("tcp", t.TcpPorts);
+                var udpFree = Free("udp", t.UdpPorts);
+                if (tcpFree.Count > 0 && tcpFree.SequenceEqual(udpFree))
+                {
+                    targets.Add(t with { Addresses = tcpFree });
+                    continue;
+                }
+                if (tcpFree.Count > 0)
+                    targets.Add(new AutoTarget { Addresses = tcpFree, TcpPorts = t.TcpPorts });
+                if (udpFree.Count > 0)
+                    targets.Add(new AutoTarget { Addresses = udpFree, UdpPorts = t.UdpPorts });
+            }
+            if (targets.Count == 0)
+                continue;
+            foreach (var t in targets.Where(t => !t.ByLocalPort))
+            {
+                foreach (var a in t.Addresses)
+                {
+                    if (t.TcpPorts.Length > 0)
+                        claimed.Add(("tcp", a));
+                    if (t.UdpPorts.Length > 0)
+                        claimed.Add(("udp", a));
+                }
+            }
+            result.Add(g with { Targets = targets });
+            if (result.Count == AutoRules.MaxGroups)
+                break;
+        }
+        return result;
     }
 
     /// <summary>The traffic of one service; null when nothing is known to aim at (no address seen).</summary>

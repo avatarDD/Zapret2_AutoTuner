@@ -466,13 +466,21 @@ public sealed class GenevaAuto : IAsyncDisposable
                 _trial = null;
                 _current = null;
             }
-            try
+            // the mode going off (or the program closing) stops the groups itself: applying them here could start them
+            // again after it did
+            if (!ct.IsCancellationRequested)
             {
-                await ApplyAsync(CancellationToken.None, force: true).ConfigureAwait(false);
-            }
-            catch (Exception e) when (e is GenevaRefusedException or Grpc.Core.RpcException or IOException or InvalidOperationException)
-            {
-                AddLog("Группы не применились / groups not applied: " + e.Message);
+                try
+                {
+                    await ApplyAsync(ct, force: true).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                }
+                catch (Exception e) when (e is GenevaRefusedException or Grpc.Core.RpcException or IOException or InvalidOperationException)
+                {
+                    AddLog("Группы не применились / groups not applied: " + e.Message);
+                }
             }
             Save(force: true);
             Changed?.Invoke();
@@ -611,7 +619,8 @@ public sealed class GenevaAuto : IAsyncDisposable
             _trial = (s.Key, strategy);
         Changed?.Invoke();
         var reply = await ApplyAsync(ct, force: true).ConfigureAwait(false);
-        if (reply is null || reply.Groups.Count == 0 || reply.Limited)
+        // the tried strategy itself must run: a probe while only the other groups started would judge no bypass at all
+        if (reply is null || reply.Limited || !reply.Groups.Any(g => g.Requested.Contains(strategy)))
             return false;
         // the rules are in; let the next connection meet them
         await Task.Delay(TimeSpan.FromSeconds(1), ct).ConfigureAwait(false);
@@ -680,8 +689,10 @@ public sealed class GenevaAuto : IAsyncDisposable
                 _limited = reply.Limited;
                 _groups = [.. reply.Groups.Select(rg =>
                 {
-                    var g = groups.FirstOrDefault(x => x.Strategy == rg.Strategy) ?? groups.ElementAtOrDefault(reply.Groups.IndexOf(rg));
-                    var names = (g?.Services ?? []).Select(k => _book.Find(k)?.Name ?? k).ToList();
+                    // the Agent names a group by its canonical form and lists the texts it serves
+                    var names = groups.Where(x => rg.Requested.Contains(x.Strategy) || x.Strategy == rg.Strategy)
+                        .SelectMany(x => x.Services).Distinct(StringComparer.Ordinal)
+                        .Select(k => _book.Find(k)?.Name ?? k).ToList();
                     var old = _groups.FirstOrDefault(x => x.Id == rg.Id);
                     return new AutoGroupView { Strategy = rg.Strategy, Id = rg.Id, Queue = rg.Queue, Services = names, Stats = old?.Stats, Rate = old?.Rate ?? 0 };
                 })];

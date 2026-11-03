@@ -38,7 +38,8 @@ public sealed class GenevaAutoTests
         Assert.True(done());
     }
 
-    private static (GenevaController Controller, GenevaAuto Auto, FakeGenevaAgent Agent, FakeProbes Probes, MemoryGenevaStore Store) Make()
+    private static (GenevaController Controller, GenevaAuto Auto, FakeGenevaAgent Agent, FakeProbes Probes, MemoryGenevaStore Store) Make(
+        Action<GenevaController, FakeGenevaAgent>? before = null)
     {
         // a resolver that never answers: every slice holds the same unanswered query
         var monitor = new FakeMonitor(Capture(
@@ -47,6 +48,7 @@ public sealed class GenevaAutoTests
         var agent = new FakeGenevaAgent();
         var store = new MemoryGenevaStore();
         var controller = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, (h, p, t, l, ct) => Task.FromResult(new ProbeResult { Host = h, Address = "" }));
+        before?.Invoke(controller, agent);
         var probes = new FakeProbes(agent, AutoCandidates.Dns[1]);
         var auto = new GenevaAuto(controller, _ => Task.FromResult<IGenevaAgent>(agent), monitor, probes,
             () => new DateTime(2026, 1, 1, 0, 0, 30, DateTimeKind.Utc))
@@ -86,6 +88,37 @@ public sealed class GenevaAutoTests
         var saved = GenevaState.Parse(store.Json);
         Assert.True(saved.Auto.Enabled);
         Assert.Equal(AutoStatus.Applied, saved.Auto.Services.Single(x => x.Key == "dns:8.8.8.8").Status);
+    }
+
+    [Fact]
+    public async Task A_trial_whose_group_did_not_start_is_not_taken_for_a_working_strategy()
+    {
+        // a site's group runs; the group of the strategy that would "work" for the resolver never starts
+        var (controller, auto, agent, probes, _) = Make((c, a) =>
+        {
+            a.AutoRefused.Add(AutoCandidates.Dns[1]);
+            c.SaveAuto(new GenevaAutoState
+            {
+                Services =
+                [
+                    new AutoService
+                    {
+                        Key = "web:a.com", Kind = AutoKind.Web, Transport = Core.Model.L4Kind.Tcp, Name = "a.com", App = "tls",
+                        Addresses = [new AutoAddress("203.0.113.5", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc))],
+                        Ports = [443], Status = AutoStatus.Applied, Strategy = AutoCandidates.Tcp[0],
+                    },
+                ],
+            });
+        });
+        await using var _ = controller;
+        await using var __ = auto;
+        await auto.EnableAsync(default);
+
+        // the quick check went past the refused strategy without a probe and never applied it
+        await Until(() => { lock (probes.Checks) return probes.Checks.Any(c => c.Applied == AutoCandidates.Udp[0]); });
+        lock (probes.Checks)
+            Assert.DoesNotContain(probes.Checks, c => c.Applied == AutoCandidates.Dns[1]);
+        Assert.NotEqual(AutoCandidates.Dns[1], auto.View.Services.Single(x => x.Key == "dns:8.8.8.8").Strategy);
     }
 
     [Fact]

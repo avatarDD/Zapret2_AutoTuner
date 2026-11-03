@@ -165,6 +165,9 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
     /// <summary>The Agent answers "Авто" applies as a Windows without address filters would.</summary>
     public bool AutoLimited { get; set; }
 
+    /// <summary>Strategies whose group does not start (left out of the reply, as the Agent does).</summary>
+    public HashSet<string> AutoRefused { get; } = new(StringComparer.Ordinal);
+
     public Task<GenevaAutoApplyReply> AutoApplyAsync(GenevaAutoApplyRequest request, CancellationToken ct)
     {
         var reply = new GenevaAutoApplyReply { Limited = AutoLimited };
@@ -175,7 +178,16 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
             {
                 int q = 340;
                 foreach (var g in request.Groups)
-                    reply.Groups.Add(new GenevaAutoGroupState { Strategy = g.Strategy, Id = "auto" + q, Queue = q++, Pid = 1 });
+                {
+                    if (AutoRefused.Contains(g.Strategy))
+                    {
+                        reply.Problems.Add(g.Strategy + ": refused");
+                        continue;
+                    }
+                    var state = new GenevaAutoGroupState { Strategy = g.Strategy, Id = "auto" + q, Queue = q++, Pid = 1 };
+                    state.Requested.Add(g.Strategy);
+                    reply.Groups.Add(state);
+                }
             }
         }
         return Task.FromResult(reply);

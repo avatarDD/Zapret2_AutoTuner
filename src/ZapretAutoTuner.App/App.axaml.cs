@@ -21,6 +21,8 @@ public sealed partial class App : Application
                 Loc.Loc.I.English = host.Settings.Language == "en";
             ApplyTheme(host.Settings.Theme);
             ApplyFont(host.Settings.LargeFont);
+            // what the last search found is still there after a restart: export and protection work on it
+            host.Solutions.Restore();
             var main = new MainViewModel(host);
             desktop.MainWindow = new MainWindow { DataContext = main };
             _ = main.Mcp.ApplyAsync();

@@ -84,6 +84,30 @@ families:
     axes:
       pos: "@pos"
 
+  # What works against the DPI of 2025–2026 (TSPU): the combinations the community keeps in its current sets
+  # (nfqws2-keenetic defaults, the z2k autocircular RKN list), with our white hello for their google ClientHello blob
+  # and our white SNI. A reassembling DPI with an SNI whitelist is no longer passed by a plain split, so these come
+  # right after the cheap splits instead of after hundreds of variants of the classic families. Arguments z2k's own
+  # Lua adds (badseq) are not in zapret2 and are left out.
+  - id: modern
+    order: 21
+    l4: tcp
+    protocols: [tls]
+    payload: tls_client_hello
+    skip_if_working: [multisplit]
+    templates:
+      - "--lua-desync=fake:blob=fake_default_tls:{mfool}:tls_mod=rnd,dupsid,sni={white}:repeats=8 --lua-desync=multisplit:pos=1:seqovl=681:seqovl_pattern=tls_white"
+      - "--lua-desync=multisplit:pos=1:seqovl=681:seqovl_pattern=tls_white"
+      - "--lua-desync=fake:blob=0x00000000:{mfool}:tls_mod=rnd,dupsid,sni={white}:repeats=11 --lua-desync=multidisorder:pos=1,midsld"
+      - "--lua-desync=multisplit:pos=1,sniext+1:seqovl=1"
+      - "--lua-desync=fake:blob=fake_default_tls:{mfool}:tls_mod=rnd,dupsid,sni={white}:repeats=8 --lua-desync=fakedsplit:pos=1:{mfool}"
+      - "--lua-desync=fake:blob=tls_white:{mfool}:repeats=6 --lua-desync=multisplit:pos=2,sniext+1:seqovl=679:seqovl_pattern=tls_white"
+      - "--lua-desync=fake:blob=fake_default_tls:{mfool}:tls_mod=rnd,dupsid,sni={white} --lua-desync=hostfakesplit:host={white}:{mfool}"
+      - "--lua-desync=hostfakesplit:host={white}:{mfool}:repeats=4"
+      - "--lua-desync=fake:blob=fake_default_tls:badsum:tls_mod=rnd,dupsid,sni={white} --lua-desync=multidisorder:pos=1,midsld"
+    axes:
+      mfool: {quick: ["tcp_seq=2", "tcp_ts=-1000"], standard: ["tcp_seq=2", "tcp_ts=-1000", badsum, tcp_md5]}
+
   - id: seqovl
     order: 23
     l4: tcp
@@ -187,7 +211,7 @@ families:
     l4: tcp
     protocols: [tls]
     payload: tls_client_hello
-    skip_if_working: [multisplit, seqovl, fake]
+    skip_if_working: [multisplit, seqovl, fake, modern]
     templates:
       - "--lua-desync=fake:blob={blob}:{fool}{mod} --lua-desync=multisplit:pos={pos}"
       - "--lua-desync=fake:blob={blob}:{fool}{mod} --lua-desync=multidisorder:pos={pos}"
@@ -202,7 +226,7 @@ families:
     l4: tcp
     protocols: [tls]
     payload: tls_client_hello
-    skip_if_working: [multisplit, seqovl, fake, fake_multi]
+    skip_if_working: [multisplit, seqovl, fake, fake_multi, modern]
     templates:
       # nfqws2-keenetic default strategy 1, with the white hello as the fake and the overlap pattern
       - "--lua-desync=fake:blob=tls_white:tls_mod=rnd,dupsid,sni={white}:{fool} --lua-desync=multisplit:pos={pos}:seqovl=1:seqovl_pattern=tls_white:tcp_ts_up"
@@ -216,7 +240,7 @@ families:
     protocols: [tls]
     payload: tls_client_hello
     modes: [standard, full]
-    skip_if_working: [multisplit, seqovl, fake, fake_multi, faked]
+    skip_if_working: [multisplit, seqovl, fake, fake_multi, faked, modern]
     templates:
       - "--lua-desync=fake:blob={blob}:{fool} --lua-desync=fakedsplit:pos={pos1}:{fool}"
       - "--lua-desync=fake:blob={blob}:{fool} --lua-desync=fakeddisorder:pos={pos1}:{fool}"
@@ -231,7 +255,7 @@ families:
     protocols: [tls]
     payload: tls_client_hello
     modes: [standard, full]
-    skip_if_working: [multisplit, seqovl, fake, fake_multi, hostfake]
+    skip_if_working: [multisplit, seqovl, fake, fake_multi, hostfake, modern]
     templates:
       - "--lua-desync=fake:blob={blob}:{fool} --lua-desync=hostfakesplit:host={white}:midhost=host-2:{fool}:tcp_ts_up"
     axes:
@@ -255,7 +279,7 @@ families:
     protocols: [tls, http]
     payload: none
     modes: [standard, full]
-    skip_if_working: [multisplit, seqovl, fake, fake_ttl, faked, hostfake, fake_multi, fake_seqovl, fake_faked, fake_hostfake]
+    skip_if_working: [multisplit, seqovl, fake, fake_ttl, faked, hostfake, fake_multi, fake_seqovl, fake_faked, fake_hostfake, modern]
     tags: [slow, phase0]
     templates:
       - "--lua-desync=wssize:wsize=1:scale=6"

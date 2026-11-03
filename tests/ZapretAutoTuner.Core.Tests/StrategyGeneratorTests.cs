@@ -137,4 +137,44 @@ public sealed class StrategyGeneratorTests
         var full = StrategyGenerator.Expand(cat["t"], new GeneratorOptions { Mode = SearchMode.Full }, cat).ToList();
         Assert.Equal(4, full.Count);
     }
+
+    [Fact]
+    public void Within_a_family_every_value_is_tried_before_deep_combinations()
+    {
+        const string yaml = """
+            families:
+              - id: t
+                order: 1
+                l4: tcp
+                protocols: [tls]
+                payload: none
+                templates: ["--lua-desync=fake:blob={b}:{f}:repeats={r}", "--lua-desync=multisplit:pos={p}"]
+                axes:
+                  b: [b0, b1]
+                  f: [f0, f1, f2]
+                  r: [r0, r1]
+                  p: [p0, p1]
+            """;
+        var cat = FamilyCatalog.Parse(yaml);
+        var all = StrategyGenerator.Expand(cat["t"], new GeneratorOptions(), cat).ToList();
+        Assert.Equal(12 + 2, all.Count);
+        // the head of every axis of every template first, then one value away from it
+        Assert.Equal(["--lua-desync=fake:blob=b0:f0:repeats=r0", "--lua-desync=multisplit:pos=p0"], all[..2]);
+        Assert.Equal(["--lua-desync=fake:blob=b0:f0:repeats=r1", "--lua-desync=fake:blob=b0:f1:repeats=r0", "--lua-desync=fake:blob=b1:f0:repeats=r0", "--lua-desync=multisplit:pos=p1"], all[2..6]);
+        // the old lexicographic order reached blob=b1 only after all six b0 combinations
+        Assert.True(all.IndexOf("--lua-desync=fake:blob=b1:f0:repeats=r0") < all.IndexOf("--lua-desync=fake:blob=b0:f2:repeats=r1"));
+    }
+
+    [Fact]
+    public void Modern_family_is_generated_early_and_valid_on_windows_without_timestamps()
+    {
+        var set = StrategyGenerator.Generate(new GeneratorOptions { Mode = SearchMode.Quick, Platform = EnginePlatform.Windows, TcpTimestamps = false });
+        var modern = set.OfFamily("modern").ToList();
+        Assert.NotEmpty(modern);
+        Assert.DoesNotContain(modern, c => c.Key.Contains("tcp_ts=", StringComparison.Ordinal));
+        Assert.Contains(modern, c => c.Key.Contains("seqovl_pattern=tls_white", StringComparison.Ordinal) && c.Key.Contains("sni=www.google.com", StringComparison.Ordinal));
+        var order = set.Candidates.Select(c => c.Family).Distinct().ToList();
+        Assert.True(order.IndexOf("modern") < order.IndexOf("fake"));
+        Assert.Empty(set.Rejected);
+    }
 }

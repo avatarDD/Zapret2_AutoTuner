@@ -108,6 +108,30 @@ public class HttpProbeTests
     }
 
     [Fact]
+    public async Task Silent_hello_fails_after_the_quiet_timeout_not_the_full_one()
+    {
+        await using var s = new TestServer(ServerMode.SilentOnHello);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var r = await HttpProbe.RunAsync(Opts(s, o => o with { Tls = true, HandshakeTimeout = TimeSpan.FromSeconds(8), QuietRttFactor = 10, MinQuietTimeout = TimeSpan.FromMilliseconds(500) }));
+        Assert.Equal(ProbeError.TlsTimeout, r.Error);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), sw.Elapsed.ToString());
+    }
+
+    [Fact]
+    public async Task Quiet_timeout_does_not_cut_a_server_that_answers()
+    {
+        await using var s = new TestServer(ServerMode.Ok, TestCerts.Leaf(Host), bodyBytes: 100_000);
+        var r = await HttpProbe.RunAsync(Opts(s, o => o with { QuietRttFactor = 1, MinQuietTimeout = TimeSpan.FromMilliseconds(300) }));
+        Assert.Equal(ProbeError.None, r.Error);
+        // the quiet timeout is a floor over the connect time and never above the full timeout
+        var o = Opts(s, x => x with { QuietRttFactor = 10, MinQuietTimeout = TimeSpan.FromSeconds(1) });
+        Assert.Equal(TimeSpan.FromSeconds(1), HttpProbe.QuietTimeout(o, TimeSpan.FromMilliseconds(20)));
+        Assert.Equal(TimeSpan.FromSeconds(3), HttpProbe.QuietTimeout(o, TimeSpan.FromMilliseconds(300)));
+        Assert.Null(HttpProbe.QuietTimeout(o, TimeSpan.FromSeconds(1)));
+        Assert.Null(HttpProbe.QuietTimeout(o with { QuietRttFactor = null }, TimeSpan.FromMilliseconds(20)));
+    }
+
+    [Fact]
     public async Task Wrong_certificate_fails_L1_but_is_recorded()
     {
         await using var s = new TestServer(ServerMode.Ok, TestCerts.Leaf("other.test"), bodyBytes: 100);

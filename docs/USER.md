@@ -41,11 +41,26 @@
    странице нужны другие домены (CDN, картинки), программа назовёт их:
    добавьте их отдельными целями, стратегия для основного сайта при этом
    сохраняется.
-3. **Экспорт.** Выберите, куда установить: этот компьютер, Keenetic
-   (nfqws2-keenetic), zapret-gui, zapret2 на Linux/OpenWrt или просто строку
-   аргументов. Без адреса роутера сохраняется файл. На роутер и в zapret-gui
-   ничего не уходит без вашего «Да», а применение в zapret-gui — отдельная
-   вторая кнопка.
+3. **«Где включить».** Найденная стратегия сама по себе нигде не работает:
+   программа хранит её у себя (файл `current-solution.json` в папке данных,
+   переживает перезапуск, на главной есть кнопка «Где включить…»). Дальше
+   выберите одно место, на каждой карточке написано, куда попадёт стратегия
+   и как она включается:
+   - **Этот компьютер.** «Включить на этом компьютере» запускает встроенный
+     zapret2 и открывает «Монитор»; обход работает, пока открыт AutoTuner.
+     В Windows есть «Установить как службу Windows» (служба `zt_winws2`
+     работает и без AutoTuner, с загрузки) и «Удалить службу Windows». Ещё
+     можно сохранить архив для своего zapret2/winws2.
+   - **Keenetic (nfqws2-keenetic).** «Установить на роутер по SSH»: в
+     `/opt/etc/nfqws2/nfqws2.conf` заменяются только переменные стратегии
+     (с резервной копией), домены дописываются в `lists/user.list`, потом
+     nfqws2 перезапускается. Или «Сохранить архив» с README.
+   - **zapret-gui.** «Отправить в zapret-gui» сохраняет стратегию
+     «AutoTuner: <сайты>» в разделе «Стратегии», применение — отдельный
+     вопрос. Или архив для «Стратегии → Импорт».
+   - **Другие системы:** архив для zapret2 на Linux/OpenWrt
+     (`/opt/zapret2/config`) и строка аргументов.
+   Ничего не устанавливается и не применяется без вашего «Да».
 4. **Монитор.** «Включить защиту» держит стратегию запущенной и следит за её
    сайтами. Если сайт перестал открываться, программа ищет исправление и
    спрашивает, применить ли его (или применяет сама, если вы это разрешили в
@@ -184,9 +199,16 @@ cannot be protected that way: a replaced agent gets the rights on its next start
    is allowed) and, with the browser box ticked, the page. When the page needs
    other domains (a CDN, images), the program names them: add them as targets
    of their own, the strategy for the main site is kept.
-3. **Export** to this PC, Keenetic, zapret-gui, zapret2 or an argument line.
-   Nothing goes to a router or zapret-gui without your Yes; applying in
-   zapret-gui is a separate second button.
+3. **Where to turn it on.** A found strategy works nowhere by itself: the app
+   keeps it (`current-solution.json` in the data folder, it survives a restart;
+   Home has "Where to turn it on…"). Each card says where the strategy goes and
+   how it is turned on: **this PC** (the built-in zapret2 while AutoTuner is
+   open, a Windows service `zt_winws2` that runs without it, or an archive),
+   **Keenetic** over SSH (only the strategy variables of `nfqws2.conf` are
+   replaced, after a backup) or as an archive, **zapret-gui** (saved as an
+   "AutoTuner: <sites>" strategy, applying is a separate question) or as an
+   archive, and **other systems**: zapret2 on Linux/OpenWrt, an argument line.
+   Nothing is installed or applied without your Yes.
 4. **Monitor** keeps the strategy running and repairs it when a site breaks,
    asking first unless you allowed automatic fixes.
 5. **Reports** builds an archive for analysis with your IPs masked. Nothing is

@@ -92,12 +92,43 @@ public sealed class StrategySearchTests
     }
 
     [Fact]
+    public async Task Scouting_tries_every_family_before_going_deep_into_one()
+    {
+        // only a fake with the white hello, a low TTL and a split behind it works: the old order needed hundreds of trials
+        var dpi = new SimDpi((s, _) => s.Contains("fake_ttl_never", StringComparison.Ordinal) ? TrialOutcome.Success() : TrialOutcome.Fail(TrialFailure.Reset));
+        await new StrategySearch(dpi, Quick(o => o with { StopAfterFound = 99 })).RunAsync();
+        var families = StrategyGenerator.Generate(new GeneratorOptions { Mode = SearchMode.Standard }).Candidates.Select(c => c.Family).Distinct().ToList();
+        var firstRound = dpi.Runs.Take(families.Count).ToList();
+        // the first round is the head of every family, in family order
+        var gen = StrategyGenerator.Generate(new GeneratorOptions { Mode = SearchMode.Standard }).Candidates;
+        Assert.Equal(families.Select(f => gen.First(c => c.Family == f).Key), firstRound);
+        // the second round takes two of each, and nothing is lost or repeated
+        Assert.Equal(gen.Count, dpi.Runs.Count);
+        Assert.Equal(gen.Count, dpi.Runs.Distinct().Count());
+    }
+
+    [Fact]
+    public void Scouting_keeps_outside_candidates_in_front_and_rounds_grow()
+    {
+        StrategyCandidate C(string fam, int i, string src = CandidateSource.Generator) =>
+            new(Strategy.Parse($"--lua-desync=multisplit:pos={i + 1}"), fam, 0, [], L4Kind.Tcp) { Source = src };
+        var prior = C("prior", 99, CandidateSource.Prior);
+        var plan = new List<StrategyCandidate> { prior };
+        plan.AddRange(Enumerable.Range(0, 5).Select(i => C("a", i)));
+        plan.AddRange(Enumerable.Range(10, 5).Select(i => C("b", i)));
+        var scouted = StrategySearch.Scout(plan, 1);
+        Assert.Equal(["prior", "a", "b", "a", "a", "b", "b", "a", "a", "b", "b"], scouted.Select(c => c.Family));
+        Assert.Equal(plan.Count, scouted.Count);
+        Assert.Same(plan, StrategySearch.Scout(plan, 0));
+    }
+
+    [Fact]
     public async Task Dead_strategies_cost_two_attempts_and_standard_mode_cuts_dependent_families()
     {
         // multisplit:pos=2 works; everything else is dead
         const string Works = "--payload=tls_client_hello --lua-desync=multisplit:pos=2";
         var dpi = new SimDpi((s, _) => s == Works ? TrialOutcome.Success() : TrialOutcome.Fail(TrialFailure.Timeout));
-        var r = await new StrategySearch(dpi, Quick(o => o with { StopAfterFound = 99 })).RunAsync();
+        var r = await new StrategySearch(dpi, Quick(o => o with { StopAfterFound = 99, ScoutPerFamily = 0 })).RunAsync();
 
         Assert.Equal(SearchStopReason.Exhausted, r.Reason);
         Assert.Equal(Works, Assert.Single(r.Working).Candidate.Key);
@@ -224,7 +255,7 @@ public sealed class StrategySearchTests
             return TrialOutcome.Fail(TrialFailure.Reset);
         }) { Reachable = () => false };
         var log = new Log();
-        var r = await new StrategySearch(dpi, Quick(o => o with { PunishThreshold = 3 }), log).RunAsync();
+        var r = await new StrategySearch(dpi, Quick(o => o with { PunishThreshold = 3, ScoutPerFamily = 0 }), log).RunAsync();
         Assert.Equal(SearchStopReason.Punished, r.Reason);
         Assert.Equal(Midsld, r.BestPartial?.Candidate.Key);
         // the series that tripped the punishment is not held against the strategy
@@ -235,13 +266,13 @@ public sealed class StrategySearchTests
     public async Task Punishment_series_runs_again_and_only_the_rerun_is_logged()
     {
         int calls = 0;
-        // pos=1: 2 lost SYNs, pos=2: 2 lost SYNs (punishment), then the address is back and pos=2 really resets
+        // the first strategy: 2 lost SYNs, the second: 2 lost SYNs (punishment), then the address is back and the second really resets
+        var second = StrategyGenerator.Generate(new GeneratorOptions { Mode = SearchMode.Standard }).Candidates[1].Key;
         var dpi = new SimDpi((s, _) => ++calls <= 4 ? TrialOutcome.Fail(TrialFailure.NoConnect) : s.EndsWith("pos=midsld", StringComparison.Ordinal) ? TrialOutcome.Success() : TrialOutcome.Fail(TrialFailure.Reset));
         var log = new Log();
-        await new StrategySearch(dpi, Quick(o => o with { StopAfterFound = 1 }), log).RunAsync();
-        var pos2 = log.Trials.Where(t => t.Item1.EndsWith("multisplit:pos=2", StringComparison.Ordinal)).ToList();
-        Assert.Equal(2, pos2.Count);
-        Assert.Equal(4, dpi.Attempts["--payload=tls_client_hello --lua-desync=multisplit:pos=2"]);
+        await new StrategySearch(dpi, Quick(o => o with { StopAfterFound = 1, ScoutPerFamily = 0 }), log).RunAsync();
+        Assert.Equal(2, log.Trials.Count(t => t.Item1 == second));
+        Assert.Equal(4, dpi.Attempts[second]);
     }
 
     [Fact]

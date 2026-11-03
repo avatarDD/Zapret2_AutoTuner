@@ -35,6 +35,13 @@ public sealed partial class MainViewModel : ObservableObject
         // and zapret2 waits for geneva: its bypass, and its search (the probe's packets would pass both engines)
         Monitor.GenevaRunning = () => host.Geneva.RunRunning || host.Geneva.SearchRunning;
         Wizard.GenevaBusy = () => host.Geneva.RunRunning || host.Geneva.SearchRunning;
+        // "Включить на этом компьютере": the monitor runs the solution as protection
+        Wizard.ProtectHere = async () =>
+        {
+            Current = Monitor;
+            if (SessionState.I.Last?.Solution is { } s)
+                await Monitor.ApplySolutionAsync(s);
+        };
         Pages = [Home, Wizard, Monitor, Engine, Reports, Expert, Resources, Advisor, Settings];
         _current = Home;
         host.AgentLost += m => AgentStatus = Loc.Loc.I.F("agent.lost", m);
@@ -87,6 +94,13 @@ public sealed partial class MainViewModel : ObservableObject
     private string _agentStatus = "";
 
     public string Version => $"{Core.AppInfo.Version} · zapret2 {Core.AppInfo.Zapret2Version}";
+
+    /// <summary>The wizard's last step for the current solution: where to turn it on or install it.</summary>
+    public void OpenExport()
+    {
+        Wizard.Step = 5;
+        Current = Wizard;
+    }
 
     /// <summary>From the checker: start the wizard on the blocked resources.</summary>
     public void StartWizard(IEnumerable<string> hosts)

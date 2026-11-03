@@ -648,8 +648,8 @@
   "Saved"
  ],
  "export.targets_hint": [
-  "Без адреса роутера или zapret-gui будет сохранён файл. Ничего не устанавливается без вашего подтверждения.",
-  "Without a router or zapret-gui address a file is saved. Nothing is installed without your confirmation."
+  "Ничего не устанавливается и не применяется без вашего подтверждения. Пароли не сохраняются.",
+  "Nothing is installed or applied without your confirmation. Passwords are not stored."
  ],
  "export.timeout": [
   "Нет ответа вовремя: {0}",
@@ -1560,8 +1560,8 @@
   "Start trials on the router?"
  ],
  "wizard.solution": [
-  "Готово: профилей в итоговой стратегии {0}. Дальше — экспорт.",
-  "Done: {0} profiles in the final strategy. Next is export."
+  "Готово: профилей в итоговой стратегии {0}.",
+  "Done: {0} profiles in the final strategy."
  ],
  "wizard.start": [
   "Начать",
@@ -1580,12 +1580,12 @@
   "Check result"
  ],
  "wizard.step5": [
-  "Куда установить",
-  "Where to install"
+  "Где включить найденную стратегию",
+  "Where to turn the found strategy on"
  ],
  "wizard.steps": [
-  "1 Что не работает · 2 Диагностика · 3 Подбор · 4 Проверка · 5 Экспорт",
-  "1 What fails · 2 Diagnostics · 3 Search · 4 Check · 5 Export"
+  "1 Что не работает · 2 Диагностика · 3 Подбор · 4 Проверка · 5 Где включить",
+  "1 What fails · 2 Diagnostics · 3 Search · 4 Check · 5 Where to turn it on"
  ],
  "wizard.title": [
   "Подбор стратегии",
@@ -1664,8 +1664,8 @@
   "2. 'Find a strategy': list the sites, the program tries strategies by itself and checks them with a full load."
  ],
  "home.how_3": [
-  "3. Найденное включите в «Мониторе» на этом ПК или выгрузите на последнем шаге мастера: zapret2, роутер, zapret-gui.",
-  "3. Turn what was found on in Monitor on this PC, or export it at the wizard's last step: zapret2, a router, zapret-gui."
+  "3. «Где включить»: найденную стратегию включите на этом ПК одной кнопкой или установите на роутер Keenetic, в zapret-gui или в свой zapret2.",
+  "3. 'Where to turn it on': turn the found strategy on on this PC with one button, or install it on a Keenetic router, in zapret-gui or in your own zapret2."
  ],
  "home.how_more": [
   "Готовую стратегию можно открыть в «Эксперт» → «Импорт». Списки доменов, которые она использует, храните в «Ресурсах».",
@@ -1674,5 +1674,149 @@
  "resources.empty": [
   "Здесь пока пусто. Нажмите «Новый», введите имя и содержимое, затем «Сохранить».",
   "Nothing here yet. Press New, type a name and the content, then Save."
+ ],
+ "export.current": [
+  "Найденная стратегия: профилей {0}, для: {1}.\nОна сохранена в программе (файл {2}) и не пропадёт после перезапуска. Но пока она нигде не работает: включите её на этом компьютере или установите туда, где работает обход.",
+  "The found strategy: {0} profiles, for: {1}.\nIt is kept by the app (file {2}) and survives a restart. It works nowhere yet: turn it on on this PC or install it where your bypass runs."
+ ],
+ "export.intro": [
+  "Выберите одно место. Без вашего подтверждения ничего не устанавливается и не применяется.",
+  "Pick one place. Nothing is installed or applied without your confirmation."
+ ],
+ "export.pc_when": [
+  "Обход нужен только на этом компьютере.",
+  "You need the bypass on this PC only."
+ ],
+ "export.pc_how": [
+  "«Включить на этом компьютере» запускает встроенный zapret2 (winws2/nfqws2) со стратегией. Обход работает, пока открыт AutoTuner; следить и выключать — на странице «Монитор».",
+  "'Turn on on this PC' starts the built-in zapret2 (winws2/nfqws2) with the strategy. The bypass works while AutoTuner is open; watch it and turn it off on the Monitor page."
+ ],
+ "export.protect_here": [
+  "Включить на этом компьютере",
+  "Turn on on this PC"
+ ],
+ "export.pc_file": [
+  "Сохранить архив для своего zapret2",
+  "Save an archive for your own zapret2"
+ ],
+ "export.service": [
+  "Установить как службу Windows",
+  "Install as a Windows service"
+ ],
+ "export.service_hint": [
+  "Служба zt_winws2 работает и без AutoTuner, с загрузки Windows. Не включайте одновременно защиту в «Мониторе»: два движка будут обрабатывать одни и те же пакеты.",
+  "The zt_winws2 service runs without AutoTuner, from Windows start-up. Do not turn on protection in Monitor at the same time: two engines would handle the same packets."
+ ],
+ "export.service_remove": [
+  "Удалить службу Windows",
+  "Remove the Windows service"
+ ],
+ "export.service_confirm": [
+  "Установить службу zt_winws2?",
+  "Install the zt_winws2 service?"
+ ],
+ "export.service_note": [
+  "Служба будет запускаться вместе с Windows. Удалить её можно здесь же, кнопкой «Удалить службу Windows».",
+  "The service starts with Windows. Remove it here with 'Remove the Windows service'."
+ ],
+ "export.service_running": [
+  "Служба zt_winws2 установлена и запущена. Файлы стратегии: {0}",
+  "The zt_winws2 service is installed and running. Strategy files: {0}"
+ ],
+ "export.service_installed": [
+  "Служба zt_winws2 установлена, но не запустилась. Файлы стратегии: {0}",
+  "The zt_winws2 service is installed but did not start. Strategy files: {0}"
+ ],
+ "export.service_remove_confirm": [
+  "Удалить службу zt_winws2?",
+  "Remove the zt_winws2 service?"
+ ],
+ "export.service_remove_text": [
+  "Служба будет остановлена и удалена вместе со своей папкой в ProgramData.",
+  "The service is stopped and removed with its ProgramData folder."
+ ],
+ "export.service_removed": [
+  "Служба zt_winws2 удалена",
+  "The zt_winws2 service is removed"
+ ],
+ "export.service_windows_only": [
+  "Служба есть только в Windows. В Linux сохраните архив для zapret2: он ставится как служба systemd.",
+  "The service exists on Windows only. On Linux save the zapret2 archive: it runs as a systemd service."
+ ],
+ "export.keenetic_when": [
+  "Обход на роутере Keenetic с пакетом nfqws2-keenetic: работает для всех устройств дома.",
+  "The bypass on a Keenetic router with the nfqws2-keenetic package: it works for every device at home."
+ ],
+ "export.keenetic_where": [
+  "Куда попадёт: в /opt/etc/nfqws2/nfqws2.conf заменяются только переменные стратегии (перед этим делается резервная копия), наши домены дописываются в lists/user.list (ваши остаются), блобы — в blobs/. Затем nfqws2 перезапускается; при ошибке прежние файлы возвращаются. Без SSH сохраните архив: внутри README с теми же шагами.",
+  "Where it goes: only the strategy variables are replaced in /opt/etc/nfqws2/nfqws2.conf (after a backup), our domains are added to lists/user.list (yours stay), blobs go to blobs/. Then nfqws2 restarts; on an error the previous files come back. Without SSH save the archive: its README has the same steps."
+ ],
+ "export.keenetic_install": [
+  "Установить на роутер по SSH",
+  "Install on the router over SSH"
+ ],
+ "export.need_router_host": [
+  "Укажите адрес роутера и пароль SSH или сохраните архив.",
+  "Enter the router address and SSH password, or save the archive."
+ ],
+ "export.save_archive": [
+  "Сохранить архив",
+  "Save an archive"
+ ],
+ "export.gui_when": [
+  "У вас стоит zapret-gui (на роутере или ПК с Linux).",
+  "You run zapret-gui (on a router or a Linux PC)."
+ ],
+ "export.gui_where": [
+  "Куда попадёт: в zapret-gui в разделе «Стратегии» появится стратегия «AutoTuner: <сайты>» с хостлистами. Сначала она только сохраняется, применить её программа спросит отдельно. Без адреса сохраните архив и импортируйте его в zapret-gui: «Стратегии → Импорт».",
+  "Where it goes: zapret-gui gets an 'AutoTuner: <sites>' strategy under Strategies, with its hostlists. It is only saved first; the app asks separately before applying it. Without an address save the archive and import it in zapret-gui: Strategies → Import."
+ ],
+ "export.gui_send": [
+  "Отправить в zapret-gui",
+  "Send to zapret-gui"
+ ],
+ "export.need_gui_url": [
+  "Укажите адрес zapret-gui или сохраните архив.",
+  "Enter the zapret-gui address, or save the archive."
+ ],
+ "export.other": [
+  "Другие системы: zapret2 на Linux/OpenWrt, строка аргументов",
+  "Other systems: zapret2 on Linux/OpenWrt, an argument line"
+ ],
+ "export.zapret2_where": [
+  "Архив для установленного zapret2: переменные для /opt/zapret2/config (NFQWS2_OPT и другие), списки и блобы. Шаги — в README внутри.",
+  "An archive for an installed zapret2: the variables for /opt/zapret2/config (NFQWS2_OPT and others), lists and blobs. The steps are in its README."
+ ],
+ "export.argv_where": [
+  "Одна строка аргументов nfqws2/winws2 в буфер обмена — для своего скрипта запуска.",
+  "One nfqws2/winws2 argument line to the clipboard, for your own start script."
+ ],
+ "export.copy_line": [
+  "Скопировать строку",
+  "Copy the line"
+ ],
+ "wizard.next_title": [
+  "Стратегия найдена, но пока нигде не включена.",
+  "A strategy is found, but it is not turned on anywhere yet."
+ ],
+ "wizard.next_text": [
+  "Включите её на этом компьютере одной кнопкой или установите на роутер, в zapret-gui или в свой zapret2.",
+  "Turn it on on this PC with one button, or install it on a router, in zapret-gui or in your own zapret2."
+ ],
+ "wizard.next_elsewhere": [
+  "Установить на роутер или в другую программу…",
+  "Install on a router or in another program…"
+ ],
+ "home.solution_title": [
+  "Найденная стратегия сохранена",
+  "The found strategy is kept"
+ ],
+ "home.solution": [
+  "Профилей: {0}, для: {1}. Включите её на этом компьютере или установите на роутер или в zapret-gui.",
+  "{0} profiles, for: {1}. Turn it on on this PC or install it on a router or in zapret-gui."
+ ],
+ "home.solution_use": [
+  "Где включить…",
+  "Where to turn it on…"
  ]
 }

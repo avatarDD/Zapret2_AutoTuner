@@ -301,10 +301,22 @@ public static class StrategyGenerator
         string lpayload = unknown ? ":" + LuaPayloadUnknown : "";
         if (unknown)
             payload += $"--out-range={UnknownOutRange} ";
-        foreach (var template in f.Templates)
+        // Diversity first: a combination's rank is the sum of the indices of its axis values, so every template with the
+        // first value of every axis comes first, then everything one step away from that, and so on.
+        // The lexicographic order tried all repeats of one fooling before the next fooling, and all of the first
+        // template before the second: a family's winner sat deep inside it although it differs from the head in one
+        // value. Ties keep the file order.
+        var ranked = new List<(int Rank, int Seq, string Template, string[] Combo, List<(string Name, IReadOnlyList<string> Values)> Used)>();
+        int seq = 0;
+        for (int t = 0; t < f.Templates.Count; t++)
         {
+            var template = f.Templates[t];
             var used = axes.Where(a => template.Contains("{" + a.Name + "}", StringComparison.Ordinal)).ToList();
-            foreach (var combo in Product(used.Select(a => a.Values).ToList()))
+            foreach (var (combo, rank) in Product(used.Select(a => a.Values).ToList()))
+                ranked.Add((rank, seq++, template, combo, used));
+        }
+        foreach (var (_, _, template, combo, used) in ranked.OrderBy(r => r.Rank).ThenBy(r => r.Seq))
+        {
             {
                 var text = template;
                 for (int i = 0; i < used.Count; i++)
@@ -372,11 +384,12 @@ public static class StrategyGenerator
         : catalog.Sets.TryGetValue($"{name}_{protocol}", out s) ? s
         : throw new FormatException($"unknown set @{name}");
 
-    private static IEnumerable<string[]> Product(IReadOnlyList<IReadOnlyList<string>> lists)
+    /// <summary>The cartesian product (the last list varying fastest) with the sum of the value indices of each combination.</summary>
+    private static IEnumerable<(string[] Combo, int Rank)> Product(IReadOnlyList<IReadOnlyList<string>> lists)
     {
         if (lists.Count == 0)
         {
-            yield return [];
+            yield return ([], 0);
             yield break;
         }
         var idx = new int[lists.Count];
@@ -384,7 +397,7 @@ public static class StrategyGenerator
             yield break;
         while (true)
         {
-            yield return idx.Select((v, i) => lists[i][v]).ToArray();
+            yield return (idx.Select((v, i) => lists[i][v]).ToArray(), idx.Sum());
             int k = lists.Count - 1;
             while (k >= 0 && ++idx[k] == lists[k].Count)
             {

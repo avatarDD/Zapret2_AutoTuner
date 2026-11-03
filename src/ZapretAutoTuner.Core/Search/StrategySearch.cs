@@ -116,6 +116,12 @@ public sealed record SearchOptions
 {
     public GeneratorOptions Generator { get; init; } = new();
 
+    /// <summary>Candidates of each family in the scouting round before any family is gone through (0: no scouting).</summary>
+    public int ScoutPerFamily { get; init; } = 1;
+
+    /// <summary>Each next round takes this many times more candidates of every family than the previous one.</summary>
+    public double ScoutGrowth { get; init; } = 2;
+
     /// <summary>Attempts per strategy while screening; N/N is "working".</summary>
     public int Attempts { get; init; } = 3;
 
@@ -194,7 +200,17 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
         var set = StrategyGenerator.Generate(options.Generator);
         var external = options.Priors.Select(c => c.Source == CandidateSource.Generator ? c with { Source = CandidateSource.Prior } : c).ToList();
         var first = options.First.Select(c => c.Source == CandidateSource.Generator ? c with { Source = CandidateSource.Prior } : c).ToList();
-        List<StrategyCandidate> plan = options.Learning is { } learning ? new ThompsonOrder(learning).Arrange(external, set.Candidates) : [.. external, .. set.Candidates];
+        List<StrategyCandidate> plan;
+        if (options.Learning is { } learning)
+        {
+            // what the learned order puts first and what already passed here keeps its place; the rest is scouted
+            var order = new ThompsonOrder(learning);
+            var arranged = order.Arrange(external, set.Candidates);
+            int keep = arranged.TakeWhile(c => c.Source != CandidateSource.Generator || order.Succeeded(c.Key)).Count();
+            plan = [.. arranged.Take(keep), .. Scout(arranged.Skip(keep).ToList(), options.ScoutPerFamily, options.ScoutGrowth)];
+        }
+        else
+            plan = Scout([.. external, .. set.Candidates], options.ScoutPerFamily, options.ScoutGrowth);
         plan.InsertRange(0, first);
         var fromOutside = first.Concat(external).ToHashSet(ReferenceEqualityComparer.Instance);
         var catalog = FamilyCatalog.Default;
@@ -267,6 +283,46 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
             BestPartial = _bestPartial,
         });
         return new SearchResult(ranked, _bestPartial, _done, reason, Elapsed);
+    }
+
+    /// <summary>
+    /// The scouting round: the first <paramref name="perFamily"/> candidates of every family, in the order the families
+    /// come in, then everything else in the plan's order. Without it the search went through a family of a hundred
+    /// variants before it looked at the next technique, while a DPI usually lets through one technique and not another:
+    /// one or two variants of each tell more than the hundredth of the first. Candidates from outside the generator
+    /// (priors, the model's advice) keep their place in front; with the learned order, so do its leading strategies
+    /// that already passed in the history.
+    /// </summary>
+    public static List<StrategyCandidate> Scout(List<StrategyCandidate> plan, int perFamily, double growth = 2)
+    {
+        if (perFamily <= 0)
+            return plan;
+        var result = new List<StrategyCandidate>(plan.Count);
+        int lead = 0;
+        while (lead < plan.Count && plan[lead].Source != CandidateSource.Generator)
+            result.Add(plan[lead++]);
+        // families in the order they come in, each with its candidates in the plan's order
+        var families = new List<Queue<StrategyCandidate>>();
+        var byFamily = new Dictionary<string, Queue<StrategyCandidate>>(StringComparer.Ordinal);
+        foreach (var c in plan.Skip(lead))
+        {
+            var key = c.Source == CandidateSource.Generator ? c.Family : "\0" + c.Source;
+            if (!byFamily.TryGetValue(key, out var q))
+            {
+                byFamily[key] = q = new Queue<StrategyCandidate>();
+                families.Add(q);
+            }
+            q.Enqueue(c);
+        }
+        for (double size = perFamily; families.Any(q => q.Count > 0); size *= growth)
+        {
+            foreach (var q in families)
+            {
+                for (int n = 0; n < (int)size && q.Count > 0; n++)
+                    result.Add(q.Dequeue());
+            }
+        }
+        return result;
     }
 
     /// <summary>Standard mode: a family is not tried once a family it depends on already works (SCANLEVEL=standard).</summary>

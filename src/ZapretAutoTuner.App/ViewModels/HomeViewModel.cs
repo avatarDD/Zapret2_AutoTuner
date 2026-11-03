@@ -87,4 +87,20 @@ public sealed partial class HomeViewModel(MainViewModel main) : PageViewModel
 
     [RelayCommand]
     private void OpenWizard() => main.StartWizard([]);
+
+    [RelayCommand]
+    private void OpenExport() => main.OpenExport();
+
+    /// <summary>A solution from this or an earlier run is kept: the home page says so and leads to where to use it.</summary>
+    public bool HasSolution => SessionState.I.Last?.Solution is not null;
+
+    public string SolutionText => SessionState.I.Last?.Solution is { } s
+        ? L.F("home.solution", s.Profiles.Count, s.Meta.Targets.Count > 0 ? string.Join(", ", s.Meta.Targets.Take(5)) + (s.Meta.Targets.Count > 5 ? "…" : "") : "—")
+        : "";
+
+    public override void OnShown()
+    {
+        OnPropertyChanged(nameof(HasSolution));
+        OnPropertyChanged(nameof(SolutionText));
+    }
 }

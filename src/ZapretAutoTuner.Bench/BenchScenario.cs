@@ -37,7 +37,7 @@ public sealed record BenchScenario(string Id, int Asn, BlockLabel Primary, IRead
     public override string ToString() => Id;
 }
 
-/// <summary>The scenario set: four providers with two or three DPIs each and two cold ones.</summary>
+/// <summary>The scenario set: five providers with two or three DPIs each and two cold ones.</summary>
 public static class BenchScenarios
 {
     private const string White = "www.google.com";
@@ -92,6 +92,18 @@ public static class BenchScenarios
             "only hostfakesplit with a white host",
             s => Calls(s, "hostfakesplit").Any(c => c["host"] == White) ? 1 : 0),
 
+        // provider F: a modern reassembling DPI with an SNI whitelist (TSPU of 2025–2026)
+        new("f-tspu-seqovl", 64507, BlockLabel.SniBlock, [BlockLabel.SniBlock], SimFailure.Reset,
+            "RST after the ClientHello, also when it is split or preceded by a plain fake",
+            "a fake that names a white SNI (tls_mod sni=) followed by a split whose overlap carries the white hello",
+            s => Calls(s, "fake").Any(c => c["tls_mod"]?.Contains("sni=", StringComparison.Ordinal) ?? false)
+                && Calls(s, "multisplit", "multidisorder").Any(c => c["seqovl_pattern"] == "tls_white") ? 1 : 0),
+        new("f-tspu-disorder", 64507, BlockLabel.SniBlock, [BlockLabel.SniBlock], SimFailure.Reset,
+            "RST after the ClientHello, also when it is split or preceded by a plain fake",
+            "a fake with a white SNI repeated at least 6 times, then a disordered split",
+            s => Calls(s, "fake").Any(c => (c["tls_mod"]?.Contains("sni=", StringComparison.Ordinal) ?? false) && Repeats(c) >= 6)
+                && Calls(s, "multidisorder").Any() ? 1 : 0),
+
         // cold: alone on their provider
         new("e-wssize", 64505, BlockLabel.SniBlock, [BlockLabel.SniBlock], SimFailure.Reset,
             "RST after the ClientHello",
@@ -113,6 +125,8 @@ public static class BenchScenarios
     private static IEnumerable<LuaCall> Calls(Strategy s, params string[] functions) => s.Calls.Where(c => functions.Contains(c.Function));
 
     private static bool Pos(LuaCall c, string marker) => c["pos"] is { } p && p.Split(',').Any(x => x.StartsWith(marker, StringComparison.Ordinal));
+
+    private static int Repeats(LuaCall c) => int.TryParse(c["repeats"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var r) ? r : 1;
 
     private static bool Md5(LuaCall c) => c.Has("tcp_md5");
 

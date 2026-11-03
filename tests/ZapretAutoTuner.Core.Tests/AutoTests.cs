@@ -266,6 +266,24 @@ public class AutoTests
         Assert.False(s.IsActive);
     }
 
+    [Fact]
+    public void A_search_cut_by_a_power_loss_is_searched_again_after_the_restart()
+    {
+        // the state is saved on every transition: the last save before the power went off says "searching"
+        var book = new AutoBook();
+        book.Feed([Sample("web:a.com", AutoHealth.Failed, T0)], T0);
+        book.Confirmed("web:a.com", AutoConfirm.Blocked, T0);
+        book.Searching("web:a.com", T0.AddSeconds(1));
+        var saved = book.Snapshot();
+        Assert.Equal(AutoStatus.Searching, Assert.Single(saved).Status);
+
+        var restarted = new AutoBook(saved);
+        var s = restarted.Find("web:a.com")!;
+        Assert.Equal(AutoStatus.Blocked, s.Status);
+        Assert.Equal("подбор прерван, продолжу", s.Why);
+        Assert.Same(s, restarted.NextToSearch(T0.AddMinutes(1)));
+    }
+
     // ---- what is applied
 
     [Fact]

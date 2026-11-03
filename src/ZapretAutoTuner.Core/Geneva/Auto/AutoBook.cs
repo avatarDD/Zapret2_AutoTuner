@@ -133,6 +133,14 @@ public sealed class AutoBook
             // a book saved by an older version may hold the first packets of a protocol that is no longer replayed
             if (!AutoObserver.ReplayableApps.Contains(s.App))
                 s.Replay = "";
+            // a search does not survive the process: saved as searching means the power went off or the program was
+            // killed in the middle of it. Nothing picks a searching service up (NextToSearch takes blocked ones), so it
+            // would stay "в подборе" for good; it waits for its search again, as after Interrupted.
+            if (s.Status == AutoStatus.Searching)
+            {
+                s.Status = AutoStatus.Blocked;
+                s.Why = "подбор прерван, продолжу";
+            }
             _services[s.Key] = s;
         }
     }

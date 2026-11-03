@@ -13,6 +13,7 @@ public sealed class AppHost : IAsyncDisposable
     private readonly SemaphoreSlim _agentGate = new(1, 1);
     private AgentConnection? _agent;
     private readonly ResourceSync _resourceSync;
+    private readonly SolutionStore _solutions;
 
     public AppHost(string? dataDir = null)
     {
@@ -26,6 +27,7 @@ public sealed class AppHost : IAsyncDisposable
         Settings = new AppSettings(Kb);
         Resources = new ResourceStore(Kb);
         _resourceSync = new ResourceSync(Resources, ViewModels.SessionState.I);
+        _solutions = new SolutionStore(DataDir, ViewModels.SessionState.I, Resources);
         GenevaBundle = new GenevaBundle(Path.Combine(AppContext.BaseDirectory, "geneva"));
         Geneva = new Tuning.Geneva.GenevaController(
             async ct => new Tuning.Geneva.AgentGeneva((await AgentAsync(ct).ConfigureAwait(false)).Client),
@@ -37,6 +39,9 @@ public sealed class AppHost : IAsyncDisposable
             new AgentMonitor(this),
             new Tuning.Geneva.AutoProbes());
     }
+
+    /// <summary>The current solution on disk: restored at start (<see cref="SolutionStore.Restore"/>), saved on every change.</summary>
+    public SolutionStore Solutions => _solutions;
 
     /// <summary>geneva's "Авто" mode: watches the whole PC and bypasses what is blocked, each with its own strategy.</summary>
     public Tuning.Geneva.GenevaAuto GenevaAuto { get; }
@@ -159,6 +164,7 @@ public sealed class AppHost : IAsyncDisposable
             await _router.DisposeAsync().ConfigureAwait(false);
         _routerResources?.Dispose();
         _resourceSync.Dispose();
+        _solutions.Dispose();
         Kb.Dispose();
         _agentGate.Dispose();
     }

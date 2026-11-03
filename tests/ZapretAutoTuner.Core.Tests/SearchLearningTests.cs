@@ -197,7 +197,7 @@ public sealed class SearchLearningTests
 
         // the bandit off: the static order, the winner comes last
         var stat = new SimDpi(k => k == winner);
-        await new StrategySearch(stat, new SearchOptions { StopAfterFound = 1 }).RunAsync();
+        await new StrategySearch(stat, new SearchOptions { StopAfterFound = 1, Simplify = false }).RunAsync();
         Assert.Equal(set.Candidates[0].Key, stat.Runs[0]);
         Assert.Equal(winner, stat.Runs[^1]);
     }
@@ -213,6 +213,7 @@ public sealed class SearchLearningTests
         await new StrategySearch(dpi, new SearchOptions
         {
             StopAfterFound = 1,
+            Simplify = false,
             First = [mine],
             Learning = L(history, new LearningContext(Asn, Sni)),
         }).RunAsync();

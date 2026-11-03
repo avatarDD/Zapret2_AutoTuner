@@ -49,13 +49,6 @@ public sealed partial class TargetRowViewModel(string host) : ObservableObject
     partial void OnStageChanged(PipelineStage value) => OnPropertyChanged(nameof(StageText));
 }
 
-public sealed record ExportTile(string Key, string TitleKey, string HintKey)
-{
-    public string Title => Loc.Loc.I[TitleKey];
-
-    public string Hint => Loc.Loc.I[HintKey];
-}
-
 /// <summary>
 /// The main scenario, a 5-step wizard (PLAN 8): what does not work → diagnostics → search → check → export. The
 /// search runs through <see cref="TuningPipeline"/>; this only turns its events into rows, bars and log lines.
@@ -207,17 +200,91 @@ public sealed partial class WizardViewModel : PageViewModel
 
     public ObservableCollection<string> Results { get; } = [];
 
-    public IReadOnlyList<ExportTile> Tiles { get; } =
-    [
-        new("pc", "export.pc", "export.pc_hint"),
-        new("keenetic", "export.keenetic", "export.keenetic_hint"),
-        new("gui", "export.gui", "export.gui_hint"),
-        new("zapret2", "export.zapret2", "export.zapret2_hint"),
-        new("argv", "export.argv", "export.argv_hint"),
-    ];
-
+    /// <summary>
+    /// The last export's message. It also lands under the card of the destination it was for (<see cref="PcStatus"/>
+    /// and the others), so the answer is next to the button that was pressed.
+    /// </summary>
     [ObservableProperty]
     private string _exportStatus = "";
+
+    private string? _exportKey;
+
+    [ObservableProperty]
+    private string _pcStatus = "";
+
+    [ObservableProperty]
+    private string _keeneticStatus = "";
+
+    [ObservableProperty]
+    private string _guiStatus = "";
+
+    [ObservableProperty]
+    private string _zapret2Status = "";
+
+    [ObservableProperty]
+    private string _argvStatus = "";
+
+    partial void OnExportStatusChanged(string value)
+    {
+        switch (_exportKey)
+        {
+            case "pc" or "protect" or "service" or "service_remove":
+                PcStatus = value;
+                break;
+            case "keenetic" or "keenetic_ssh":
+                KeeneticStatus = value;
+                break;
+            case "gui" or "gui_send":
+                GuiStatus = value;
+                break;
+            case "zapret2":
+                Zapret2Status = value;
+                break;
+            case "argv":
+                ArgvStatus = value;
+                break;
+        }
+    }
+
+    /// <summary>There is a solution to install: the one just found, an imported one or the one kept from the last run.</summary>
+    public bool HasSolution => SessionState.I.Last?.Solution is not null;
+
+    /// <summary>What the current solution is and where the app keeps it (step 4 and 5 header).</summary>
+    public string SolutionInfo
+    {
+        get
+        {
+            if (SessionState.I.Last?.Solution is not { } s)
+                return L["wizard.no_solution"];
+            var targets = s.Meta.Targets.Count > 0 ? string.Join(", ", s.Meta.Targets.Take(8)) + (s.Meta.Targets.Count > 8 ? "…" : "") : "—";
+            return L.F("export.current", s.Profiles.Count, targets, _host.Solutions.Path);
+        }
+    }
+
+    /// <summary>Turns the solution on on this PC: the "Монитор" page starts it as protection (set by the main window).</summary>
+    public Func<Task>? ProtectHere { get; set; }
+
+    [RelayCommand]
+    private async Task ProtectHereAsync()
+    {
+        _exportKey = "protect";
+        if (!HasSolution)
+        {
+            ExportStatus = L["wizard.no_solution"];
+            return;
+        }
+        if (ProtectHere is not null)
+            await ProtectHere();
+    }
+
+    [RelayCommand]
+    private void GoExport() => Step = 5;
+
+    partial void OnStepChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasSolution));
+        OnPropertyChanged(nameof(SolutionInfo));
+    }
 
     [ObservableProperty]
     private string _routerHost = "";
@@ -811,11 +878,14 @@ public sealed partial class WizardViewModel : PageViewModel
                 row.Result = t.Best?.Candidate.Strategy.ToString() ?? "";
         }
         Summary = r.Solution is null ? L["wizard.no_solution"] : L.F("wizard.solution", r.Solution.Profiles.Count);
+        OnPropertyChanged(nameof(HasSolution));
+        OnPropertyChanged(nameof(SolutionInfo));
     }
 
     [RelayCommand]
     private async Task ExportAsync(string key)
     {
+        _exportKey = key;
         var s = SessionState.I.Last?.Solution;
         if (s is null)
         {
@@ -834,10 +904,20 @@ public sealed partial class WizardViewModel : PageViewModel
                 case "zapret2":
                     await Save(Zapret2Exporter.Build(s), "autotuner-zapret2.zip");
                     break;
+                case "service":
+                    await ServiceAsync(s);
+                    break;
+
                 case "keenetic":
+                    await Save(KeeneticExporter.Build(s), "autotuner-keenetic.zip");
+                    break;
+                case "keenetic_ssh":
                     await KeeneticAsync(s);
                     break;
                 case "gui":
+                    await Save(ZapretGuiExporter.Build(s), "autotuner-zapret-gui.zip");
+                    break;
+                case "gui_send":
                     await GuiAsync(s);
                     break;
                 case "argv":
@@ -872,13 +952,61 @@ public sealed partial class WizardViewModel : PageViewModel
         ExportStatus = pkg.Warnings.Count > 0 ? string.Join("\n", pkg.Warnings) : L["export.saved"];
     }
 
+    /// <summary>Windows: the winws2 service is offered (it runs without the app, from boot on).</summary>
+    public bool IsWindows => OperatingSystem.IsWindows();
+
+    /// <summary>
+    /// Windows: the solution as the zt_winws2 service (PLAN 5.3), after the user saw the plan and said yes. The Agent
+    /// copies the export into ProgramData and creates the service; it keeps working after AutoTuner is closed.
+    /// </summary>
+    private async Task ServiceAsync(Solution s)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            ExportStatus = L["export.service_windows_only"];
+            return;
+        }
+        var pkg = WinwsExporter.Build(s);
+        var plan = string.Join("\n", WindowsServiceDelivery.Plan(pkg).Select(st => "• " + L.Pick(st.Ru, st.En)));
+        if (Confirm is null || !await Confirm(L["export.service_confirm"], plan + "\n\n" + L["export.service_note"]))
+            return;
+        var agent = await _host.AgentAsync(CancellationToken.None);
+        var r = await WindowsServiceDelivery.InstallAsync(agent.Client, pkg, confirmedByUser: true);
+        ExportStatus = r.Installed ? L.F(r.Running ? "export.service_running" : "export.service_installed", r.Directory) : L.F("export.failed", r.Output);
+    }
+
+    /// <summary>Removes the zt_winws2 service; needs no solution, only the user's yes.</summary>
+    [RelayCommand]
+    private async Task RemoveServiceAsync()
+    {
+        _exportKey = "service_remove";
+        if (!OperatingSystem.IsWindows())
+        {
+            ExportStatus = L["export.service_windows_only"];
+            return;
+        }
+        if (Confirm is null || !await Confirm(L["export.service_remove_confirm"], L["export.service_remove_text"]))
+            return;
+        try
+        {
+            var agent = await _host.AgentAsync(CancellationToken.None);
+            var r = await WindowsServiceDelivery.RemoveAsync(agent.Client, confirmedByUser: true);
+            ExportStatus = r.Installed ? L.F("export.failed", r.Output) : L["export.service_removed"];
+        }
+        catch (Exception e)
+        {
+            ExportStatus = L.F("export.failed", e.Message);
+            Problem = BugReports.From(e);
+        }
+    }
+
     /// <summary>Keenetic: a file by default; over SSH only after the user saw the plan and said yes.</summary>
     private async Task KeeneticAsync(Solution s)
     {
         var pkg = KeeneticExporter.Build(s);
         if (string.IsNullOrWhiteSpace(RouterHost))
         {
-            await Save(pkg, "autotuner-keenetic.zip");
+            ExportStatus = L["export.need_router_host"];
             return;
         }
         var host = RouterHost.Trim();
@@ -909,8 +1037,7 @@ public sealed partial class WizardViewModel : PageViewModel
     {
         if (string.IsNullOrWhiteSpace(GuiUrl))
         {
-            var pkg = ZapretGuiExporter.Build(s);
-            await Save(pkg, "autotuner-zapret-gui.zip");
+            ExportStatus = L["export.need_gui_url"];
             return;
         }
         if (ZapretGuiClient.BaseAddress(GuiUrl) is not { } baseAddress)

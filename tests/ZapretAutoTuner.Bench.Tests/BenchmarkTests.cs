@@ -75,10 +75,10 @@ public sealed class BenchmarkTests(ITestOutputHelper output)
         var b = await new SearchBenchmark(SmallOptions with { Seeds = 2 }).RunAsync();
         Assert.Equal(a.Runs, b.Runs);
         Assert.Equal([BenchArm.Static, BenchArm.Bandit], a.Arms);
-        // the static order tries the families in order: the midsld split is the third multisplit candidate
+        // the static order scouts every family once, then goes deeper: the midsld split comes in the second round
         var first = a.Runs.First(r => r.Scenario == "a-split-midsld" && r.Arm == BenchArm.Static);
         Assert.True(first.Success);
-        Assert.Equal(3, first.Strategies);
+        Assert.InRange(first.Strategies, 2, 20);
         Assert.Contains("midsld", first.Winner, StringComparison.Ordinal);
     }
 
@@ -117,20 +117,21 @@ public sealed class BenchmarkTests(ITestOutputHelper output)
             Assert.True(b.Failures <= st.Failures && (b.Median ?? int.MaxValue) <= (st.Median ?? int.MaxValue),
                 $"{id}: bandit median {b.Median} ({b.Failures} failed), static {st.Median} ({st.Failures} failed)");
         }
-        // a deterministic DPI whose winner the learned order knows: it is tried first in most draws (static: 3; before
-        // the leave-one-out prior the median was 60), and an exploring draw costs one untried family, not all of them
+        // a deterministic DPI whose winner the learned order knows: it comes within the first strategies the siblings won
+        // with in most draws (static: about 10; before the leave-one-out prior the median was 60), and an exploring draw
+        // costs one untried family, not all of them
         var midsld = report.Runs.Where(r => r.Scenario == "a-split-midsld" && r.Arm == BenchArm.Bandit).ToList();
-        Assert.True(midsld.Count(r => r.Success && r.Strategies == 1) >= 7, string.Join(", ", midsld.Select(r => r.Strategies)));
+        Assert.True(midsld.Count(r => r.Success && r.Strategies <= 3) >= 7, string.Join(", ", midsld.Select(r => r.Strategies)));
         Assert.All(midsld, r => Assert.True(r.Success && r.Strategies <= 30, $"seed {r.Seed}: {r.Strategies}"));
     }
 
     [Fact]
     public async Task TheReportHasTheTablesAndTheJson()
     {
-        var report = await new SearchBenchmark(new BenchOptions { Scenarios = BenchScenarios.Select(["a-split-midsld", "a-disorder", "e-wssize"]), Seeds = 1, Budget = 50 }).RunAsync();
+        var report = await new SearchBenchmark(new BenchOptions { Scenarios = BenchScenarios.Select(["a-split-midsld", "a-disorder", "e-none"]), Seeds = 1, Budget = 50 }).RunAsync();
         var md = BenchFormat.Markdown(report);
         Assert.Contains("| static | 3 |", md, StringComparison.Ordinal);
-        Assert.Contains("| e-wssize | 64505 | no |", md, StringComparison.Ordinal);
+        Assert.Contains("| e-none | 64506 | no |", md, StringComparison.Ordinal);
         Assert.Contains("> 50", md, StringComparison.Ordinal);
         Assert.Contains("Model arms not run", md, StringComparison.Ordinal);
         var json = JsonNode.Parse(BenchFormat.Json(report))!;

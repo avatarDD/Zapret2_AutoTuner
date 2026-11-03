@@ -33,6 +33,7 @@ public sealed class LearnedOrderTests
         {
             Generator = new GeneratorOptions { Mode = SearchMode.Quick },
             StopAfterFound = 1,
+            Simplify = false,
             Learning = learning ? TuningSession.Learning(kb, new LearningContext(asn, Label)) with { Seed = 3 } : null,
         };
         options = TuningSession.Prepare(kb, options, session, asn);
@@ -49,7 +50,8 @@ public sealed class LearnedOrderTests
         const int Asn = 12389;
         long network = kb.Network(new NetworkInfo(Asn, null));
         var set = StrategyGenerator.Generate(new GeneratorOptions { Mode = SearchMode.Quick });
-        var winner = set.Candidates[^1];
+        // the last strategy the static order (with its scouting rounds) gets to
+        var winner = StrategySearch.Scout([.. set.Candidates], new SearchOptions().ScoutPerFamily, new SearchOptions().ScoutGrowth)[^1];
         bool Works(string k) => k == winner.Key;
 
         // first time: the static order, the winner is found last

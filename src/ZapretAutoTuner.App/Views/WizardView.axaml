@@ -129,6 +129,25 @@
         <StackPanel Spacing="8">
           <TextBlock Classes="h2" Text="{l:T wizard.step4}" />
           <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+          <!-- the found strategy works nowhere yet: say so, and offer the two ways on -->
+          <Border Classes="card">
+            <Border.IsVisible>
+              <MultiBinding Converter="{x:Static BoolConverters.And}">
+                <Binding Path="HasSolution" />
+                <Binding Path="OnPc" />
+              </MultiBinding>
+            </Border.IsVisible>
+            <StackPanel Spacing="6">
+              <TextBlock Text="{l:T wizard.next_title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Text="{l:T wizard.next_text}" TextWrapping="Wrap" />
+              <WrapPanel>
+                <Button Classes="accent" Margin="0,0,8,0" Content="{l:T export.protect_here}" Command="{Binding ProtectHereCommand}" />
+                <Button Content="{l:T wizard.next_elsewhere}" Command="{Binding GoExportCommand}" />
+              </WrapPanel>
+              <TextBlock Classes="muted" Text="{l:T export.pc_how}" TextWrapping="Wrap" />
+              <SelectableTextBlock Text="{Binding PcStatus}" TextWrapping="Wrap" IsVisible="{Binding PcStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Border>
           <StackPanel Spacing="6" IsVisible="{Binding OnRouter}">
             <Button Classes="accent" Content="{l:T wizard.router_commit}" Command="{Binding CommitRouterCommand}" IsVisible="{Binding CanCommitRouter}" IsEnabled="{Binding !Running}" />
             <SelectableTextBlock Text="{Binding RouterStatus}" TextWrapping="Wrap" />
@@ -152,36 +171,93 @@
         </StackPanel>
       </ScrollViewer>
 
-      <!-- step 5: export -->
+      <!-- step 5: where the found strategy goes. Each destination says where it ends up and how it is turned on;
+           its fields and its answer are on its own card. -->
       <ScrollViewer IsVisible="{Binding IsStep5}">
         <StackPanel Spacing="10">
           <TextBlock Classes="h2" Text="{l:T wizard.step5}" />
-          <ItemsControl ItemsSource="{Binding Tiles}">
-            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:ExportTile">
-                <Button Width="230" Height="110" Margin="0,0,8,8" HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
-                        Command="{Binding $parent[ItemsControl].((vm:WizardViewModel)DataContext).ExportCommand}" CommandParameter="{Binding Key}">
-                  <StackPanel Spacing="4">
-                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="15" />
-                    <TextBlock Text="{Binding Hint}" Classes="muted" FontSize="12" />
-                  </StackPanel>
-                </Button>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4">
-            <TextBlock Text="{l:T export.router_host}" VerticalAlignment="Center" Margin="0,0,8,6" />
-            <TextBox Grid.Column="1" Text="{Binding RouterHost}" Watermark="192.168.1.1" Margin="0,0,0,6" />
-            <TextBlock Grid.Row="1" Text="{l:T export.router_password}" VerticalAlignment="Center" Margin="0,0,8,6" />
-            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding RouterPassword}" PasswordChar="•" Margin="0,0,0,6" />
-            <TextBlock Grid.Row="2" Text="{l:T export.gui_url}" VerticalAlignment="Center" Margin="0,0,8,6" />
-            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding GuiUrl}" Watermark="http://192.168.1.1:8080" Margin="0,0,0,6" />
-            <TextBlock Grid.Row="3" Text="{l:T export.gui_password}" VerticalAlignment="Center" Margin="0,0,8,6" />
-            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding GuiPassword}" PasswordChar="•" Margin="0,0,0,6" />
-          </Grid>
-          <TextBlock Classes="muted" Text="{l:T export.targets_hint}" />
-          <SelectableTextBlock Text="{Binding ExportStatus}" TextWrapping="Wrap" />
+          <Border Classes="card">
+            <StackPanel Spacing="4">
+              <SelectableTextBlock Text="{Binding SolutionInfo}" TextWrapping="Wrap" />
+              <TextBlock Classes="muted" Text="{l:T export.intro}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <!-- this PC -->
+          <Border Classes="card">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{l:T export.pc}" FontWeight="SemiBold" FontSize="15" />
+              <TextBlock Text="{l:T export.pc_when}" TextWrapping="Wrap" />
+              <TextBlock Classes="muted" Text="{l:T export.pc_how}" TextWrapping="Wrap" />
+              <WrapPanel>
+                <Button Classes="accent" Margin="0,0,8,0" Content="{l:T export.protect_here}" Command="{Binding ProtectHereCommand}" IsEnabled="{Binding HasSolution}" />
+                <Button Margin="0,0,8,0" Content="{l:T export.service}" Command="{Binding ExportCommand}" CommandParameter="service" IsEnabled="{Binding HasSolution}" IsVisible="{Binding IsWindows}" />
+                <Button Content="{l:T export.pc_file}" Command="{Binding ExportCommand}" CommandParameter="pc" IsEnabled="{Binding HasSolution}" />
+              </WrapPanel>
+              <TextBlock Classes="muted" Text="{l:T export.service_hint}" TextWrapping="Wrap" IsVisible="{Binding IsWindows}" />
+              <Button HorizontalAlignment="Left" Content="{l:T export.service_remove}" Command="{Binding RemoveServiceCommand}" IsVisible="{Binding IsWindows}" />
+              <SelectableTextBlock Text="{Binding PcStatus}" TextWrapping="Wrap" IsVisible="{Binding PcStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Border>
+
+          <!-- Keenetic -->
+          <Border Classes="card">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{l:T export.keenetic}" FontWeight="SemiBold" FontSize="15" />
+              <TextBlock Text="{l:T export.keenetic_when}" TextWrapping="Wrap" />
+              <TextBlock Classes="muted" Text="{l:T export.keenetic_where}" TextWrapping="Wrap" />
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                <TextBlock Text="{l:T export.router_host}" VerticalAlignment="Center" Margin="0,0,8,6" />
+                <TextBox Grid.Column="1" Text="{Binding RouterHost}" Watermark="192.168.1.1" Margin="0,0,0,6" />
+                <TextBlock Grid.Row="1" Text="{l:T export.router_password}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding RouterPassword}" PasswordChar="•" />
+              </Grid>
+              <WrapPanel>
+                <Button Classes="accent" Margin="0,0,8,0" Content="{l:T export.keenetic_install}" Command="{Binding ExportCommand}" CommandParameter="keenetic_ssh" IsEnabled="{Binding HasSolution}" />
+                <Button Content="{l:T export.save_archive}" Command="{Binding ExportCommand}" CommandParameter="keenetic" IsEnabled="{Binding HasSolution}" />
+              </WrapPanel>
+              <SelectableTextBlock Text="{Binding KeeneticStatus}" TextWrapping="Wrap" IsVisible="{Binding KeeneticStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Border>
+
+          <!-- zapret-gui -->
+          <Border Classes="card">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{l:T export.gui}" FontWeight="SemiBold" FontSize="15" />
+              <TextBlock Text="{l:T export.gui_when}" TextWrapping="Wrap" />
+              <TextBlock Classes="muted" Text="{l:T export.gui_where}" TextWrapping="Wrap" />
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                <TextBlock Text="{l:T export.gui_url}" VerticalAlignment="Center" Margin="0,0,8,6" />
+                <TextBox Grid.Column="1" Text="{Binding GuiUrl}" Watermark="http://192.168.1.1:8080" Margin="0,0,0,6" />
+                <TextBlock Grid.Row="1" Text="{l:T export.gui_password}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding GuiPassword}" PasswordChar="•" />
+              </Grid>
+              <WrapPanel>
+                <Button Classes="accent" Margin="0,0,8,0" Content="{l:T export.gui_send}" Command="{Binding ExportCommand}" CommandParameter="gui_send" IsEnabled="{Binding HasSolution}" />
+                <Button Content="{l:T export.save_archive}" Command="{Binding ExportCommand}" CommandParameter="gui" IsEnabled="{Binding HasSolution}" />
+              </WrapPanel>
+              <SelectableTextBlock Text="{Binding GuiStatus}" TextWrapping="Wrap" IsVisible="{Binding GuiStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Border>
+
+          <!-- other systems -->
+          <Expander Header="{l:T export.other}">
+            <StackPanel Spacing="10">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{l:T export.zapret2}" FontWeight="SemiBold" />
+                <TextBlock Classes="muted" Text="{l:T export.zapret2_where}" TextWrapping="Wrap" />
+                <Button Content="{l:T export.save_archive}" Command="{Binding ExportCommand}" CommandParameter="zapret2" IsEnabled="{Binding HasSolution}" />
+                <SelectableTextBlock Text="{Binding Zapret2Status}" TextWrapping="Wrap" IsVisible="{Binding Zapret2Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              </StackPanel>
+              <StackPanel Spacing="6">
+                <TextBlock Text="{l:T export.argv}" FontWeight="SemiBold" />
+                <TextBlock Classes="muted" Text="{l:T export.argv_where}" TextWrapping="Wrap" />
+                <Button Content="{l:T export.copy_line}" Command="{Binding ExportCommand}" CommandParameter="argv" IsEnabled="{Binding HasSolution}" />
+                <SelectableTextBlock Text="{Binding ArgvStatus}" TextWrapping="Wrap" IsVisible="{Binding ArgvStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              </StackPanel>
+            </StackPanel>
+          </Expander>
+          <TextBlock Classes="muted" Text="{l:T export.targets_hint}" TextWrapping="Wrap" />
         </StackPanel>
       </ScrollViewer>
     </Panel>

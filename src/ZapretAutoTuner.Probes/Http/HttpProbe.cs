@@ -60,6 +60,17 @@ public sealed record HttpProbeOptions
 
     public TimeSpan HandshakeTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// When set, a ClientHello that gets not a single byte back within this many TCP connect times (at least
+    /// <see cref="MinQuietTimeout"/>) fails at once instead of after <see cref="HandshakeTimeout"/>: a DPI that drops
+    /// the hello answers nothing, while a server, however slow its handshake (a tiny window), starts answering within a
+    /// few round trips. Bytes that do arrive keep the full timeout. The search sets it; a dead strategy then costs
+    /// about 1.5 s per attempt instead of 5.
+    /// </summary>
+    public double? QuietRttFactor { get; init; }
+
+    public TimeSpan MinQuietTimeout { get; init; } = TimeSpan.FromMilliseconds(1500);
+
     /// <summary>No incoming bytes for this long after the request means a stall.</summary>
     public TimeSpan StallTimeout { get; init; } = TimeSpan.FromSeconds(3);
 
@@ -140,7 +151,10 @@ public static class HttpProbe
                 {
                     using var cts = CancellationTokenSource.CreateLinkedTokenSource(total.Token);
                     cts.CancelAfter(o.HandshakeTimeout);
-                    await ssl.AuthenticateAsClientAsync(auth, cts.Token).ConfigureAwait(false);
+                    var handshake = ssl.AuthenticateAsClientAsync(auth, cts.Token);
+                    if (QuietTimeout(o, r.ConnectTime) is { } quiet)
+                        await WatchQuietAsync(handshake, raw, quiet, cts).ConfigureAwait(false);
+                    await handshake.ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
@@ -174,6 +188,43 @@ public static class HttpProbe
             if (ssl is not null)
                 await ssl.DisposeAsync().ConfigureAwait(false);
             await raw.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>How long a ClientHello may go without any answer (<see cref="HttpProbeOptions.QuietRttFactor"/>); null: the full timeout.</summary>
+    internal static TimeSpan? QuietTimeout(HttpProbeOptions o, TimeSpan? connectTime)
+    {
+        if (o.QuietRttFactor is not { } factor || connectTime is not { } rtt)
+            return null;
+        var quiet = TimeSpan.FromTicks(Math.Max(o.MinQuietTimeout.Ticks, (long)(rtt.Ticks * factor)));
+        return quiet < o.HandshakeTimeout ? quiet : null;
+    }
+
+    /// <summary>
+    /// Cancels the handshake when the hello has been out for <paramref name="quiet"/> without a byte back. The clock starts
+    /// when the hello is written, not when the handshake starts: a busy client may take seconds to build it.
+    /// </summary>
+    private static async Task WatchQuietAsync(Task handshake, CountingStream raw, TimeSpan quiet, CancellationTokenSource cts)
+    {
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+        try
+        {
+            var step = TimeSpan.FromMilliseconds(Math.Min(100, quiet.TotalMilliseconds / 4));
+            while (!handshake.IsCompleted && raw.BytesIn == 0)
+            {
+                long sent = raw.FirstWriteAt;
+                if (sent != 0 && Stopwatch.GetElapsedTime(sent) >= quiet)
+                {
+                    await cts.CancelAsync().ConfigureAwait(false);
+                    return;
+                }
+                var delay = sent == 0 ? step : quiet - Stopwatch.GetElapsedTime(sent);
+                await Task.WhenAny(handshake, Task.Delay(delay > TimeSpan.Zero ? delay : step, wait.Token)).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await wait.CancelAsync().ConfigureAwait(false);
         }
     }
 

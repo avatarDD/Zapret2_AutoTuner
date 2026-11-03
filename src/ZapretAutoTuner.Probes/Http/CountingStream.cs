@@ -9,6 +9,11 @@ internal sealed class CountingStream(Stream inner) : Stream
 
     public long BytesOut { get; private set; }
 
+    /// <summary><see cref="System.Diagnostics.Stopwatch"/> timestamp of the first write that went out; 0 before it.</summary>
+    public long FirstWriteAt => Interlocked.Read(ref _firstWriteAt);
+
+    private long _firstWriteAt;
+
     public bool Reset { get; private set; }
 
     public bool Eof { get; private set; }
@@ -49,6 +54,7 @@ internal sealed class CountingStream(Stream inner) : Stream
         {
             await inner.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
             BytesOut += buffer.Length;
+            Interlocked.CompareExchange(ref _firstWriteAt, System.Diagnostics.Stopwatch.GetTimestamp(), 0);
         }
         catch (Exception e) when (IsReset(e))
         {

@@ -23,6 +23,14 @@
         <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
       </StackPanel>
     </StackPanel>
+    <!-- the strategy found earlier is kept: where it is and where to use it -->
+    <Border DockPanel.Dock="Top" Classes="card" Margin="0,12,0,0" IsVisible="{Binding HasSolution}">
+      <StackPanel Spacing="6">
+        <TextBlock Text="{l:T home.solution_title}" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding SolutionText}" TextWrapping="Wrap" />
+        <Button Classes="accent" HorizontalAlignment="Left" Content="{l:T home.solution_use}" Command="{Binding OpenExportCommand}" />
+      </StackPanel>
+    </Border>
     <Border DockPanel.Dock="Top" Classes="card" Margin="0,12,0,0" IsVisible="{Binding !Rows.Count}">
       <StackPanel Spacing="6">
         <TextBlock Text="{l:T home.how_title}" FontWeight="SemiBold" />

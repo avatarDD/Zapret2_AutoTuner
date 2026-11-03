@@ -116,6 +116,18 @@ public sealed record SearchOptions
 {
     public GeneratorOptions Generator { get; init; } = new();
 
+    /// <summary>Candidates of each family in the scouting round before any family is gone through (0: no scouting).</summary>
+    public int ScoutPerFamily { get; init; } = 1;
+
+    /// <summary>Each next round takes this many times more candidates of every family than the previous one.</summary>
+    public double ScoutGrowth { get; init; } = 2;
+
+    /// <summary>A found combination is checked against its simpler parts (<see cref="StrategyMutator.Simplify"/>).</summary>
+    public bool Simplify { get; init; } = true;
+
+    /// <summary>Simpler variants tried per found strategy.</summary>
+    public int SimplifyBudget { get; init; } = 6;
+
     /// <summary>Attempts per strategy while screening; N/N is "working".</summary>
     public int Attempts { get; init; } = 3;
 
@@ -194,7 +206,17 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
         var set = StrategyGenerator.Generate(options.Generator);
         var external = options.Priors.Select(c => c.Source == CandidateSource.Generator ? c with { Source = CandidateSource.Prior } : c).ToList();
         var first = options.First.Select(c => c.Source == CandidateSource.Generator ? c with { Source = CandidateSource.Prior } : c).ToList();
-        List<StrategyCandidate> plan = options.Learning is { } learning ? new ThompsonOrder(learning).Arrange(external, set.Candidates) : [.. external, .. set.Candidates];
+        List<StrategyCandidate> plan;
+        if (options.Learning is { } learning)
+        {
+            // what the learned order puts first and what already passed here keeps its place; the rest is scouted
+            var order = new ThompsonOrder(learning);
+            var arranged = order.Arrange(external, set.Candidates);
+            int keep = arranged.TakeWhile(c => c.Source != CandidateSource.Generator || order.Succeeded(c.Key)).Count();
+            plan = [.. arranged.Take(keep), .. Scout(arranged.Skip(keep).ToList(), options.ScoutPerFamily, options.ScoutGrowth)];
+        }
+        else
+            plan = Scout([.. external, .. set.Candidates], options.ScoutPerFamily, options.ScoutGrowth);
         plan.InsertRange(0, first);
         var fromOutside = first.Concat(external).ToHashSet(ReferenceEqualityComparer.Instance);
         var catalog = FamilyCatalog.Default;
@@ -218,10 +240,13 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
                 var started = Elapsed;
                 int seriesBefore = _seriesRun;
                 var eff = await ScreenAsync(c, ct).ConfigureAwait(false);
+                int foundBefore = _found.Count;
                 if (eff.Partial)
                     await RefineAsync(c, eff, remaining, ct).ConfigureAwait(false);
                 else if (eff.Working)
                     AddFound(new FoundStrategy(c, eff, Score(c.Strategy, eff)));
+                if (_found.Count > foundBefore && options.Simplify)
+                    await SimplifyAsync(_found[^1], set.Candidates, remaining, ct).ConfigureAwait(false);
                 _done++;
                 // results taken from an interrupted session cost nothing and would make the estimate collapse
                 if (_seriesRun > seriesBefore)
@@ -267,6 +292,46 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
             BestPartial = _bestPartial,
         });
         return new SearchResult(ranked, _bestPartial, _done, reason, Elapsed);
+    }
+
+    /// <summary>
+    /// The scouting round: the first <paramref name="perFamily"/> candidates of every family, in the order the families
+    /// come in, then everything else in the plan's order. Without it the search went through a family of a hundred
+    /// variants before it looked at the next technique, while a DPI usually lets through one technique and not another:
+    /// one or two variants of each tell more than the hundredth of the first. Candidates from outside the generator
+    /// (priors, the model's advice) keep their place in front; with the learned order, so do its leading strategies
+    /// that already passed in the history.
+    /// </summary>
+    public static List<StrategyCandidate> Scout(List<StrategyCandidate> plan, int perFamily, double growth = 2)
+    {
+        if (perFamily <= 0)
+            return plan;
+        var result = new List<StrategyCandidate>(plan.Count);
+        int lead = 0;
+        while (lead < plan.Count && plan[lead].Source != CandidateSource.Generator)
+            result.Add(plan[lead++]);
+        // families in the order they come in, each with its candidates in the plan's order
+        var families = new List<Queue<StrategyCandidate>>();
+        var byFamily = new Dictionary<string, Queue<StrategyCandidate>>(StringComparer.Ordinal);
+        foreach (var c in plan.Skip(lead))
+        {
+            var key = c.Source == CandidateSource.Generator ? c.Family : "\0" + c.Source;
+            if (!byFamily.TryGetValue(key, out var q))
+            {
+                byFamily[key] = q = new Queue<StrategyCandidate>();
+                families.Add(q);
+            }
+            q.Enqueue(c);
+        }
+        for (double size = perFamily; families.Any(q => q.Count > 0); size *= growth)
+        {
+            foreach (var q in families)
+            {
+                for (int n = 0; n < (int)size && q.Count > 0; n++)
+                    result.Add(q.Dequeue());
+            }
+        }
+        return result;
     }
 
     /// <summary>Standard mode: a family is not tried once a family it depends on already works (SCANLEVEL=standard).</summary>
@@ -359,6 +424,58 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
             if (_bestPartial is null || best.Efficiency.Rate > _bestPartial.Efficiency.Rate)
                 _bestPartial = best;
         }
+    }
+
+    /// <summary>
+    /// A found strategy with parts that may be unnecessary is checked against its simpler neighbours
+    /// (<see cref="StrategyMutator.Simplify"/>), each over a full refinement series that stops at the first failure.
+    /// A working one is added and simplified in turn; it ranks first by its score. A variant the generator also makes
+    /// takes that candidate's family.
+    /// </summary>
+    private async Task SimplifyAsync(FoundStrategy found, IReadOnlyList<StrategyCandidate> generated, int remaining, CancellationToken ct)
+    {
+        var queue = new Queue<FoundStrategy>([found]);
+        int budget = options.SimplifyBudget;
+        while (queue.Count > 0 && budget > 0)
+        {
+            var f = queue.Dequeue();
+            foreach (var m in StrategyMutator.Simplify(f.Candidate.Strategy, options.Generator, l4: f.Candidate.L4))
+            {
+                if (budget <= 0)
+                    break;
+                if (!_tried.Add(m.Strategy.ToString()))
+                    continue;
+                budget--;
+                var known = generated.FirstOrDefault(g => g.Key == m.Strategy.ToString());
+                var child = known ?? f.Candidate with { Strategy = m.Strategy, Family = FamilyOf(m.Strategy, f.Candidate.Family), Source = CandidateSource.Mutation };
+                Report(SearchStage.Refining, child, remaining, $"Упрощаю найденную: {m.What}", $"Simplifying the found one: {m.What}");
+                var e = options.AlreadyTried.TryGetValue(child.Key, out var k) && k.Attempts > 0
+                    ? k
+                    : Count(await RunAsync(child, options.PartialAttempts, o => o.Any(x => !x.Ok), ct).ConfigureAwait(false));
+                if (!e.Working || e.Attempts < options.PartialAttempts)
+                    continue;
+                var path = f.MutationPath is { } p ? p + " → " + m.What : m.What;
+                var simpler = new FoundStrategy(child, e, Score(child.Strategy, e), path);
+                AddFound(simpler);
+                queue.Enqueue(simpler);
+            }
+        }
+    }
+
+    /// <summary>The family a single-instance strategy belongs to by its function, for one the generator does not make itself.</summary>
+    internal static string FamilyOf(Strategy s, string fallback)
+    {
+        if (s.InstanceCount != 1)
+            return fallback;
+        var c = s.Calls.Single();
+        return c.Function switch
+        {
+            "multisplit" or "multidisorder" => c.Has("seqovl") ? "seqovl" : "multisplit",
+            "fake" => c.Has("ip_ttl") || c.Has("ip_autottl") ? "fake_ttl" : "fake",
+            "fakedsplit" or "fakeddisorder" => "faked",
+            "hostfakesplit" => "hostfake",
+            _ => fallback,
+        };
     }
 
     /// <summary>

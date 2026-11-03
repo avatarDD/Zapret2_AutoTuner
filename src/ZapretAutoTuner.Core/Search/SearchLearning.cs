@@ -177,6 +177,9 @@ public sealed class ThompsonOrder
     /// </summary>
     public BetaPosterior Strategy(string key) => Arm(_byStrategy[key]).Post;
 
+    /// <summary>The strategy passed at least once in the history this order learns from.</summary>
+    public bool Succeeded(string key) => _byStrategy[key].Any(x => x.R.Successes > 0);
+
     /// <summary>An arm's posterior (from <paramref name="prior"/>, or the other arms' pool) and the unexplored prior it competes with.</summary>
     private (BetaPosterior Post, BetaPosterior Unexplored) Arm(IEnumerable<(ArmStat R, double W)> rows, double? prior = null)
     {

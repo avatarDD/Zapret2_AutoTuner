@@ -191,6 +191,41 @@ public static class StrategyMutator
         return result;
     }
 
+    /// <summary>
+    /// Simpler neighbours of a strategy that works: each instance left out in turn (a fake before a split may be
+    /// unnecessary, or the split after a fake), and the sequence overlap taken off a split. Scouting reaches a
+    /// combination family before it has gone through the plain splits, so a found combination is checked against
+    /// its parts: the simplest that also works ranks first (dpi-diagnostics §6.3). Every variant passes the Validator.
+    /// </summary>
+    public static List<Mutation> Simplify(Strategy parent, GeneratorOptions? options = null, IReadOnlyDictionary<string, string>? blobs = null, L4Kind? l4 = null)
+    {
+        options ??= new GeneratorOptions();
+        blobs ??= new Dictionary<string, string> { [StrategyGenerator.WhiteBlob] = StrategyGenerator.WhiteHelloHex(options.WhiteSni) };
+        var validator = new StrategyValidator(new ValidationContext
+        {
+            Platform = options.Platform,
+            DeclaredBlobs = blobs.ToDictionary(kv => kv.Key, kv => (long?)((kv.Value.Length - 2) / 2)),
+        });
+        var kind = l4 ?? InferL4(parent);
+        var actions = parent.Actions;
+        var raw = new List<Mutation>();
+        if (parent.InstanceCount > 1)
+        {
+            for (int i = 0; i < actions.Count; i++)
+            {
+                if (actions[i] is LuaDesync { Call: var call })
+                    raw.Add(new Mutation(new Strategy(actions.Where((_, j) => j != i)), $"{call.Function}: убран / dropped"));
+            }
+        }
+        for (int i = 0; i < actions.Count; i++)
+        {
+            if (actions[i] is LuaDesync { Call: var call } && call.Function is "multisplit" or "multidisorder" && call.Has("seqovl"))
+                raw.Add(new Mutation(Replace(parent, i, call.Without("seqovl").Without("seqovl_pattern").Without("tcp_ts_up")), $"{call.Function}: без seqovl / no seqovl"));
+        }
+        var seen = new HashSet<string>(StringComparer.Ordinal) { parent.ToString() };
+        return [.. raw.Where(m => m.Strategy.InstanceCount > 0 && seen.Add(m.Strategy.ToString()) && validator.ValidateStrategy(m.Strategy, kind).Ok)];
+    }
+
     /// <summary>UDP payload types: a strategy filtered by one of them runs on UDP.</summary>
     private static readonly HashSet<string> UdpPayloads = new(StringComparer.Ordinal)
     {

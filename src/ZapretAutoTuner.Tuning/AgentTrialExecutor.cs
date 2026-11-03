@@ -58,6 +58,9 @@ public sealed record AgentTrialOptions
 
     public TimeSpan ReachTimeout { get; init; } = TimeSpan.FromSeconds(3);
 
+    /// <summary>A hello without a byte back fails after this many connect times (<see cref="HttpProbeOptions.QuietRttFactor"/>); null waits the full timeout.</summary>
+    public double? QuietRttFactor { get; init; } = 10;
+
     /// <summary>Adjusts the probe (timeouts, trusted roots on the stand).</summary>
     public Func<HttpProbeOptions, HttpProbeOptions>? TweakHttp { get; init; }
 }
@@ -158,6 +161,7 @@ public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target
             Path = target.Path,
             MinBytes = target.MinBytes,
             PadBytes = target.PadBytes,
+            QuietRttFactor = options.QuietRttFactor,
         };
         return options.TweakHttp?.Invoke(o) ?? o;
     }

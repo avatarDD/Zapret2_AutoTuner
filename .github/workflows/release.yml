@@ -2,7 +2,9 @@ name: Release
 
 # A tag v1.2.3 builds, tests and packages every platform and publishes a GitHub release.
 # Only official upstream binaries go in: nfqws2/winws2, WinDivert, cygwin1.dll and lua from the bol-van/zapret2
-# release archive pinned by SHA-256 in tools/bundle/zapret2.lock.json (bundle.py --strict checks it), and for the
+# release archive pinned by SHA-256 in tools/bundle/zapret2.lock.json (bundle.py --strict checks it), geneva from the
+# latest release of avatarDD/geneva_c (the draft job resolves it once, every package job pins that tag in
+# tools/bundle/geneva.lock.json and checks the archives against the release's SHA256SUMS), and for the
 # page check the Chromium headless shell that the bundled Playwright version installs (Chrome for Testing).
 # Packages go straight to a draft release (release assets do not count against the Actions artifact quota); the
 # last job adds SHA256SUMS.txt and publishes it. A manual run is a dry run unless "publish" is ticked: then it
@@ -54,9 +56,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      geneva_tag: ${{ steps.geneva.outputs.tag }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        if: env.PUBLISH == 'true'
+      - name: Latest geneva_c release
+        id: geneva
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # the release ships the current geneva, not whatever tag the lock in the repository was last bumped to
+          tag=$(python3 tools/bundle/update_geneva_lock.py --print-tag | tail -n 1)
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "no geneva_c release tag: $tag" >&2; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          git diff --stat
       - name: Notes and draft
         if: env.PUBLISH == 'true'
         env:
@@ -124,6 +137,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python tools/bundle/bundle.py --rid ${{ matrix.rid }} --strict
+      - name: Pin the geneva_c release the draft job resolved
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/bundle/update_geneva_lock.py --tag ${{ needs.draft.outputs.geneva_tag }}
       - name: Bundle geneva (official geneva_c release, pinned)
         run: python tools/bundle/bundle_geneva.py --rid ${{ matrix.rid }} --strict
       - name: Publish

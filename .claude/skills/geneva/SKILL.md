@@ -1,6 +1,6 @@
 ---
 name: geneva
-description: Второй движок обхода — geneva_c (avatarDD/geneva_c, v1.0.0, протокол proto 1). Язык стратегий Geneva, команды run/evolve/check/library/db/fw, события JSON Lines, внешний пробник evolve, управляющий сокет, очереди и firewall, как AutoTuner его бандлит, запускает в Agent и показывает в UI и MCP. Читать перед любой правкой Geneva-кода, бандла geneva и MCP-инструментов geneva_*.
+description: Второй движок обхода — geneva_c (avatarDD/geneva_c, v1.1.1, протокол proto 1). Язык стратегий Geneva, команды run/evolve/check/library/db/fw, события JSON Lines, внешний пробник evolve, управляющий сокет, очереди и firewall, как AutoTuner его бандлит, запускает в Agent и показывает в UI и MCP. Читать перед любой правкой Geneva-кода, бандла geneva и MCP-инструментов geneva_*.
 ---
 
 # geneva_c в AutoTuner
@@ -119,6 +119,15 @@ Hyper-V), TcpConnector отдаёт `ProbeDetail.LocalPortPrefix` с кодом
   архива; их SHA-256 закреплены отдельно (`file_sha256` в lock) по
   официальному релизу WinDivert (basil00/WinDivert v2.2.2), и бандл не
   собирается, если байты отличаются.
+- Версия geneva в релизе — последняя опубликованная в avatarDD/geneva_c:
+  `release.yml` (job `draft`) находит её через
+  `tools/bundle/update_geneva_lock.py`, и каждый job `package` пинит в lock
+  этот тег перед `bundle_geneva.py`. Скрипт сверяет каждый архив с
+  SHA256SUMS релиза, а WinDivert — с уже закреплённым официальным релизом
+  WinDivert (новый WinDivert пинится только вручную). Обновить lock в
+  репозитории: `python3 tools/bundle/update_geneva_lock.py`; проверить, не
+  отстал ли он: `--check`. Смена `proto` ловится в `bundle_geneva.py`
+  (`geneva version --json` на нативном раннере) и требует правки кода.
 - Agent копирует бандл в защищённую папку (`ProtectedBundle.CopyAndVerify`)
   и запускает geneva только оттуда.
 - Правила firewall geneva (`inet geneva_<queue>`, цепочки

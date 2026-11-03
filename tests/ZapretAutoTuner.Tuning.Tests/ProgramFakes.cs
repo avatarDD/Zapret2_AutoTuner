@@ -107,4 +107,18 @@ internal static class ProgramFixtures
         BinaryPrimitives.WriteUInt32BigEndian(b.AsSpan(4), 0x2112A442);
         return b;
     }
+
+    /// <summary>A DNS query for one A record.</summary>
+    public static byte[] DnsQuery(string name)
+    {
+        var ms = new MemoryStream();
+        ms.Write([0x12, 0x34, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0]);
+        foreach (var label in name.Split('.'))
+        {
+            ms.WriteByte((byte)label.Length);
+            ms.Write(System.Text.Encoding.ASCII.GetBytes(label));
+        }
+        ms.Write([0, 0, 1, 0, 1]);
+        return ms.ToArray();
+    }
 }

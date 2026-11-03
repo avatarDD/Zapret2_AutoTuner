@@ -291,6 +291,18 @@ internal sealed class AgentService : Protocol.Agent.AgentBase
         }
     }
 
+    public override async Task<GenevaAutoApplyReply> GenevaAutoApply(GenevaAutoApplyRequest request, ServerCallContext context)
+    {
+        try
+        {
+            return await _host.Geneva.AutoApplyAsync(request, context.CancellationToken);
+        }
+        catch (Exception e) when (e is Geneva.GenevaStartException or IOException or global::System.Net.Sockets.SocketException or InvalidOperationException)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, e.Message));
+        }
+    }
+
     public override Task<GenevaInfoReply> GenevaInfo(GenevaInfoRequest request, ServerCallContext context)
     {
         try

@@ -112,6 +112,8 @@ internal sealed class FakeHost : IAutoTunerHost, IDisposable
 
     public Tuning.Geneva.GenevaController? Geneva { get; set; }
 
+    public Tuning.Geneva.GenevaAuto? GenevaAuto { get; set; }
+
     public Tools.GenevaBundle? GenevaBundle { get; set; }
 
     public bool LocalTuningRunning { get; set; }

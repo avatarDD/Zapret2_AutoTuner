@@ -31,7 +31,15 @@ public sealed class AppHost : IAsyncDisposable
             async ct => new Tuning.Geneva.AgentGeneva((await AgentAsync(ct).ConfigureAwait(false)).Client),
             new KbGenevaStore(Kb),
             GenevaProbeAsync);
+        GenevaAuto = new Tuning.Geneva.GenevaAuto(
+            Geneva,
+            async ct => new Tuning.Geneva.AgentGeneva((await AgentAsync(ct).ConfigureAwait(false)).Client),
+            new AgentMonitor(this),
+            new Tuning.Geneva.AutoProbes());
     }
+
+    /// <summary>geneva's "Авто" mode: watches the whole PC and bypasses what is blocked, each with its own strategy.</summary>
+    public Tuning.Geneva.GenevaAuto GenevaAuto { get; }
 
     /// <summary>geneva_c next to the program: version, library and check run from here without rights.</summary>
     public GenevaBundle GenevaBundle { get; }
@@ -142,6 +150,7 @@ public sealed class AppHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await GenevaAuto.DisposeAsync().ConfigureAwait(false);
         await Geneva.DisposeAsync().ConfigureAwait(false);
         // the Agent removes its firewall rules and stops engines on shutdown (AGENTS.md rule 6)
         if (_agent is not null)
@@ -411,6 +420,22 @@ public sealed class AppSettings
 }
 
 /// <summary>geneva's saved state (engine choice, progress, found strategies) in the knowledge base's settings.</summary>
+/// <summary>The Agent's capture, the Agent started on first use (and again after it dropped).</summary>
+internal sealed class AgentMonitor(AppHost host) : Tuning.IProgramMonitor
+{
+    private async Task<Tuning.AgentProgramMonitor> MonitorAsync(CancellationToken ct) =>
+        new((await host.AgentAsync(ct).ConfigureAwait(false)).Client);
+
+    public async Task<string> StartCaptureAsync(CancellationToken ct) =>
+        await (await MonitorAsync(ct).ConfigureAwait(false)).StartCaptureAsync(ct).ConfigureAwait(false);
+
+    public async Task<(byte[] Pcapng, long Dropped)> StopCaptureAsync(string captureId, CancellationToken ct) =>
+        await (await MonitorAsync(ct).ConfigureAwait(false)).StopCaptureAsync(captureId, ct).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<Core.Programs.ObservedSocket>> ListConnectionsAsync(int pid, CancellationToken ct) =>
+        await (await MonitorAsync(ct).ConfigureAwait(false)).ListConnectionsAsync(pid, ct).ConfigureAwait(false);
+}
+
 internal sealed class KbGenevaStore(KnowledgeBase kb) : Tuning.Geneva.IGenevaStore
 {
     public const string Key = "geneva.state";

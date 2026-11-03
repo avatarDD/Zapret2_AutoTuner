@@ -32,6 +32,62 @@
       <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontWeight="SemiBold" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
       <StackPanel Spacing="10" IsVisible="{Binding IsGeneva}">
+        <!-- the "Авто" mode: one switch -->
+        <Border Classes="card">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="2">
+                <TextBlock Classes="h2" Text="{l:T engine.auto}" />
+                <TextBlock Classes="muted" Text="{l:T engine.auto_about}" TextWrapping="Wrap" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" VerticalAlignment="Top" IsChecked="{Binding AutoOn, Mode=OneWay}" Command="{Binding ToggleAutoCommand}"
+                            IsEnabled="{Binding !AutoBusy}" OnContent="{l:T engine.auto_on}" OffContent="{l:T engine.auto_off_short}" />
+            </Grid>
+            <TextBlock Text="{Binding AutoPhase}" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding AutoSummary}" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding AutoSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Text="{Binding AutoNotice}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding AutoNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <ItemsControl ItemsSource="{Binding AutoServices}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:AutoRow">
+                  <Grid ColumnDefinitions="220,140,*,Auto" Margin="0,2">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Status}" Foreground="{Binding Brush}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Detail}" FontSize="12" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                      <SelectableTextBlock Text="{Binding Strategy}" FontFamily="monospace" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding Strategy, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+                    <Button Grid.Column="3" Margin="8,0,0,0" Content="{l:T engine.auto_reset}" IsVisible="{Binding CanReset}" ToolTip.Tip="{l:T engine.auto_reset_tip}"
+                            Command="{Binding $parent[ItemsControl].((vm:EngineViewModel)DataContext).ResetAutoServiceCommand}" CommandParameter="{Binding}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <CheckBox Content="{l:T engine.auto_show_all}" IsChecked="{Binding AutoShowAll}" />
+            <Expander Header="{l:T engine.auto_groups}" IsVisible="{Binding !!AutoGroups.Count}">
+              <ItemsControl ItemsSource="{Binding AutoGroups}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:AutoGroupRow">
+                    <StackPanel Margin="0,2">
+                      <SelectableTextBlock Text="{Binding Strategy}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding Services}" FontSize="12" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding Counters}" FontSize="12" Classes="muted" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Expander>
+            <Expander Header="{l:T engine.auto_log}" IsVisible="{Binding !!AutoLog.Count}">
+              <ItemsControl ItemsSource="{Binding AutoLog}" MaxHeight="300">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <SelectableTextBlock Text="{Binding}" FontFamily="monospace" FontSize="11" TextWrapping="Wrap" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Expander>
+          </StackPanel>
+        </Border>
+
         <!-- 1. search -->
         <Border Classes="card">
           <StackPanel Spacing="8">

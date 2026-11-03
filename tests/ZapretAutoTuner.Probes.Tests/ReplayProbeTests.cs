@@ -85,6 +85,23 @@ public sealed class ReplayProbeTests
     }
 
     [Fact]
+    public async Task Udp_goes_from_the_local_port_geneva_judges_and_a_busy_port_is_told_apart()
+    {
+        await using var server = new UdpServer(answer: true);
+        using var holder = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        holder.Bind(new IPEndPoint(IPAddress.Any, 0));
+        int busy = ((IPEndPoint)holder.LocalEndPoint!).Port;
+        var r = await ReplayProbe.RunAsync(Udp(server.Port, AppProtocol.Unknown, [1, 2, 3]) with { LocalPort = busy });
+        Assert.False(r.Ok);
+        Assert.True(ReplayProbe.LocalPortUnavailable(r), r.ErrorEn);
+
+        holder.Close();
+        r = await ReplayProbe.RunAsync(Udp(server.Port, AppProtocol.Unknown, [1, 2, 3]) with { LocalPort = busy });
+        Assert.True(r.Ok, r.ErrorEn);
+        Assert.False(ReplayProbe.LocalPortUnavailable(r));
+    }
+
+    [Fact]
     public async Task Silent_udp_server_is_no_reply()
     {
         await using var server = new UdpServer(answer: false);

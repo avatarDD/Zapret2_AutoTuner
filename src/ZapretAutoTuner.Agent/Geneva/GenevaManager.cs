@@ -7,8 +7,11 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ZapretAutoTuner.Agent.Engine;
+using ZapretAutoTuner.Agent.Firewall;
 using ZapretAutoTuner.Agent.Os;
+using ZapretAutoTuner.Core.Engine;
 using ZapretAutoTuner.Core.Geneva;
+using ZapretAutoTuner.Core.Geneva.Auto;
 using ZapretAutoTuner.Protocol;
 using ZapretAutoTuner.Tools;
 
@@ -30,16 +33,21 @@ internal sealed class GenevaManager : IDisposable
     private readonly AgentStateStore _state;
     private readonly LuaStore _store;
     private readonly WindowsJob? _job;
+    private readonly FirewallManager? _firewall;
+    private readonly SemaphoreSlim _autoGate = new(1, 1);
+    private readonly Dictionary<string, GenevaInstance> _auto = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, string> _autoFilters = [];
     private readonly Lock _prepareLock = new();
     private readonly string _original;
     private string? _prepared;
     private int _seq;
 
-    public GenevaManager(AgentOptions options, AgentStateStore state, LuaStore store)
+    public GenevaManager(AgentOptions options, AgentStateStore state, LuaStore store, FirewallManager? firewall = null)
     {
         _options = options;
         _state = state;
         _store = store;
+        _firewall = firewall;
         // under pkexec only the copy next to the Agent binary: ZT_GENEVA_DIR is the caller's to set
         _original = options.Pkexec ? Path.Combine(AppContext.BaseDirectory, "geneva") : GenevaBundle.Locate().Root;
         if (OperatingSystem.IsWindows())
@@ -149,6 +157,8 @@ internal sealed class GenevaManager : IDisposable
     {
         if (_running.Values.Any(i => i.Mode == "run" && !i.HasExited))
             throw new GenevaStartException("geneva уже работает: сначала остановите её / geneva already runs");
+        if (_running.Values.Any(i => i.Mode == "auto" && !i.HasExited))
+            throw new GenevaStartException("включён режим «Авто»: сначала выключите его / the \"Auto\" mode is on");
         var settings = new GenevaRunSettings { Strategy = r.Strategy, Ports = string.IsNullOrWhiteSpace(r.Ports) ? "80,443" : r.Ports };
         if (settings.Problems() is { Count: > 0 } bad)
             throw new GenevaStartException(string.Join("; ", bad));
@@ -178,6 +188,8 @@ internal sealed class GenevaManager : IDisposable
             Generations = r.Generations == 0 ? 15 : r.Generations,
             Resume = r.Resume,
             Seeds = [.. r.Seeds],
+            Protos = string.IsNullOrEmpty(r.Protos) ? "TCP" : r.Protos,
+            Probe = string.IsNullOrEmpty(r.Probe) ? GenevaArgv.WebProbe : r.Probe,
         };
         if (settings.Problems() is { Count: > 0 } bad)
             throw new GenevaStartException(string.Join("; ", bad));
@@ -262,7 +274,7 @@ internal sealed class GenevaManager : IDisposable
     public async Task<(bool Ok, string Json)> ControlAsync(string id, string cmd, string? strategy, CancellationToken ct)
     {
         var inst = Find(id) ?? throw new GenevaStartException("нет такого экземпляра / no such instance");
-        if (inst.Mode != "run" || inst.HasExited)
+        if (inst.Mode is not ("run" or "auto") || inst.HasExited)
             throw new GenevaStartException("geneva не работает / geneva is not running");
         if (!ControlCommands.Contains(cmd))
             throw new GenevaStartException($"команда {cmd} не разрешена / command not allowed");
@@ -319,7 +331,7 @@ internal sealed class GenevaManager : IDisposable
         if (!_running.TryRemove(id, out var inst))
             return (false, 0);
         bool was = !inst.HasExited;
-        if (was && inst.Mode == "run")
+        if (was && inst.Mode is "run" or "auto")
         {
             try
             {
@@ -342,6 +354,260 @@ internal sealed class GenevaManager : IDisposable
     public async Task StopAllAsync()
     {
         await Task.WhenAll(_running.Keys.ToList().Select(StopAsync));
+        lock (_auto)
+        {
+            _auto.Clear();
+            _autoFilters.Clear();
+        }
+        _firewall?.Replace(AutoOwner, new Dictionary<string, NftQueueRule>());
+    }
+
+    // ---- the "Авто" mode (skill geneva, §9)
+
+    /// <summary>The queues of the "Авто" mode's groups: apart from zapret2's (300–321) and geneva's own (310, 311, 330, 331).</summary>
+    public const int AutoQueueBase = 340;
+
+    /// <summary>The owner prefix of the "Авто" mode's rules in the engine firewall.</summary>
+    public const string AutoOwner = "geneva-auto/";
+
+    /// <summary>geneva's own packets (raw sends) carry this mark and must not come back to its queue.</summary>
+    public const uint GenevaMark = 0x20000000;
+
+    private IReadOnlySet<string>? _features;
+
+    /// <summary>The <c>features</c> of <c>geneva version --json</c> (Windows: "filter" and "set_filter" turn the mode on).</summary>
+    private async Task<IReadOnlySet<string>> FeaturesAsync(string geneva, CancellationToken ct)
+    {
+        if (_features is not null)
+            return _features;
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(10));
+            var v = await Cmd.RunAsync(geneva, ["version", "--json"], ct: cts.Token);
+            if (JsonNode.Parse(v.Stdout.Trim()) is JsonObject o && o["features"] is JsonArray a)
+            {
+                foreach (var f in a)
+                {
+                    if (f is JsonValue fv && fv.TryGetValue<string>(out var name))
+                        set.Add(name);
+                }
+            }
+        }
+        catch (Exception e) when (e is JsonException or OperationCanceledException or InvalidOperationException or IOException)
+        {
+        }
+        return _features = set;
+    }
+
+    /// <summary>
+    /// Makes the running groups match <paramref name="r"/>: a strategy that stays keeps its process (its targets are
+    /// replaced), a new one starts on a free queue, a dropped one stops. Linux: the targets become rules in the engine
+    /// firewall (addresses, ports, the first packets of each connection, geneva's own packets skipped) and geneva runs
+    /// with <c>--firewall none</c>. Windows: geneva_c with <c>--filter</c> (features "filter", "set_filter") gets the
+    /// targets as its WinDivert filter; an older geneva cannot aim at addresses, and nothing is applied.
+    /// </summary>
+    public async Task<GenevaAutoApplyReply> AutoApplyAsync(GenevaAutoApplyRequest r, CancellationToken ct)
+    {
+        await _autoGate.WaitAsync(ct);
+        try
+        {
+            return await AutoApplyLockedAsync(r, ct);
+        }
+        finally
+        {
+            _autoGate.Release();
+        }
+    }
+
+    private async Task<GenevaAutoApplyReply> AutoApplyLockedAsync(GenevaAutoApplyRequest r, CancellationToken ct)
+    {
+        var reply = new GenevaAutoApplyReply();
+        if (r.Groups.Count > 0 && _running.Values.Any(i => i.Mode == "run" && !i.HasExited))
+            throw new GenevaStartException("включён обход geneva с одной стратегией: сначала выключите его / the single-strategy geneva bypass is on");
+        if (r.Groups.Count > AutoRules.MaxGroups)
+            throw new GenevaStartException($"больше {AutoRules.MaxGroups} групп / more than {AutoRules.MaxGroups} groups");
+        var geneva = r.Groups.Count > 0 ? Prepare() : _prepared;
+        bool windows = OperatingSystem.IsWindows();
+        if (r.Groups.Count > 0 && windows)
+        {
+            var f = await FeaturesAsync(geneva!, ct);
+            if (!f.Contains("filter") || !f.Contains("set_filter"))
+            {
+                await StopAutoAsync(_auto.Keys.ToList());
+                reply.Limited = true;
+                reply.Problems.Add("эта geneva_c на Windows не умеет фильтр по адресам (--filter): обход не применён, нужна geneva_c 1.1 / this geneva_c cannot filter by address on Windows (--filter): nothing applied, geneva_c 1.1 is needed");
+                return reply;
+            }
+        }
+        else if (r.Groups.Count > 0 && _firewall is null)
+        {
+            throw new GenevaStartException("нет firewall для правил очереди / no firewall for the queue rules");
+        }
+
+        // the canonical form names a group: the same strategy in two spellings is one process
+        var wanted = new Dictionary<string, List<AutoTarget>>(StringComparer.Ordinal);
+        if (r.Groups.Count > 0)
+        {
+            var checks = await new GenevaBundle(Path.GetDirectoryName(geneva!)!).CheckAsync([.. r.Groups.Select(g => g.Strategy)], ct);
+            for (int i = 0; i < r.Groups.Count; i++)
+            {
+                var g = r.Groups[i];
+                var check = i < checks.Count ? checks[i] : null;
+                if (GenevaStrategyText.Problem(g.Strategy) is { } bad)
+                {
+                    reply.Problems.Add(bad);
+                    continue;
+                }
+                if (check is not { Ok: true, Strategy: { } canonical })
+                {
+                    reply.Problems.Add("стратегия не разбирается / the strategy does not parse: " + (check?.Error ?? "?"));
+                    continue;
+                }
+                var targets = g.Targets.Select(ToTarget).Where(t => t is not null).Select(t => t!).ToList();
+                if (targets.Count == 0)
+                    continue;
+                if (!wanted.TryGetValue(canonical, out var list))
+                    wanted[canonical] = list = [];
+                list.AddRange(targets);
+            }
+        }
+
+        var gone = _auto.Where(a => !wanted.ContainsKey(a.Key) || a.Value.HasExited).Select(a => a.Key).ToList();
+        await StopAutoAsync(gone);
+
+        var rules = new Dictionary<string, NftQueueRule>(StringComparer.Ordinal);
+        foreach (var (strategy, targets) in wanted)
+        {
+            if (!_auto.TryGetValue(strategy, out var inst))
+            {
+                int queue = Enumerable.Range(AutoQueueBase, AutoRules.MaxGroups).FirstOrDefault(q => _auto.Values.All(i => i.Queue != q));
+                if (queue == 0)
+                {
+                    reply.Problems.Add("нет свободной очереди / no free queue");
+                    continue;
+                }
+                try
+                {
+                    inst = await StartAutoAsync(geneva!, strategy, queue, targets, ct);
+                }
+                catch (Exception e) when (e is GenevaStartException or IOException or InvalidOperationException or global::System.ComponentModel.Win32Exception)
+                {
+                    reply.Problems.Add($"{strategy}: {e.Message}");
+                    continue;
+                }
+                _auto[strategy] = inst;
+            }
+            else if (windows)
+            {
+                var filter = AutoPlan.WinDivertFilter(targets);
+                if (_autoFilters.GetValueOrDefault(inst.Queue) != filter)
+                {
+                    var answer = await SendControlAsync(inst, new JsonObject { ["id"] = 2, ["cmd"] = "set_filter", ["filter"] = filter }, ct);
+                    if ((bool?)answer["ok"] ?? false)
+                        _autoFilters[inst.Queue] = filter;
+                    else
+                        reply.Problems.Add($"set_filter: {(string?)answer["error"]}");
+                }
+            }
+            if (!windows)
+            {
+                for (int i = 0; i < targets.Count; i++)
+                    rules[$"{AutoOwner}{inst.Queue.ToString(CultureInfo.InvariantCulture)}/{i.ToString(CultureInfo.InvariantCulture)}"] = Rule(targets[i], inst.Queue);
+            }
+            reply.Groups.Add(new GenevaAutoGroupState { Strategy = strategy, Id = inst.Id, Queue = inst.Queue, Pid = inst.Pid });
+        }
+        if (_firewall is not null && !windows && _firewall.Replace(AutoOwner, rules) is { } err)
+        {
+            // without the rules nothing reaches geneva: better stopped than shown as working
+            await StopAutoAsync(_auto.Keys.ToList());
+            reply.Groups.Clear();
+            reply.Problems.Add("firewall: " + err);
+        }
+        return reply;
+    }
+
+    private static AutoTarget? ToTarget(GenevaAutoTarget t)
+    {
+        var addresses = t.Addresses.Select(a => IPAddress.TryParse(a, out var ip) ? ip : null).Where(a => a is not null).Select(a => a!).ToList();
+        string Ports(string p)
+        {
+            if (string.IsNullOrWhiteSpace(p))
+                return "";
+            try
+            {
+                return GenevaArgv.NormalizePorts(p);
+            }
+            catch (FormatException)
+            {
+                return "";
+            }
+        }
+        var tcp = Ports(t.TcpPorts);
+        var udp = Ports(t.UdpPorts);
+        if (tcp.Length == 0 && udp.Length == 0)
+            return null;
+        // aimed at nothing would mean everything: a target is addresses, or a program's local ports
+        if (!t.ByLocalPort && addresses.Count == 0)
+            return null;
+        return new AutoTarget { Addresses = t.ByLocalPort ? [] : addresses, TcpPorts = tcp, UdpPorts = udp, ByLocalPort = t.ByLocalPort };
+    }
+
+    private static NftQueueRule Rule(AutoTarget t, int queue) => new()
+    {
+        QueueNum = queue,
+        Targets = t.Addresses,
+        TcpPorts = t.TcpPorts,
+        UdpPorts = t.UdpPorts,
+        BySourcePort = t.ByLocalPort,
+        Incoming = true,
+        SkipMark = GenevaMark,
+        TcpOutPackets = AutoRules.OutPackets,
+        UdpOutPackets = AutoRules.OutPackets,
+        TcpInPackets = AutoRules.InPackets,
+        UdpInPackets = AutoRules.InPackets,
+    };
+
+    private async Task<GenevaInstance> StartAutoAsync(string geneva, string strategy, int queue, IReadOnlyList<AutoTarget> targets, CancellationToken ct)
+    {
+        int port = FreeLoopbackPort();
+        var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+        var q = queue.ToString(CultureInfo.InvariantCulture);
+        // -p and --proto only name the traffic for geneva's events; what reaches it is decided by the rules (Linux) or
+        // the filter (Windows)
+        var argv = new List<string>
+        {
+            "run", "-s", strategy, "-p", "1-65535", "--proto", "tcp,udp",
+            "-c", "tcp:" + port.ToString(CultureInfo.InvariantCulture),
+            "-e", "-", "--stats-interval", "5", "--quiet",
+        };
+        if (OperatingSystem.IsWindows())
+        {
+            var file = Path.Combine(StateDir, $"auto-{q}.filter");
+            var filter = AutoPlan.WinDivertFilter(targets);
+            await File.WriteAllTextAsync(file, filter, ct);
+            argv.AddRange(["--filter-file", file]);
+            if ((await FeaturesAsync(geneva, ct)).Contains("first"))
+                argv.AddRange(["--first", AutoRules.OutPackets.ToString(CultureInfo.InvariantCulture)]);
+            _autoFilters[queue] = filter;
+        }
+        else
+        {
+            argv.AddRange(["-q", q, "--firewall", "none"]);
+        }
+        return Launch("auto", geneva, argv, new Dictionary<string, string> { ["GENEVA_CONTROL_TOKEN"] = token }, supervise: true, port, token, "1-65535", queue);
+    }
+
+    private async Task StopAutoAsync(IReadOnlyList<string> strategies)
+    {
+        foreach (var s in strategies)
+        {
+            if (!_auto.Remove(s, out var inst))
+                continue;
+            _autoFilters.Remove(inst.Queue);
+            await StopAsync(inst.Id);
+        }
     }
 
     /// <summary>geneva's rules of a queue, gone even if geneva was killed (<c>geneva fw down</c>: the rules are named by queue).</summary>
@@ -453,6 +719,7 @@ internal sealed class GenevaManager : IDisposable
 
     public void Dispose()
     {
+        _autoGate.Dispose();
         foreach (var i in _running.Values)
             i.Dispose();
         if (OperatingSystem.IsWindows())

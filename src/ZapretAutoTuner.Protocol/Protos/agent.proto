@@ -55,6 +55,11 @@ service Agent {
   rpc GenevaControl (GenevaControlRequest) returns (GenevaControlReply);
   // What the Agent keeps: the version, the saved searches (resume) and the best strategies of the database.
   rpc GenevaInfo (GenevaInfoRequest) returns (GenevaInfoReply);
+  // The "Авто" mode (skill geneva, §9): the whole set of strategies and the traffic each one gets. The Agent runs one
+  // "geneva run" per strategy (queues 340-347, "--firewall none") and queues only that traffic to it (its own rules
+  // in the table of the engine firewall: addresses and ports, the first packets of each connection). An empty list
+  // stops them all. Replaces the previous set; a strategy that stays keeps its process.
+  rpc GenevaAutoApply (GenevaAutoApplyRequest) returns (GenevaAutoApplyReply);
 
   // Stops everything, removes rules and exits.
   rpc Shutdown (ShutdownRequest) returns (ShutdownReply);
@@ -233,6 +238,8 @@ message GenevaStartRequest {
   bool resume = 8;
   repeated string seeds = 9;    // strategies the population starts from
   string tag = 10;
+  string protos = 11;           // evolve: the layers the search may use ("TCP", "UDP,IP", ...); empty: TCP
+  string probe = 12;            // evolve: what the UI's probe checks, for the target key ("web" or empty, "replay", ...)
 }
 
 message GenevaStartReply {
@@ -306,4 +313,33 @@ message GenevaInfoReply {
   repeated GenevaSavedSearch searches = 3;
   repeated GenevaDbEntry best = 4;
   repeated string running = 5;  // ids
+}
+
+message GenevaAutoTarget {
+  repeated string addresses = 1; // server addresses; empty with by_local_port
+  string tcp_ports = 2;          // "443", "80,443"
+  string udp_ports = 3;
+  bool by_local_port = 4;        // the ports are the program's local ports (peer-to-peer)
+}
+
+message GenevaAutoGroup {
+  string strategy = 1;
+  repeated GenevaAutoTarget targets = 2;
+}
+
+message GenevaAutoApplyRequest {
+  repeated GenevaAutoGroup groups = 1;
+}
+
+message GenevaAutoGroupState {
+  string strategy = 1;           // canonical (geneva check)
+  string id = 2;                 // the instance: GenevaWatch, GenevaControl
+  int32 queue = 3;
+  int32 pid = 4;
+}
+
+message GenevaAutoApplyReply {
+  repeated GenevaAutoGroupState groups = 1;
+  repeated string problems = 2;  // groups that did not start, why (Russian / English)
+  bool limited = 3;              // Windows without geneva's --filter: nothing applied, the page says why
 }

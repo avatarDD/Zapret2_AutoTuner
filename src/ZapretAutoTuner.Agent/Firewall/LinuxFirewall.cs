@@ -155,6 +155,38 @@ internal sealed class FirewallManager
         }
     }
 
+    /// <summary>
+    /// Replaces every rule whose owner starts with <paramref name="prefix"/> by <paramref name="rules"/> in one apply
+    /// (the "Авто" mode's targets change together). On an error the previous rules stay. Returns an error text or null.
+    /// </summary>
+    public string? Replace(string prefix, IReadOnlyDictionary<string, NftQueueRule> rules)
+    {
+        lock (_lock)
+        {
+            var old = _rules.Where(r => r.Key.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+            foreach (var (k, _) in old)
+                _rules.Remove(k);
+            foreach (var (k, r) in rules)
+                _rules[k] = r;
+            var err = ApplyLocked();
+            if (err is not null)
+            {
+                foreach (var k in rules.Keys)
+                    _rules.Remove(k);
+                foreach (var (k, r) in old)
+                    _rules[k] = r;
+                ApplyLocked();
+                return err;
+            }
+            if (rules.Count > 0)
+            {
+                foreach (var p in _sysctl.Apply(NftRuleset.RequiredSysctls))
+                    Console.Error.WriteLine(p);
+            }
+            return null;
+        }
+    }
+
     public void Unset(string owner)
     {
         lock (_lock)

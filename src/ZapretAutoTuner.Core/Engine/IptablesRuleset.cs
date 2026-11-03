@@ -47,9 +47,10 @@ public static class IptablesRuleset
     {
         var chain = outgoing ? PostChain : PreChain;
         var addrOpt = outgoing ? "-d" : "-s";
-        var portOpt = outgoing ? "--dports" : "--sports";
+        var portOpt = outgoing != r.BySourcePort ? "--dports" : "--sports";
         var dir = outgoing ? "original" : "reply";
-        var addrs = targets.Count == 0 ? [""] : targets.Select(t => $"{addrOpt} {t} ").ToList();
+        var skip = r.SkipMark == 0 ? "" : $"-m mark ! --mark 0x{r.SkipMark.ToString("X8", CultureInfo.InvariantCulture)}/0x{r.SkipMark.ToString("X8", CultureInfo.InvariantCulture)} ";
+        var addrs = (targets.Count == 0 ? new List<string> { "" } : targets.Select(t => $"{addrOpt} {t} ")).Select(a => skip + a).ToList();
         foreach (var (proto, ports, n) in new[]
         {
             ("tcp", r.TcpPorts, outgoing ? r.TcpOutPackets : r.TcpInPackets),

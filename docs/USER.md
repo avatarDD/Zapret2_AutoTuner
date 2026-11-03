@@ -86,6 +86,25 @@
    «Продолжить», а обход с галочкой «Включать при запуске» возвращается
    после перезапуска программы. Одновременно работает только один движок.
 
+   **Режим «Авто»** — один переключатель над этими шагами, после которого
+   ничего настраивать не нужно. Программа сама следит за всем трафиком ПК:
+   сайтами (TCP и QUIC), DNS, WireGuard, OpenVPN, DHT торрентов и любыми
+   другими протоколами. Если соединения с каким-то сервисом рвутся так, как
+   это делает DPI, программа сначала проверяет его без обхода: обход
+   ищется, только если сервис действительно заблокирован. Потом она пробует
+   уже известные стратегии, а если они не помогают, запускает подбор geneva.
+   Найденная стратегия применяется только к трафику этого сервиса (его
+   адресам и портам, а для торрента — его локальному порту), остальной
+   трафик через geneva не идёт. Если обход перестал работать, стратегия
+   подбирается заново, а неудачный подбор продолжается позже с новыми
+   поколениями. Если заблокирован сам адрес (соединение не устанавливается
+   вовсе), программа так и пишет: здесь поможет только туннель. Список
+   сервисов показывает состояние каждого, у каждого есть кнопка «Сбросить».
+   Режим остаётся включённым после перезапуска. На Windows для применения
+   найденных стратегий нужна geneva_c 1.1 или новее; со старой версией
+   блокировки находятся, но обход не включается, и программа об этом
+   предупреждает.
+
 Под каждым пунктом меню написано, для чего он. При закрытии программы
 вместе с ней завершаются все запущенные ею процессы (браузер проверки и
 другие), агент сам останавливает движок и снимает правила.
@@ -227,6 +246,23 @@ cannot be protected that way: a replaced agent gets the rights on its next start
    bypass are saved: Continue resumes a stopped search, and a bypass with
    "Turn on at start" comes back after the program restarts. Only one engine
    runs at a time.
+
+   **Auto mode** is one switch above these steps, and nothing else needs
+   setting. The program watches all of the PC's traffic: sites (TCP and
+   QUIC), DNS, WireGuard, OpenVPN, torrent DHT and any other protocol. When
+   connections to a service fail the way DPI makes them fail, it first checks
+   the service without a bypass: a bypass is searched only for what is really
+   blocked. Then it tries the strategies it already knows, and if none helps,
+   runs geneva's search. A strategy it finds applies to that service's
+   traffic only (its addresses and ports, or a torrent's local port); the rest
+   of the traffic never goes through geneva. When a bypass stops working, a
+   new one is searched, and a search that found nothing continues later with
+   more generations. When the address itself is blocked (no connection at
+   all), the program says so: only a tunnel helps there. The list shows each
+   service's state with a Reset button. The mode stays on across restarts.
+   On Windows, applying the strategies needs geneva_c 1.1 or newer; with an
+   older one blocks are found but no bypass is turned on, and the program
+   says so.
 
 Every menu item says what it is for. Closing the program ends every process it
 started (the check's browser and others); the agent stops the engine and

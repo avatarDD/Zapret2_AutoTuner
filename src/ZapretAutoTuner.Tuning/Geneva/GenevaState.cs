@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ZapretAutoTuner.Core.Geneva;
+using ZapretAutoTuner.Core.Geneva.Auto;
 
 namespace ZapretAutoTuner.Tuning.Geneva;
 
@@ -54,6 +55,27 @@ public sealed record GenevaActiveRun
     public bool AutoStart { get; init; }
 }
 
+/// <summary>The "Авто" mode between runs: whether it is on, and every service with its status and strategy.</summary>
+public sealed record GenevaAutoState
+{
+    public bool Enabled { get; init; }
+
+    public List<AutoService> Services { get; init; } = [];
+
+    /// <summary>Timestamps kept per list in the saved state: the window needs a few, not hundreds.</summary>
+    public const int SavedTimes = 20;
+
+    /// <summary>The book as it is saved: the windows' timestamps trimmed to the last <see cref="SavedTimes"/>.</summary>
+    public static List<AutoService> Trimmed(IEnumerable<AutoService> services) => [.. services.Select(s =>
+    {
+        var c = s.Clone();
+        c.Fails = [.. c.Fails.TakeLast(SavedTimes)];
+        c.Oks = [.. c.Oks.TakeLast(SavedTimes)];
+        c.NoConnections = [.. c.NoConnections.TakeLast(SavedTimes)];
+        return c;
+    })];
+}
+
 /// <summary>
 /// What is kept between runs (the user's "сохранять прогресс и рабочие настройки"): the chosen engine, the last search
 /// settings, each target's search progress, the strategies found and the strategy that bypasses. The search itself
@@ -76,6 +98,8 @@ public sealed record GenevaState
     public List<GenevaFoundStrategy> Found { get; init; } = [];
 
     public GenevaActiveRun? Active { get; init; }
+
+    public GenevaAutoState Auto { get; init; } = new();
 
     public const int MaxFound = 200;
 

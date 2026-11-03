@@ -33,8 +33,9 @@ public sealed partial class MainViewModel : ObservableObject
             : Mcp.Session.Busy ? Loc.Loc.I["engine.busy_mcp"]
             : null;
         // and zapret2 waits for geneva: its bypass, and its search (the probe's packets would pass both engines)
-        Monitor.GenevaRunning = () => host.Geneva.RunRunning || host.Geneva.SearchRunning;
-        Wizard.GenevaBusy = () => host.Geneva.RunRunning || host.Geneva.SearchRunning;
+        host.GenevaAuto.Busy = host.Geneva.Busy;
+        Monitor.GenevaRunning = () => host.Geneva.RunRunning || host.Geneva.SearchRunning || host.GenevaAuto.Running;
+        Wizard.GenevaBusy = () => host.Geneva.RunRunning || host.Geneva.SearchRunning || host.GenevaAuto.Running;
         // "Включить на этом компьютере": the monitor runs the solution as protection
         Wizard.ProtectHere = async () =>
         {
@@ -55,6 +56,9 @@ public sealed partial class MainViewModel : ObservableObject
         {
             if (await host.Geneva.RestoreAsync(CancellationToken.None))
                 Engine.Status = Loc.Loc.I["engine.restored"];
+            // the "Авто" mode the user left on comes back by itself
+            else if (await host.GenevaAuto.RestoreAsync(CancellationToken.None))
+                Engine.Status = Loc.Loc.I["engine.auto_restored"];
         }
         catch (Exception e) when (e is Tuning.Geneva.GenevaRefusedException or Protocol.AgentStartException or InvalidOperationException or Grpc.Core.RpcException)
         {

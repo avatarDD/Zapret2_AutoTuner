@@ -46,6 +46,8 @@ public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor, WizardVie
 
     public Tuning.Geneva.GenevaController? Geneva => host.Geneva;
 
+    public Tuning.Geneva.GenevaAuto? GenevaAuto => host.GenevaAuto;
+
     public Tools.GenevaBundle? GenevaBundle => host.GenevaBundle;
 
     /// <summary>The MCP search learns like the wizard's: the provider from Settings, the label of the verdict.</summary>

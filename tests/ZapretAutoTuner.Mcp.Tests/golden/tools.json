@@ -1326,5 +1326,63 @@
       "properties": {},
       "additionalProperties": false
     }
+  },
+  {
+    "name": "geneva_auto_status",
+    "scope": "read",
+    "confirms": false,
+    "description": "geneva's \"Авто\" mode: whether it is on, what it does now, every service it watches (sites, QUIC, DNS, WireGuard, OpenVPN, DHT, any endpoint) with its state (watching, suspected, blocked, searching, applied, degraded, not_found, ip_blocked, ...), the strategy applied to it, the running strategies with their counters, and the mode's log.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "all": {
+          "type": "boolean",
+          "description": "Also the services that work fine (default: only those with a problem or a bypass)"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_auto_enable",
+    "scope": "control",
+    "confirms": true,
+    "description": "Turns the \"Авто\" mode on: AutoTuner watches all of this PC's traffic, confirms each block without a bypass first, finds a geneva strategy for each blocked service and applies it to that service's traffic only. It stays on across restarts. Needs the user's yes in the AutoTuner window; the answer is pending until then. Needs the user's confirmation in the AutoTuner window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_auto_disable",
+    "scope": "control",
+    "confirms": false,
+    "description": "Turns the \"Авто\" mode off: every strategy it applied stops and its interception rules go; what it learned stays for the next time.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_auto_reset",
+    "scope": "control",
+    "confirms": false,
+    "description": "Forgets what the \"Авто\" mode knows about one service (its key from geneva_auto_status): its bypass goes and watching starts over.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The service's key",
+          "maxLength": 300
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "additionalProperties": false
+    }
   }
 ]

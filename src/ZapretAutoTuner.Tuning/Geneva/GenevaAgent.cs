@@ -21,6 +21,9 @@ public interface IGenevaAgent
     Task<GenevaControlReply> ControlAsync(string id, string cmd, string? strategy, CancellationToken ct);
 
     Task<GenevaInfoReply> InfoAsync(CancellationToken ct);
+
+    /// <summary>The "Авто" mode's groups: the Agent makes its running set match (an empty request stops them all).</summary>
+    Task<GenevaAutoApplyReply> AutoApplyAsync(GenevaAutoApplyRequest request, CancellationToken ct);
 }
 
 /// <summary><see cref="IGenevaAgent"/> over the Agent's gRPC connection.</summary>
@@ -77,6 +80,18 @@ public sealed class AgentGeneva(Agent.AgentClient client) : IGenevaAgent
         try
         {
             return await client.GenevaInfoAsync(new GenevaInfoRequest(), cancellationToken: ct);
+        }
+        catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
+        {
+            throw new GenevaRefusedException(e.Status.Detail);
+        }
+    }
+
+    public async Task<GenevaAutoApplyReply> AutoApplyAsync(GenevaAutoApplyRequest request, CancellationToken ct)
+    {
+        try
+        {
+            return await client.GenevaAutoApplyAsync(request, cancellationToken: ct);
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.FailedPrecondition)
         {

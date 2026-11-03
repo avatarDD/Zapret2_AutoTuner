@@ -159,6 +159,28 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
         return Task.FromResult(new GenevaControlReply { Ok = true, Json = "{\"ok\":true}" });
     }
 
+    /// <summary>Every "Авто" apply, in order.</summary>
+    public List<GenevaAutoApplyRequest> AutoApplied { get; } = [];
+
+    /// <summary>The Agent answers "Авто" applies as a Windows without address filters would.</summary>
+    public bool AutoLimited { get; set; }
+
+    public Task<GenevaAutoApplyReply> AutoApplyAsync(GenevaAutoApplyRequest request, CancellationToken ct)
+    {
+        var reply = new GenevaAutoApplyReply { Limited = AutoLimited };
+        lock (_lock)
+        {
+            AutoApplied.Add(request.Clone());
+            if (!AutoLimited)
+            {
+                int q = 340;
+                foreach (var g in request.Groups)
+                    reply.Groups.Add(new GenevaAutoGroupState { Strategy = g.Strategy, Id = "auto" + q, Queue = q++, Pid = 1 });
+            }
+        }
+        return Task.FromResult(reply);
+    }
+
     public Task<GenevaInfoReply> InfoAsync(CancellationToken ct) => Task.FromResult(new GenevaInfoReply { VersionJson = "{\"version\":\"1.0.0\",\"proto\":1}" });
 }
 

@@ -24,6 +24,9 @@ public sealed record ReplayProbeOptions
     public int Rounds { get; init; } = 4;
 
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>Send from this local port (geneva's search applies its strategy to a block of local ports); 0: any.</summary>
+    public int LocalPort { get; init; }
 }
 
 /// <summary>Why a replay failed.</summary>
@@ -179,6 +182,8 @@ public static class ReplayProbe
     private static async Task<ReplayProbeResult> UdpAsync(ReplayProbeOptions o, IReadOnlyList<byte[]> payloads, Stopwatch sw, CancellationToken ct)
     {
         using var s = new Socket(o.Address.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
+        if (Bind(s, o) is { } refused)
+            return ReplayProbeResult.Fail(ReplayError.Socket, 0, sw.Elapsed, refused);
         await s.ConnectAsync(o.Address, o.Port, ct).ConfigureAwait(false);
         int sent = 0, received = 0;
         long bytes = 0;
@@ -238,6 +243,8 @@ public static class ReplayProbe
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(o.Timeout);
         using var s = new Socket(o.Address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+        if (Bind(s, o) is { } refused)
+            return ReplayProbeResult.Fail(ReplayError.Socket, 0, sw.Elapsed, refused);
         try
         {
             await s.ConnectAsync(o.Address, o.Port, timeout.Token).ConfigureAwait(false);
@@ -265,6 +272,28 @@ public static class ReplayProbe
             return ReplayProbeResult.Fail(error, payloads.Count, sw.Elapsed, e.SocketErrorCode);
         }
     }
+
+    /// <summary>Binds to <see cref="ReplayProbeOptions.LocalPort"/>; the error when the port is taken or reserved, else null.</summary>
+    private static SocketError? Bind(Socket s, ReplayProbeOptions o)
+    {
+        if (o.LocalPort == 0)
+            return null;
+        try
+        {
+            // the port may linger in TIME_WAIT from the previous probe of the block
+            s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            s.Bind(new IPEndPoint(o.Address.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, o.LocalPort));
+            return null;
+        }
+        catch (SocketException e)
+        {
+            return e.SocketErrorCode;
+        }
+    }
+
+    /// <summary>The bind of the local port failed: not the network's answer, another port of the block may do.</summary>
+    public static bool LocalPortUnavailable(ReplayProbeResult r) =>
+        r is { Error: ReplayError.Socket, PacketsOut: 0, Socket: SocketError.AddressAlreadyInUse or SocketError.AccessDenied or SocketError.AddressNotAvailable };
 
     /// <summary>A STUN binding request (RFC 5389) with a random transaction id and no attributes.</summary>
     public static byte[] StunBindingRequest()

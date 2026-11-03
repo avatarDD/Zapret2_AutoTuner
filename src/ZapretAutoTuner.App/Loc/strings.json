@@ -351,6 +351,110 @@
   "Обход geneva включён снова, как вы оставили.",
   "The geneva bypass is on again, as you left it."
  ],
+ "engine.as_applied": [
+  "обход работает",
+  "bypassed"
+ ],
+ "engine.as_blocked": [
+  "заблокирован",
+  "blocked"
+ ],
+ "engine.as_degraded": [
+  "обход ослаб",
+  "bypass weakened"
+ ],
+ "engine.as_fallback": [
+  "работает через TCP",
+  "works over TCP"
+ ],
+ "engine.as_ipblocked": [
+  "блокировка по IP",
+  "blocked by IP"
+ ],
+ "engine.as_notblocked": [
+  "не заблокирован",
+  "not blocked"
+ ],
+ "engine.as_notfound": [
+  "обход не найден",
+  "no bypass yet"
+ ],
+ "engine.as_searching": [
+  "подбор обхода",
+  "searching"
+ ],
+ "engine.as_suspected": [
+  "подозрение",
+  "suspected"
+ ],
+ "engine.as_watching": [
+  "работает",
+  "works"
+ ],
+ "engine.auto": [
+  "Авто: обход всего, что заблокировано",
+  "Auto: bypass everything that is blocked"
+ ],
+ "engine.auto_about": [
+  "Включите и больше ничего не настраивайте. AutoTuner сам следит за всем трафиком ПК (сайты, QUIC, DNS, WireGuard, OpenVPN, DHT и любые другие протоколы), проверяет, что ресурс действительно заблокирован, подбирает для него стратегию geneva и применяет её только к этому трафику. Если обход перестал работать, стратегия подбирается заново. Всё сохраняется и включается снова после перезапуска.",
+  "Turn it on and set nothing else. AutoTuner watches all of the PC's traffic (sites, QUIC, DNS, WireGuard, OpenVPN, DHT and any other protocol), checks that a resource is really blocked, finds a geneva strategy for it and applies it to that traffic only. When a bypass stops working, a new one is found. Everything is saved and comes back after a restart."
+ ],
+ "engine.auto_counters": [
+  "пакетов {0} ({1}/с) · сработало {2} · работает {3}",
+  "packets {0} ({1}/s) · triggered {2} · up {3}"
+ ],
+ "engine.auto_groups": [
+  "Работающие стратегии",
+  "Running strategies"
+ ],
+ "engine.auto_limited": [
+  "На Windows для режима «Авто» нужен geneva_c 1.1 или новее (фильтр по адресам). Блокировки находятся и стратегии подбираются, но применяются только после обновления geneva_c.",
+  "On Windows the Auto mode needs geneva_c 1.1 or newer (address filters). Blocks are found and strategies searched, but applied only after geneva_c is updated."
+ ],
+ "engine.auto_log": [
+  "Журнал режима «Авто»",
+  "Auto mode log"
+ ],
+ "engine.auto_off": [
+  "Режим «Авто» выключен.",
+  "The Auto mode is off."
+ ],
+ "engine.auto_off_short": [
+  "Выкл",
+  "Off"
+ ],
+ "engine.auto_on": [
+  "Вкл",
+  "On"
+ ],
+ "engine.auto_reset": [
+  "Сбросить",
+  "Reset"
+ ],
+ "engine.auto_reset_tip": [
+  "Забыть, что известно о сервисе: обход снимается, наблюдение начинается заново",
+  "Forget what is known about the service: its bypass goes, watching starts over"
+ ],
+ "engine.auto_restored": [
+  "Режим «Авто» снова включён, как вы оставили.",
+  "The Auto mode is on again, as you left it."
+ ],
+ "engine.auto_show_all": [
+  "Показать и сервисы, у которых всё в порядке",
+  "Show the services that work fine too"
+ ],
+ "engine.auto_summary": [
+  "Сервисов: {0} · обход работает: {1} · в работе: {2} · без обхода: {3} · соединений в последнем срезе: {4}",
+  "Services: {0} · bypassed: {1} · in progress: {2} · no bypass: {3} · flows in the last slice: {4}"
+ ],
+ "engine.auto_trying": [
+  "пробую: {0}",
+  "trying: {0}"
+ ],
+ "engine.auto_waiting": [
+  "Режим «Авто» включён и запустится, когда освободится движок.",
+  "The Auto mode is on and starts once the engine is free."
+ ],
  "engine.resume": [
   "Продолжить подбор",
   "Continue the search"

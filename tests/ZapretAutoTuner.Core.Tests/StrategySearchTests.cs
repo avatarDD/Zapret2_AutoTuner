@@ -108,6 +108,44 @@ public sealed class StrategySearchTests
     }
 
     [Fact]
+    public async Task A_found_combination_is_simplified_to_the_part_that_works()
+    {
+        // any strategy with a 1,midsld split passes, with or without a fake in front or an overlap
+        const string Plain = "--payload=tls_client_hello --lua-desync=multisplit:pos=1,midsld";
+        var dpi = new SimDpi((s, _) => s.Contains("multisplit:pos=1,midsld", StringComparison.Ordinal) && !s.Contains("midsld+", StringComparison.Ordinal) ? TrialOutcome.Success() : TrialOutcome.Fail(TrialFailure.Reset));
+        var r = await new StrategySearch(dpi, Quick(o => o with { StopAfterFound = 1 })).RunAsync();
+        Assert.Equal(Plain, r.Best?.Candidate.Key);
+        Assert.Equal("multisplit", r.Best?.Candidate.Family);
+        // the combination that was found first is still listed, below the simpler one
+        Assert.True(r.Working.Count >= 2);
+        Assert.True(r.Working[0].Score.Total <= r.Working[^1].Score.Total);
+    }
+
+    [Fact]
+    public async Task A_refined_combination_simplifies_to_a_split_of_the_split_family()
+    {
+        // the stand's balancing DPI: a 1,midsld split passes half of the time, 1,midsld+1 always, with or without a fake
+        var dpi = new SimDpi((s, n) => s.Contains("pos=1,midsld+1", StringComparison.Ordinal) ? TrialOutcome.Success()
+            : s.Contains("pos=1,midsld", StringComparison.Ordinal) && n % 2 == 1 ? TrialOutcome.Success() : TrialOutcome.Fail(TrialFailure.Reset));
+        var r = await new StrategySearch(dpi, Quick(o => o with { StopAfterFound = 1 })).RunAsync();
+        Assert.Equal("--payload=tls_client_hello --lua-desync=multisplit:pos=1,midsld+1", r.Best?.Candidate.Key);
+        Assert.Equal("multisplit", r.Best?.Candidate.Family);
+        Assert.True(r.Best!.Refined);
+        Assert.Equal(r.Best.Efficiency.Attempts, r.Best.Efficiency.Successes);
+    }
+
+    [Fact]
+    public void Simplify_drops_instances_and_the_overlap()
+    {
+        var s = Strategy.Parse("--payload=tls_client_hello --lua-desync=fake:blob=fake_default_tls:tcp_md5 --lua-desync=multisplit:pos=1:seqovl=681:seqovl_pattern=tls_white");
+        var v = StrategyMutator.Simplify(s).Select(m => m.Strategy.ToString()).ToList();
+        Assert.Contains("--payload=tls_client_hello --lua-desync=multisplit:pos=1:seqovl=681:seqovl_pattern=tls_white", v);
+        Assert.Contains("--payload=tls_client_hello --lua-desync=fake:blob=fake_default_tls:tcp_md5", v);
+        Assert.Contains("--payload=tls_client_hello --lua-desync=fake:blob=fake_default_tls:tcp_md5 --lua-desync=multisplit:pos=1", v);
+        Assert.Empty(StrategyMutator.Simplify(Strategy.Parse("--payload=tls_client_hello --lua-desync=multisplit:pos=1")));
+    }
+
+    [Fact]
     public void Scouting_keeps_outside_candidates_in_front_and_rounds_grow()
     {
         StrategyCandidate C(string fam, int i, string src = CandidateSource.Generator) =>

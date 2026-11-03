@@ -122,6 +122,12 @@ public sealed record SearchOptions
     /// <summary>Each next round takes this many times more candidates of every family than the previous one.</summary>
     public double ScoutGrowth { get; init; } = 2;
 
+    /// <summary>A found combination is checked against its simpler parts (<see cref="StrategyMutator.Simplify"/>).</summary>
+    public bool Simplify { get; init; } = true;
+
+    /// <summary>Simpler variants tried per found strategy.</summary>
+    public int SimplifyBudget { get; init; } = 6;
+
     /// <summary>Attempts per strategy while screening; N/N is "working".</summary>
     public int Attempts { get; init; } = 3;
 
@@ -234,10 +240,13 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
                 var started = Elapsed;
                 int seriesBefore = _seriesRun;
                 var eff = await ScreenAsync(c, ct).ConfigureAwait(false);
+                int foundBefore = _found.Count;
                 if (eff.Partial)
                     await RefineAsync(c, eff, remaining, ct).ConfigureAwait(false);
                 else if (eff.Working)
                     AddFound(new FoundStrategy(c, eff, Score(c.Strategy, eff)));
+                if (_found.Count > foundBefore && options.Simplify)
+                    await SimplifyAsync(_found[^1], set.Candidates, remaining, ct).ConfigureAwait(false);
                 _done++;
                 // results taken from an interrupted session cost nothing and would make the estimate collapse
                 if (_seriesRun > seriesBefore)
@@ -415,6 +424,58 @@ public sealed class StrategySearch(ITrialExecutor executor, SearchOptions option
             if (_bestPartial is null || best.Efficiency.Rate > _bestPartial.Efficiency.Rate)
                 _bestPartial = best;
         }
+    }
+
+    /// <summary>
+    /// A found strategy with parts that may be unnecessary is checked against its simpler neighbours
+    /// (<see cref="StrategyMutator.Simplify"/>), each over a full refinement series that stops at the first failure.
+    /// A working one is added and simplified in turn; it ranks first by its score. A variant the generator also makes
+    /// takes that candidate's family.
+    /// </summary>
+    private async Task SimplifyAsync(FoundStrategy found, IReadOnlyList<StrategyCandidate> generated, int remaining, CancellationToken ct)
+    {
+        var queue = new Queue<FoundStrategy>([found]);
+        int budget = options.SimplifyBudget;
+        while (queue.Count > 0 && budget > 0)
+        {
+            var f = queue.Dequeue();
+            foreach (var m in StrategyMutator.Simplify(f.Candidate.Strategy, options.Generator, l4: f.Candidate.L4))
+            {
+                if (budget <= 0)
+                    break;
+                if (!_tried.Add(m.Strategy.ToString()))
+                    continue;
+                budget--;
+                var known = generated.FirstOrDefault(g => g.Key == m.Strategy.ToString());
+                var child = known ?? f.Candidate with { Strategy = m.Strategy, Family = FamilyOf(m.Strategy, f.Candidate.Family), Source = CandidateSource.Mutation };
+                Report(SearchStage.Refining, child, remaining, $"Упрощаю найденную: {m.What}", $"Simplifying the found one: {m.What}");
+                var e = options.AlreadyTried.TryGetValue(child.Key, out var k) && k.Attempts > 0
+                    ? k
+                    : Count(await RunAsync(child, options.PartialAttempts, o => o.Any(x => !x.Ok), ct).ConfigureAwait(false));
+                if (!e.Working || e.Attempts < options.PartialAttempts)
+                    continue;
+                var path = f.MutationPath is { } p ? p + " → " + m.What : m.What;
+                var simpler = new FoundStrategy(child, e, Score(child.Strategy, e), path);
+                AddFound(simpler);
+                queue.Enqueue(simpler);
+            }
+        }
+    }
+
+    /// <summary>The family a single-instance strategy belongs to by its function, for one the generator does not make itself.</summary>
+    internal static string FamilyOf(Strategy s, string fallback)
+    {
+        if (s.InstanceCount != 1)
+            return fallback;
+        var c = s.Calls.Single();
+        return c.Function switch
+        {
+            "multisplit" or "multidisorder" => c.Has("seqovl") ? "seqovl" : "multisplit",
+            "fake" => c.Has("ip_ttl") || c.Has("ip_autottl") ? "fake_ttl" : "fake",
+            "fakedsplit" or "fakeddisorder" => "faked",
+            "hostfakesplit" => "hostfake",
+            _ => fallback,
+        };
     }
 
     /// <summary>

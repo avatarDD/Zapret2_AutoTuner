@@ -33,6 +33,7 @@ public sealed class LearnedOrderTests
         {
             Generator = new GeneratorOptions { Mode = SearchMode.Quick },
             StopAfterFound = 1,
+            Simplify = false,
             Learning = learning ? TuningSession.Learning(kb, new LearningContext(asn, Label)) with { Seed = 3 } : null,
         };
         options = TuningSession.Prepare(kb, options, session, asn);

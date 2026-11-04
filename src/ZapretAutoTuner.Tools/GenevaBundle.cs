@@ -29,6 +29,9 @@ public sealed class GenevaBundle
 
     public static string FileName => OperatingSystem.IsWindows() ? "geneva.exe" : "geneva";
 
+    /// <summary>The <c>features</c> name of geneva_c 1.2: <c>--probe external</c> with several workers.</summary>
+    public const string ExternalWorkersFeature = "external_workers";
+
     public string EnginePath => Path.Combine(Root, FileName);
 
     public string ManifestPath => Path.Combine(Root, "bundle.json");

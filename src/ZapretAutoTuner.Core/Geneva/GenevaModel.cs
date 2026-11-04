@@ -69,6 +69,14 @@ public sealed record GenevaSearchSettings
     /// </summary>
     public string Probe { get; init; } = GenevaArgv.WebProbe;
 
+    /// <summary>
+    /// Strategies judged at once (geneva's <c>--workers</c>), each from its own block of local ports. More than one
+    /// needs geneva_c with the feature <c>external_workers</c>; the Agent runs one otherwise.
+    /// </summary>
+    public int Workers { get; init; } = 1;
+
+    public static (int Min, int Max) WorkersRange => (1, 8);
+
     public static IReadOnlySet<string> Layers { get; } = new HashSet<string>(StringComparer.Ordinal) { "IP", "TCP", "UDP", "DNS", "DNSQR" };
 
     public static (int Min, int Max) PopulationRange => (4, 500);
@@ -92,6 +100,8 @@ public sealed record GenevaSearchSettings
             p.Add($"популяция {Population} вне {PopulationRange.Min}–{PopulationRange.Max} / population out of range");
         if (Generations < GenerationsRange.Min || Generations > GenerationsRange.Max)
             p.Add($"поколений {Generations} вне {GenerationsRange.Min}–{GenerationsRange.Max} / generations out of range");
+        if (Workers < WorkersRange.Min || Workers > WorkersRange.Max)
+            p.Add($"потоков {Workers} вне {WorkersRange.Min}–{WorkersRange.Max} / workers out of range");
         if (Seeds.Count > GenevaArgv.MaxSeeds)
             p.Add($"больше {GenevaArgv.MaxSeeds} стратегий для засева / too many seeds");
         foreach (var s in Seeds)
@@ -143,7 +153,7 @@ public static class GenevaArgv
     public const int EvalQueue = 331;
     public const int LocalPortsBase = 30000;
 
-    /// <summary>The block of local ports of the one worker: the probe connects from these, the strategy applies only to them.</summary>
+    /// <summary>The block of local ports of one worker: the probe connects from these, the strategy applies only to them.</summary>
     public const int LocalPortsCount = 64;
 
     public const int MaxSeeds = 50;
@@ -177,7 +187,8 @@ public static class GenevaArgv
 
     /// <summary>
     /// <c>geneva evolve --probe external</c>: geneva puts each strategy on the probe's local ports and asks the UI, which
-    /// loads the page from those ports and answers (success is the full download, AGENTS.md rule 5). One worker.
+    /// loads the page from those ports and answers (success is the full download, AGENTS.md rule 5). With several
+    /// workers each asks from its own block, and the answers go back by id.
     /// </summary>
     public static List<string> Evolve(GenevaSearchSettings s, string checkpoint, string db, string? seedsFile)
     {
@@ -189,7 +200,7 @@ public static class GenevaArgv
             "evolve", "--probe", "external", "--host", s.Host.ToLowerInvariant(), "--port", s.Port.ToString(CultureInfo.InvariantCulture),
             "--population", s.Population.ToString(CultureInfo.InvariantCulture),
             "--generations", s.Generations.ToString(CultureInfo.InvariantCulture),
-            "--workers", "1", "--local-ports", LocalPortsBase.ToString(CultureInfo.InvariantCulture),
+            "--workers", s.Workers.ToString(CultureInfo.InvariantCulture), "--local-ports", LocalPortsBase.ToString(CultureInfo.InvariantCulture),
             "-q", EvalQueue.ToString(CultureInfo.InvariantCulture),
             "--checkpoint", checkpoint, "--db", db, "--target", s.TargetKey,
             "--top", "10", "-e", "-", "--quiet",

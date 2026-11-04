@@ -228,24 +228,39 @@ public static class AutoCandidates
     ];
 
     /// <summary>
-    /// What to try on <paramref name="s"/>: the strategies of the running groups of its transport first (so it joins a
-    /// group instead of opening a new one), then the ones found before, then the classics.
+    /// What to try on <paramref name="s"/>: shared strategies (imported, or the program's starting set) that name this
+    /// service first, then the strategies of the running groups of its transport (so it joins a group instead of
+    /// opening a new one), the ones found before, the other shared ones, the classics and <paramref name="extra"/>
+    /// (Geneva's library on a wider round), at most <paramref name="max"/>.
     /// </summary>
-    public static List<string> For(AutoService s, IEnumerable<string> running, IEnumerable<string> found)
+    public static List<string> For(AutoService s, IEnumerable<string> running, IEnumerable<string> found,
+        IEnumerable<GenevaSharedStrategy>? shared = null, IEnumerable<string>? extra = null, int max = AutoRules.MaxQuickCandidates)
     {
         var classics = s.Kind == AutoKind.Dns ? [.. Dns, .. Udp] : s.Transport == L4Kind.Udp ? Udp : Tcp;
-        bool Fits(string strategy) => s.Transport == L4Kind.Udp
-            ? strategy.Contains("[UDP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[IP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[DNS", StringComparison.OrdinalIgnoreCase)
-            : strategy.Contains("[TCP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[IP:", StringComparison.OrdinalIgnoreCase);
-        return running.Where(Fits)
-            .Concat(found.Where(Fits))
-            .Concat(classics)
+        var sharedList = (shared ?? []).ToList();
+        var named = sharedList.Where(x => GenevaShare.Names(x, s.Name, s.Host)).Select(x => x.Strategy);
+        var others = sharedList.Select(x => x.Strategy).Where(x => Fits(s, x));
+        // the shared strategies were found for sites and QUIC; a resolver tries its own classics before them
+        return named.Where(x => Fits(s, x))
+            .Concat(running.Where(x => Fits(s, x)))
+            .Concat(found.Where(x => Fits(s, x)))
+            .Concat(s.Kind == AutoKind.Dns ? classics.Concat(others) : others.Concat(classics))
+            .Concat((extra ?? []).Where(x => Fits(s, x)))
             .Where(x => GenevaStrategyText.Problem(x) is null)
             .Distinct(StringComparer.Ordinal)
-            .Take(AutoRules.MaxQuickCandidates)
+            .Take(max)
             .ToList();
     }
 
-    /// <summary>geneva's search space for the service (<c>--protos</c>).</summary>
-    public static string Protos(AutoService s) => s.Kind == AutoKind.Dns ? "UDP,IP,DNS,DNSQR" : s.Transport == L4Kind.Udp ? "UDP,IP" : "TCP";
+    /// <summary>A strategy that can act on the service's packets: TCP trees for TCP, UDP (or DNS, IP) trees for UDP.</summary>
+    public static bool Fits(AutoService s, string strategy) => s.Transport == L4Kind.Udp
+        ? strategy.Contains("[UDP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[IP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[DNS", StringComparison.OrdinalIgnoreCase)
+        : strategy.Contains("[TCP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[IP:", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// geneva's search space for the service (<c>--protos</c>). <paramref name="wide"/>: the wider search after the
+    /// usual one found nothing twice; a site's search may then change IP headers too (fragments, TTL, options).
+    /// </summary>
+    public static string Protos(AutoService s, bool wide = false) =>
+        s.Kind == AutoKind.Dns ? "UDP,IP,DNS,DNSQR" : s.Transport == L4Kind.Udp ? "UDP,IP" : wide ? "TCP,IP" : "TCP";
 }

@@ -29,7 +29,9 @@ public sealed class GenevaToolTests
         using var _r = rig;
         var s = await rig.Call("geneva_status");
         Assert.False(s.IsError);
-        Assert.Equal("nfqws2", (string?)s.Data["engine"]);
+        Assert.Equal("geneva", (string?)s.Data["engine"]);
+        Assert.False((await rig.Call("engine_select", """{"engine":"nfqws2"}""")).IsError);
+        Assert.Equal("nfqws2", (string?)(await rig.Call("geneva_status")).Data["engine"]);
         var sel = await rig.Call("engine_select", """{"engine":"geneva"}""");
         Assert.False(sel.IsError);
         Assert.Equal(BypassEngine.Geneva, rig.Host.Geneva!.Engine);
@@ -96,9 +98,9 @@ public sealed class GenevaToolTests
         var (rig, agent) = Make(new McpPermissions());
         using var _r = rig;
         Assert.False((await rig.Call("geneva_status")).IsError);
-        Assert.True((await rig.Call("engine_select", """{"engine":"geneva"}""")).IsError);
+        Assert.True((await rig.Call("engine_select", """{"engine":"nfqws2"}""")).IsError);
         Assert.True((await rig.Call("geneva_search_start", """{"target":"blocked.example"}""")).IsError);
         Assert.Empty(agent.Started);
-        Assert.Equal(BypassEngine.Nfqws2, rig.Host.Geneva!.Engine);
+        Assert.Equal(BypassEngine.Geneva, rig.Host.Geneva!.Engine);
     }
 }

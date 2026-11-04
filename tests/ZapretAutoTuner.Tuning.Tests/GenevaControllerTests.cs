@@ -89,6 +89,68 @@ public sealed class GenevaControllerTests
     }
 
     [Fact]
+    public async Task Several_workers_are_probed_side_by_side_each_from_its_own_ports()
+    {
+        var agent = new FakeGenevaAgent();
+        agent.Strategies.Add("[TCP:flags:PA]-fragment{tcp:-1:False}-| \\/");
+        var store = new MemoryGenevaStore();
+        var ports = new List<int>();
+        int calls = 0, inFlight = 0, maxInFlight = 0;
+        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, async (host, port, tls, local, ct) =>
+        {
+            int n = Interlocked.Increment(ref calls) - 1;
+            lock (ports)
+                ports.Add(local);
+            if (n == 0)
+                return Reset(host); // the baseline, alone
+            int now = Interlocked.Increment(ref inFlight);
+            lock (ports)
+                maxInFlight = Math.Max(maxInFlight, now);
+            // the probes wait for each other: one at a time would never see two in flight
+            for (int i = 0; i < 80 && Volatile.Read(ref maxInFlight) < 2; i++)
+                await Task.Delay(25, ct);
+            Interlocked.Decrement(ref inFlight);
+            return Loaded(host);
+        });
+        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3, Workers = 3 }, default);
+        await Until(() => !g.SearchRunning);
+
+        Assert.Equal(3, Assert.Single(agent.Started).Workers);
+        Assert.True(maxInFlight >= 2, $"probes in flight at most {maxInFlight}");
+        // every strategy got its answer, by its id, and each probe used its worker's block of ports
+        Assert.Equal(4, agent.Answers.Count);
+        Assert.Equal(agent.Answers.Count, agent.Answers.Select(a => a.Id).Distinct().Count());
+        Assert.Contains(ports, p => p is >= 30064 and <= 30127);
+        Assert.Contains(ports, p => p is >= 30128 and <= 30191);
+        Assert.Equal(3, GenevaState.Parse(store.Json).Found.Count);
+        Assert.Equal("finished", g.Search.Ended?.En);
+    }
+
+    [Fact]
+    public void Workers_and_imports_are_kept_and_imports_never_replace()
+    {
+        var store = new MemoryGenevaStore();
+        var g = new GenevaController(_ => throw new InvalidOperationException(), store, (h, p, t, l, ct) => Task.FromResult(Reset(h)));
+        Assert.Equal(1, g.Workers);
+        g.Workers = 4;
+        g.Workers = 99;
+        Assert.Equal(8, g.Workers);
+        Assert.Equal(1, g.Import([new GenevaSharedStrategy { Strategy = "[TCP:flags:PA]-drop-| \\/", Services = ["a.example"] }]));
+        Assert.Equal(1, g.Import([
+            new GenevaSharedStrategy { Strategy = "[TCP:flags:PA]-drop-| \\/", Services = ["b.example", "A.example"] },
+            new GenevaSharedStrategy { Strategy = "[UDP:sport:*]-drop-| \\/" },
+        ]));
+        var state = GenevaState.Parse(store.Json);
+        Assert.Equal(8, state.Workers);
+        Assert.Equal(2, state.Imported.Count);
+        Assert.Equal(["a.example", "b.example"], state.Imported[0].Services);
+        // the starting set comes after the user's imports
+        Assert.Equal(state.Imported.Count + GenevaShare.Preset.Count, state.Shared().Count());
+        g.RemoveImported("[UDP:sport:*]-drop-| \\/");
+        Assert.Single(GenevaState.Parse(store.Json).Imported);
+    }
+
+    [Fact]
     public async Task An_open_site_is_not_searched()
     {
         var rig = new Rig { Probe = (n, host) => Loaded(host) };
@@ -210,7 +272,9 @@ public sealed class GenevaControllerTests
     [Fact]
     public void A_damaged_state_starts_fresh_and_found_strategies_merge()
     {
-        Assert.Equal(BypassEngine.Nfqws2, GenevaState.Parse("{not json").Engine);
+        // geneva (its "Авто" mode) is the default engine; a saved choice is kept as it was
+        Assert.Equal(BypassEngine.Geneva, GenevaState.Parse("{not json").Engine);
+        Assert.Equal(BypassEngine.Nfqws2, GenevaState.Parse(new GenevaState { Engine = BypassEngine.Nfqws2 }.Serialize()).Engine);
         var s = new GenevaState()
             .WithFound([new GenevaFoundStrategy { Host = "a.example", Strategy = "x \\/", Fitness = 300, Runs = 1 }])
             .WithFound([new GenevaFoundStrategy { Host = "A.example", Strategy = "x \\/", Fitness = 390, Runs = 3 }]);

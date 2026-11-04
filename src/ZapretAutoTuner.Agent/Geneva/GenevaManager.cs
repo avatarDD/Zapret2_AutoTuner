@@ -190,9 +190,13 @@ internal sealed class GenevaManager : IDisposable
             Seeds = [.. r.Seeds],
             Protos = string.IsNullOrEmpty(r.Protos) ? "TCP" : r.Protos,
             Probe = string.IsNullOrEmpty(r.Probe) ? GenevaArgv.WebProbe : r.Probe,
+            Workers = Math.Max(1, r.Workers),
         };
         if (settings.Problems() is { Count: > 0 } bad)
             throw new GenevaStartException(string.Join("; ", bad));
+        // an older geneva_c refuses --probe external with several workers: it gets one
+        if (settings.Workers > 1 && !(await FeaturesAsync(geneva, ct)).Contains(GenevaBundle.ExternalWorkersFeature))
+            settings = settings with { Workers = 1 };
         var dir = SearchDir(settings.TargetKey);
         CreateOwnDir(Path.GetDirectoryName(dir)!);
         CreateOwnDir(dir);

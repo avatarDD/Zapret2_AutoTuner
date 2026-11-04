@@ -12,6 +12,7 @@
     <EmbeddedResource Include="Search\Data\*.yaml" LogicalName="ZapretAutoTuner.Core.Search.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Diagnostics\Data\*.json" LogicalName="ZapretAutoTuner.Core.Diagnostics.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Providers\Data\*.json" LogicalName="ZapretAutoTuner.Core.Providers.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Geneva\Data\*.json" LogicalName="ZapretAutoTuner.Core.Geneva.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Export\Data\*.conf" LogicalName="ZapretAutoTuner.Core.Export.%(Filename)%(Extension)" />
     <InternalsVisibleTo Include="ZapretAutoTuner.Core.Tests" />
     <InternalsVisibleTo Include="ZapretAutoTuner.Probes.Tests" />

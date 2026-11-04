@@ -59,12 +59,13 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
         w.TryWrite(new GenevaOutput { Event = e.ToJsonString() });
     }
 
-    private async Task<int> AskAsync(ChannelWriter<GenevaOutput> w, long id, string strategy)
+    private async Task<int> AskAsync(ChannelWriter<GenevaOutput> w, long id, string strategy, int worker = 0)
     {
         var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_lock)
             _answers[id] = tcs;
-        Event(w, new JsonObject { ["ev"] = "eval_request", ["id"] = id, ["strategy"] = strategy, ["run"] = 0, ["lports"] = "30000-30063" });
+        int from = 30000 + 64 * worker;
+        Event(w, new JsonObject { ["ev"] = "eval_request", ["id"] = id, ["strategy"] = strategy, ["run"] = 0, ["lports"] = $"{from}-{from + 63}" });
         return await tcs.Task;
     }
 
@@ -81,11 +82,26 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
         }
         var results = new List<(string S, int F)>();
         long id = 2;
-        foreach (var s in Strategies)
+        if (r.Workers > 1)
         {
-            int f = await AskAsync(w, id++, s);
-            results.Add((s, f));
-            Event(w, new JsonObject { ["ev"] = "eval", ["strategy"] = s, ["fitness"] = f, ["runs"] = 1, ["outcome"] = f > 0 ? "ok" : "failed", ["detail"] = "external" });
+            // geneva_c 1.2: the workers ask at once, each from its own ports, and take the answers in any order
+            var asks = Strategies.Select((st, i) => (St: st, Task: AskAsync(w, id + i, st, i % r.Workers))).ToList();
+            id += asks.Count;
+            foreach (var (st, t) in asks)
+            {
+                int f = await t;
+                results.Add((st, f));
+                Event(w, new JsonObject { ["ev"] = "eval", ["strategy"] = st, ["fitness"] = f, ["runs"] = 1, ["outcome"] = f > 0 ? "ok" : "failed", ["detail"] = "external" });
+            }
+        }
+        else
+        {
+            foreach (var s in Strategies)
+            {
+                int f = await AskAsync(w, id++, s);
+                results.Add((s, f));
+                Event(w, new JsonObject { ["ev"] = "eval", ["strategy"] = s, ["fitness"] = f, ["runs"] = 1, ["outcome"] = f > 0 ? "ok" : "failed", ["detail"] = "external" });
+            }
         }
         var best = results.OrderByDescending(x => x.F).First();
         Event(w, new JsonObject { ["ev"] = "generation", ["gen"] = 0, ["unique"] = results.Count, ["evaluated"] = results.Count, ["avg_fitness"] = results.Average(x => x.F), ["best_fitness"] = best.F, ["best"] = best.S });

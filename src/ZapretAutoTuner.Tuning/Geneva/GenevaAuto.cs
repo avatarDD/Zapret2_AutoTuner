@@ -124,6 +124,12 @@ public sealed class GenevaAuto : IAsyncDisposable
     /// <summary>The running groups are applied again this often (new addresses join their sets).</summary>
     public TimeSpan Refresh { get; init; } = TimeSpan.FromMinutes(2);
 
+    /// <summary>
+    /// Geneva's library for the wider round (client-side strategies, best first); null: the round goes without it.
+    /// The App reads it from the bundle without rights.
+    /// </summary>
+    public Func<CancellationToken, Task<IReadOnlyList<string>>>? Library { get; init; }
+
     /// <summary>Why the mode may not start now (zapret2's protection runs, the wizard tunes, MCP experiments), or null.</summary>
     public Func<string?>? Busy { get; set; }
 
@@ -489,15 +495,32 @@ public sealed class GenevaAuto : IAsyncDisposable
 
     private async Task FindAsync(AutoService s, CancellationToken ct)
     {
+        // nothing found twice: the wider round tries every known strategy and Geneva's library, then a bigger search
+        bool wide = s.Attempts >= AutoRules.WideAfter;
+        IReadOnlyList<string> library = [];
+        if (wide && Library is { } lib)
+        {
+            try
+            {
+                library = await lib(ct).ConfigureAwait(false);
+            }
+            catch (Exception e) when (e is InvalidOperationException or IOException or FormatException or System.ComponentModel.Win32Exception)
+            {
+                AddLog($"{s.Name}: библиотека Geneva недоступна / Geneva's library is unavailable: {e.Message}");
+            }
+        }
         List<string> candidates;
         lock (_lock)
         {
+            var state = _controller.State;
             var running = _groups.Select(g => g.Strategy).ToList();
-            var found = _controller.State.Found.Where(f => f.Fitness > 0).Select(f => f.Strategy)
+            var found = state.Found.Where(f => f.Fitness > 0).Select(f => f.Strategy)
                 .Concat(_book.Services.Where(x => x.Strategy is not null).Select(x => x.Strategy!));
-            candidates = AutoCandidates.For(s, running, found);
+            candidates = AutoCandidates.For(s, running, found, state.Shared(), library, wide ? AutoRules.MaxWideCandidates : AutoRules.MaxQuickCandidates);
         }
-        AddLog($"{s.Name}: пробую известные стратегии ({candidates.Count})");
+        AddLog(wide
+            ? $"{s.Name}: обычный подбор не помог {s.Attempts} раза — расширенный круг: {candidates.Count} стратегий, затем подбор шире"
+            : $"{s.Name}: пробую известные стратегии ({candidates.Count})");
         foreach (var c in candidates)
         {
             ct.ThrowIfCancellationRequested();
@@ -519,27 +542,45 @@ public sealed class GenevaAuto : IAsyncDisposable
             AddLog($"{s.Name}: известные стратегии не помогли; повторю позже");
             return;
         }
-        await EvolveAsync(s, candidates, ct).ConfigureAwait(false);
+        await EvolveAsync(s, candidates, wide, ct).ConfigureAwait(false);
     }
 
     /// <summary>geneva's search for the service, continued from its checkpoint when there is one.</summary>
-    private async Task EvolveAsync(AutoService s, List<string> seeds, CancellationToken ct)
+    private async Task EvolveAsync(AutoService s, List<string> seeds, bool wide, CancellationToken ct)
     {
         bool web = s.Kind == AutoKind.Web;
         var host = web ? (s.Host.Length > 0 ? s.Host : s.Name) : s.Address?.ToString() ?? "";
         var saved = _controller.State.ProgressOf(host, s.Port);
-        var settings = new GenevaSearchSettings
-        {
-            Host = host,
-            Port = s.Port,
-            Tls = s.Port != 80,
-            Probe = web ? GenevaArgv.WebProbe : GenevaArgv.ReplayProbe,
-            Protos = AutoCandidates.Protos(s),
-            Population = saved?.Population > 0 ? saved.Population : AutoRules.Population,
-            Generations = saved is null ? AutoRules.Generations : saved.Finished ? saved.Generations + AutoRules.MoreGenerations : saved.Generations,
-            Resume = saved is not null,
-            Seeds = saved is null ? seeds : [],
-        };
+        // the wider search starts over once, bigger and with more layers; later it is continued like any other
+        bool restartWide = wide && saved is { Finished: true } && saved.Population < AutoRules.WidePopulation;
+        var settings = restartWide
+            ? new GenevaSearchSettings
+            {
+                Host = host,
+                Port = s.Port,
+                Tls = s.Port != 80,
+                Probe = web ? GenevaArgv.WebProbe : GenevaArgv.ReplayProbe,
+                Protos = AutoCandidates.Protos(s, wide: true),
+                Population = AutoRules.WidePopulation,
+                Generations = AutoRules.WideGenerations,
+                Resume = false,
+                Seeds = [.. seeds.Take(GenevaArgv.MaxSeeds)],
+                Workers = _controller.Workers,
+            }
+            : new GenevaSearchSettings
+            {
+                Host = host,
+                Port = s.Port,
+                Tls = s.Port != 80,
+                Probe = web ? GenevaArgv.WebProbe : GenevaArgv.ReplayProbe,
+                // a resumed search keeps its layers: geneva refuses to continue with others
+                Protos = saved is { Protos.Length: > 0 } ? saved.Protos : AutoCandidates.Protos(s),
+                Population = saved?.Population > 0 ? saved.Population : AutoRules.Population,
+                Generations = saved is null ? AutoRules.Generations : saved.Finished ? saved.Generations + AutoRules.MoreGenerations : saved.Generations,
+                Resume = saved is not null,
+                Seeds = saved is null ? [.. seeds.Take(GenevaArgv.MaxSeeds)] : [],
+                Workers = _controller.Workers,
+            };
         if (settings.Problems() is { Count: > 0 } bad)
         {
             AddLog($"{s.Name}: подбор невозможен: {string.Join("; ", bad)}");
@@ -552,7 +593,9 @@ public sealed class GenevaAuto : IAsyncDisposable
         _controller.SearchEnded += OnEnded;
         try
         {
-            AddLog(settings.Resume ? $"{s.Name}: продолжаю подбор geneva, поколений {settings.Generations}" : $"{s.Name}: подбор geneva");
+            AddLog(settings.Resume ? $"{s.Name}: продолжаю подбор geneva, поколений {settings.Generations}"
+                : restartWide ? $"{s.Name}: подбор geneva шире: популяция {settings.Population}, слои {settings.Protos}"
+                : $"{s.Name}: подбор geneva");
             await _controller.StartSearchAsync(settings, ct, _probes.Judge(s)).ConfigureAwait(false);
             GenevaSearchView view;
             try

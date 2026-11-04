@@ -5,10 +5,12 @@
     <AssemblyName>ZapretAutoTuner</AssemblyName>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Loc\strings.json" LogicalName="ZapretAutoTuner.App.strings.json" />
+    <AvaloniaResource Include="Assets\icon.ico;Assets\icon.png" />
     <InternalsVisibleTo Include="ZapretAutoTuner.App.Tests" />
   </ItemGroup>
   <ItemGroup>

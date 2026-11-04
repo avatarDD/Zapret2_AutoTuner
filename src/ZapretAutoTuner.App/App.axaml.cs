@@ -24,7 +24,18 @@ public sealed partial class App : Application
             // what the last search found is still there after a restart: export and protection work on it
             host.Solutions.Restore();
             var main = new MainViewModel(host);
-            desktop.MainWindow = new MainWindow { DataContext = main };
+            var window = new MainWindow { DataContext = main };
+            desktop.MainWindow = window;
+            Tray? tray = null;
+            try
+            {
+                tray = new Tray(this, desktop, window, host, main);
+            }
+            catch (Exception e) when (e is InvalidOperationException or PlatformNotSupportedException or IOException)
+            {
+                // a desktop without a tray: the window works as before
+                Console.Error.WriteLine("tray: " + e.Message);
+            }
             _ = main.Mcp.ApplyAsync();
             if (Program.Stdio is { } io)
             {
@@ -37,6 +48,7 @@ public sealed partial class App : Application
             }
             desktop.ShutdownRequested += (_, _) =>
             {
+                tray?.Dispose();
                 // the built-in advisor stops talking to its provider at once
                 main.Advisor.Cancel();
                 var mcp = main.Mcp.DisposeAsync().AsTask();

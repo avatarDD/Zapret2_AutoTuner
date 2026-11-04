@@ -279,14 +279,6 @@
   "Поколений",
   "Generations"
  ],
- "engine.geneva": [
-  "geneva (Geneva, генетический подбор)",
-  "geneva (Geneva, genetic search)"
- ],
- "engine.geneva_about": [
-  "Подбор, найденные стратегии и обход — всё ниже на этой странице. Прогресс подбора и найденные стратегии сохраняются: после перезапуска подбор можно продолжить.",
-  "Search, found strategies and the bypass are all below on this page. The search progress and the strategies found are kept: after a restart the search continues."
- ],
  "engine.idle": [
   "Стратегия ни разу не сработала, хотя трафик идёт: скорее всего, она ничего не делает с этим трафиком. Попробуйте другую.",
   "The strategy never fired although traffic flows: it most likely does nothing to this traffic. Try another one."
@@ -310,22 +302,6 @@
  "engine.log": [
   "Журнал geneva",
   "geneva log"
- ],
- "engine.nfqws2": [
-  "nfqws2 (zapret2)",
-  "nfqws2 (zapret2)"
- ],
- "engine.nfqws2_about": [
-  "Подбор в «Подборе», включение и слежение в «Мониторе», экспорт в zapret2, Keenetic и zapret-gui.",
-  "Search in the Wizard, protection and watching in the Monitor, export to zapret2, Keenetic and zapret-gui."
- ],
- "engine.open_monitor": [
-  "Открыть «Монитор»",
-  "Open the Monitor"
- ],
- "engine.open_wizard": [
-  "Открыть «Подбор»",
-  "Open the Wizard"
  ],
  "engine.pause": [
   "Пауза",
@@ -416,8 +392,8 @@
   "Auto mode log"
  ],
  "engine.auto_off": [
-  "Режим «Авто» выключен.",
-  "The Auto mode is off."
+  "Авто-обход выключен.",
+  "The Auto bypass is off."
  ],
  "engine.auto_off_short": [
   "Выкл",
@@ -540,12 +516,8 @@
   "Geneva strategy"
  ],
  "engine.subtitle": [
-  "Чем обходить блокировки на этом ПК. nfqws2 (zapret2) — основной движок: мастер подбора, монитор, экспорт на роутер. geneva — второй движок с генетическим подбором стратегий Geneva и своим языком стратегий; её стратегии не переводятся в zapret2. Работает один движок за раз.",
-  "What bypasses blocks on this PC. nfqws2 (zapret2) is the main engine: the tuning wizard, the monitor, export to a router. geneva is a second engine with Geneva's genetic strategy search and its own strategy language; its strategies do not translate to zapret2. One engine works at a time."
- ],
- "engine.switch_running": [
-  "Обход geneva ещё включён: выключите его в шаге 3, чтобы перейти на nfqws2.",
-  "The geneva bypass is still on: turn it off in step 3 to switch to nfqws2."
+  "Для тех, кто хочет управлять сам: укажите сайт, подберите стратегию geneva и включите её. Обычно это не нужно — режим «Авто-обход» делает то же самое сам и для всех сайтов сразу. Стратегии geneva не переводятся в zapret2.",
+  "For those who want control: name a site, search for a geneva strategy and turn it on. Usually you do not need this: the Auto bypass does the same by itself for every site at once. geneva strategies do not translate to zapret2."
  ],
  "engine.t_dropped": [
   "Отброшено",
@@ -580,8 +552,8 @@
   "The strategy is in step 3: press Turn the bypass on."
  ],
  "engine.title": [
-  "Движок обхода",
-  "Bypass engine"
+  "Ручной подбор geneva для сайта",
+  "Manual geneva search for a site"
  ],
  "engine.tree": [
   "{0} × {1}",
@@ -1012,8 +984,8 @@
   "Dismiss"
  ],
  "monitor.geneva_running": [
-  "Сейчас работает geneva: обход или подбор (страница «Движок обхода»). Остановите её там, затем включите защиту nfqws2: два движка на одном порту мешают друг другу.",
-  "geneva is running now: its bypass or its search (the Bypass engine page). Stop it there, then start the nfqws2 protection: two engines on one port get in each other's way."
+  "Сейчас работает geneva: обход или подбор (страницы «Авто-обход» и «Подбор для сайта»). Остановите её там, затем включите защиту nfqws2: два движка на одном порту мешают друг другу.",
+  "geneva is running now: its bypass or its search (the Auto bypass and Search for a site pages). Stop it there, then start the nfqws2 protection: two engines on one port get in each other's way."
  ],
  "monitor.journal": [
   "Журнал изменений",
@@ -1068,20 +1040,20 @@
   "Advisor"
  ],
  "nav.engine": [
-  "Движок обхода",
-  "Bypass engine"
+  "Подбор для сайта",
+  "Search for a site"
  ],
  "nav.expert": [
   "Эксперт",
   "Expert"
  ],
  "nav.home": [
-  "Главная",
-  "Home"
+  "Проверка блокировок",
+  "Block check"
  ],
  "nav.monitor": [
-  "Монитор",
-  "Monitor"
+  "Защита zapret2",
+  "zapret2 protection"
  ],
  "nav.reports": [
   "Отчёты",
@@ -1096,8 +1068,8 @@
   "Settings"
  ],
  "nav.wizard": [
-  "Подбор",
-  "Tuning"
+  "Подбор zapret2",
+  "zapret2 tuning"
  ],
  "outcome.noreply": [
   "нет ответа",
@@ -1580,8 +1552,8 @@
   "{0}: works {1}/{2} · {3}"
  ],
  "wizard.geneva_busy": [
-  "Сейчас работает geneva: обход или подбор (страница «Движок обхода»). Остановите её там: испытания nfqws2 прошли бы через оба движка.",
-  "geneva is running now: its bypass or its search (the Bypass engine page). Stop it there: nfqws2's trials would pass through both engines."
+  "Сейчас работает geneva: обход или подбор (страницы «Авто-обход» и «Подбор для сайта»). Остановите её там: испытания nfqws2 прошли бы через оба движка.",
+  "geneva is running now: its bypass or its search (the Auto bypass and Search for a site pages). Stop it there: nfqws2's trials would pass through both engines."
  ],
  "wizard.mcp_busy": [
   "Сейчас подбором управляет внешний агент (MCP). Дождитесь конца или нажмите «Стоп» на баннере.",
@@ -1720,20 +1692,20 @@
   "Router through zapret-gui"
  ],
  "nav.home_hint": [
-  "Что заблокировано",
-  "What is blocked"
+  "Что заблокировано и как",
+  "What is blocked and how"
  ],
  "nav.wizard_hint": [
-  "Найти рабочую стратегию",
-  "Find a working strategy"
+  "Стратегия для ПК и роутера",
+  "A strategy for the PC and router"
  ],
  "nav.monitor_hint": [
-  "Держать защиту включённой",
-  "Keep the protection on"
+  "Держать стратегию включённой",
+  "Keep the strategy on"
  ],
  "nav.engine_hint": [
-  "nfqws2 или geneva, подбор и обход geneva",
-  "nfqws2 or geneva, geneva's search and bypass"
+  "geneva: один сайт, своя стратегия",
+  "geneva: one site, its own strategy"
  ],
  "nav.reports_hint": [
   "Итоги подбора, отчёт о проблеме",
@@ -1793,7 +1765,7 @@
  ],
  "export.pc_how": [
   "«Включить на этом компьютере» запускает встроенный zapret2 (winws2/nfqws2) со стратегией. Обход работает, пока открыт AutoTuner; следить и выключать — на странице «Монитор».",
-  "'Turn on on this PC' starts the built-in zapret2 (winws2/nfqws2) with the strategy. The bypass works while AutoTuner is open; watch it and turn it off on the Monitor page."
+  "'Turn on on this PC' starts the built-in zapret2 (winws2/nfqws2) with the strategy. The bypass works while AutoTuner is open; watch it and turn it off on the zapret2 protection page."
  ],
  "export.protect_here": [
   "Включить на этом компьютере",
@@ -1808,7 +1780,7 @@
   "Install as a Windows service"
  ],
  "export.service_hint": [
-  "Служба zt_winws2 работает и без AutoTuner, с загрузки Windows. Не включайте одновременно защиту в «Мониторе»: два движка будут обрабатывать одни и те же пакеты.",
+  "Служба zt_winws2 работает и без AutoTuner, с загрузки Windows. Не включайте одновременно защиту в «Защите zapret2»: два движка будут обрабатывать одни и те же пакеты.",
   "The zt_winws2 service runs without AutoTuner, from Windows start-up. Do not turn on protection in Monitor at the same time: two engines would handle the same packets."
  ],
  "export.service_remove": [
@@ -1922,5 +1894,185 @@
  "home.solution_use": [
   "Где включить…",
   "Where to turn it on…"
+ ],
+ "nav.auto": [
+  "Авто-обход",
+  "Auto bypass"
+ ],
+ "nav.auto_hint": [
+  "Всё само: включить и забыть",
+  "Hands-free: turn on and forget"
+ ],
+ "nav.section_auto": [
+  "АВТОМАТИЧЕСКИ",
+  "AUTOMATIC"
+ ],
+ "nav.section_manual": [
+  "ВРУЧНУЮ · GENEVA",
+  "MANUAL · GENEVA"
+ ],
+ "nav.section_zapret2": [
+  "ВРУЧНУЮ · ZAPRET2",
+  "MANUAL · ZAPRET2"
+ ],
+ "nav.section_service": [
+  "СЕРВИС",
+  "SERVICE"
+ ],
+ "auto.title": [
+  "Авто-обход",
+  "Auto bypass"
+ ],
+ "auto.subtitle": [
+  "Главный режим программы. Один переключатель: программа сама находит заблокированные сайты и сервисы и подбирает для каждого обход. Ничего настраивать не нужно.",
+  "The program's main mode. One switch: the program finds blocked sites and services and finds a bypass for each by itself. Nothing to set up."
+ ],
+ "auto.first_1": [
+  "1. Включите переключатель справа. Один раз появится запрос прав администратора: без них нельзя перехватывать трафик.",
+  "1. Turn the switch on the right on. An administrator prompt appears once: traffic cannot be intercepted without it."
+ ],
+ "auto.first_2": [
+  "2. Пользуйтесь интернетом как обычно. Когда сайт не открывается, программа это заметит, проверит и начнёт подбор — сначала проверенные стратегии из стартового набора, потом генетический поиск.",
+  "2. Use the internet as usual. When a site does not open, the program notices, checks it and starts searching: the proven strategies of the starting set first, then the genetic search."
+ ],
+ "auto.first_3": [
+  "3. Найденный обход включается сам и только для заблокированного трафика. Окно можно свернуть в трей — обход работает, пока программа запущена.",
+  "3. A found bypass turns on by itself, for the blocked traffic only. Minimize the window to the tray: the bypass works while the program runs."
+ ],
+ "auto.workers": [
+  "Потоков подбора:",
+  "Search threads:"
+ ],
+ "auto.workers_old": [
+  "Встроенный geneva_c проверяет по одной стратегии; несколько потоков заработают с geneva_c 1.2.",
+  "The bundled geneva_c checks one strategy at a time; several threads work with geneva_c 1.2."
+ ],
+ "auto.working": [
+  "Работающие стратегии",
+  "Working strategies"
+ ],
+ "auto.working_empty": [
+  "Пока ни одной: как только для сервиса найдётся обход, он появится здесь вместе со всеми сервисами, которым подходит та же стратегия.",
+  "None yet: once a bypass is found for a service it shows here, with every service the same strategy suits."
+ ],
+ "auto.services": [
+  "Сервисы с проблемами",
+  "Services with problems"
+ ],
+ "auto.share": [
+  "Обмен стратегиями",
+  "Share strategies"
+ ],
+ "auto.share_about": [
+  "Экспорт сохраняет рабочие стратегии в файл, который можно отдать другу или открыть в zapret-gui на роутере. Импорт добавляет чужие стратегии рядом с вашими: рабочие не затираются, а новые сначала проверяются на вашем трафике.",
+  "Export saves the working strategies to a file you can give to a friend or open in zapret-gui on a router. Import adds someone else's strategies next to yours: the working ones are kept, and new ones are checked on your traffic first."
+ ],
+ "auto.export": [
+  "Экспорт в файл…",
+  "Export to a file…"
+ ],
+ "auto.import": [
+  "Импорт из файла…",
+  "Import from a file…"
+ ],
+ "auto.export_empty": [
+  "Пока нечего экспортировать: рабочих стратегий нет.",
+  "Nothing to export yet: no working strategies."
+ ],
+ "auto.exported": [
+  "Экспортировано стратегий: {0}.",
+  "Strategies exported: {0}."
+ ],
+ "auto.imported": [
+  "Импорт: новых стратегий {0}, уже были {1}. Они будут проверены при подборе.",
+  "Import: {0} new strategies, {1} already known. They are checked during the search."
+ ],
+ "auto.imported_list": [
+  "Импортированные стратегии",
+  "Imported strategies"
+ ],
+ "auto.remove": [
+  "Убрать",
+  "Remove"
+ ],
+ "auto.preset": [
+  "В программе есть стартовый набор: {0} проверенные стратегии для {1} сервисов — их программа пробует первыми.",
+  "The program comes with a starting set: {0} proven strategies for {1} services, tried first."
+ ],
+ "help.auto": [
+  "Авто-обход сам следит за трафиком ПК, замечает заблокированные сайты и сервисы (сайты, QUIC, DNS, VPN, игры, торренты), проверяет без обхода, что блок настоящий, и подбирает стратегию geneva для каждого.\nПорядок: включить → пользоваться интернетом → смотреть «Работающие стратегии».\nПример: YouTube не грузится → через минуту статус «подбор обхода» → «обход работает».",
+  "The Auto bypass watches the PC's traffic, notices blocked sites and services (sites, QUIC, DNS, VPN, games, torrents), checks without a bypass that the block is real and finds a geneva strategy for each.\nOrder: turn on → use the internet → look at 'Working strategies'.\nExample: YouTube does not load → a minute later 'searching' → 'bypass works'."
+ ],
+ "help.workers": [
+  "Сколько стратегий проверяется одновременно при генетическом подборе. Больше потоков — быстрее поиск, но больше соединений к сайту. 1–2 для слабого интернета, 4 — обычно хорошо.\nПример: 4 потока проверяют поколение из 20 стратегий примерно в 4 раза быстрее.",
+  "How many strategies the genetic search checks at once. More threads search faster but open more connections to the site. 1–2 on a slow connection, 4 is usually fine.\nExample: 4 threads check a generation of 20 strategies about 4 times faster."
+ ],
+ "help.groups": [
+  "Одна стратегия часто подходит многим сайтам. Программа объединяет их: одна стратегия — одна группа со всеми её адресами, и новые сайты сначала пробуют стратегии уже работающих групп.\nПример: youtube.com, googlevideo.com, ytimg.com — одна строка с одной стратегией.",
+  "One strategy often suits many sites. The program merges them: one strategy is one group with all its addresses, and new sites try the running groups' strategies first.\nExample: youtube.com, googlevideo.com, ytimg.com: one line with one strategy."
+ ],
+ "help.statuses": [
+  "«подозрение» — соединения рвутся как при блокировке; «заблокирован» — проверка без обхода подтвердила; «подбор обхода» — идёт поиск; «обход работает» — стратегия включена; «блокировка по IP» — пакетами не обойти, нужен VPN; «не найдено» — программа повторит позже, каждый раз шире.\nКнопка «Сбросить» забывает всё о сервисе и начинает заново.",
+  "'suspected': connections fail like under a block; 'blocked': the check without a bypass confirmed it; 'searching': the search runs; 'bypass works': the strategy is on; 'blocked by IP': no packet trick helps, a VPN would; 'not found': the program tries again later, wider each time.\n'Reset' forgets the service and starts over."
+ ],
+ "help.share": [
+  "Файл — JSON в формате zapret-gui (zapret-gui/geneva-strategies): стратегии и имена сервисов, без ваших адресов. Его же понимает zapret-gui на роутере. Можно импортировать и простой текст — одна стратегия на строку.\nПример строки: [TCP:flags:PA]-fragment{tcp:-1:False}-| \\/",
+  "The file is JSON in zapret-gui's format (zapret-gui/geneva-strategies): strategies and service names, no addresses of yours. zapret-gui on a router reads it too. Plain text works as well, one strategy per line.\nExample line: [TCP:flags:PA]-fragment{tcp:-1:False}-| \\/"
+ ],
+ "help.manual": [
+  "Ручной режим для одного сайта: 1) подбор → 2) найденные стратегии → 3) обход одной стратегией для всех соединений на порты. Пока он включён, «Авто-обход» ждёт: два обхода на одних пакетах мешают друг другу.\nПример: сайт example.com, порт 443, «Найти» → «Использовать» → «Включить».",
+  "Manual mode for one site: 1) search → 2) found strategies → 3) a bypass with one strategy for every connection to the ports. While it is on, the Auto bypass waits: two bypasses on the same packets get in each other's way.\nExample: site example.com, port 443, 'Search' → 'Use' → 'Turn on'."
+ ],
+ "help.step1": [
+  "Сначала сайт проверяется без обхода. Если он открывается, подбирать нечего. Популяция — сколько стратегий в поколении, поколения — сколько кругов скрещивания. Прогресс сохраняется, «Продолжить» идёт дальше с того же места.\nПример: популяция 30, поколений 15 — около 450 проверок.",
+  "First the site is checked without a bypass; if it opens there is nothing to search. Population is the strategies per generation, generations the rounds of crossing. Progress is saved; 'Continue' goes on from there.\nExample: population 30, 15 generations, about 450 checks."
+ ],
+ "help.step2": [
+  "Стратегии, с которыми страница загрузилась полностью. «Использовать» переносит стратегию в шаг 3, «Копировать» — в буфер обмена.",
+  "Strategies with which the page loaded fully. 'Use' puts one into step 3, 'Copy' copies it."
+ ],
+ "help.step3": [
+  "Обход одной стратегией для всех соединений на указанные порты (у geneva нет списка сайтов). Для разных сайтов с разными стратегиями используйте «Авто-обход».\nПример: порты 80,443.",
+  "A bypass with one strategy for every connection to the given ports (geneva has no site list). For sites with different strategies use the Auto bypass.\nExample: ports 80,443."
+ ],
+ "help.home": [
+  "Проверка популярных сайтов движком zapret2: что заблокировано и как. Из красных строк можно сразу перейти к подбору zapret2. Для автоматического обхода geneva это не нужно.",
+  "A check of popular sites with zapret2's probes: what is blocked and how. From a red line you go straight to zapret2 tuning. The geneva Auto bypass does not need it."
+ ],
+ "settings.tray_minimize": [
+  "Сворачивать в трей при сворачивании окна",
+  "Minimize to the tray"
+ ],
+ "settings.tray_close": [
+  "Закрывать окно в трей (обход продолжает работать)",
+  "Close the window to the tray (the bypass keeps working)"
+ ],
+ "settings.tray_hint": [
+  "Из трея окно открывается щелчком по значку; «Выход» в меню значка закрывает программу и снимает обход.",
+  "Click the tray icon to open the window; 'Exit' in its menu closes the program and removes the bypass."
+ ],
+ "tray.open": [
+  "Открыть",
+  "Open"
+ ],
+ "tray.auto_on": [
+  "Включить авто-обход",
+  "Turn the Auto bypass on"
+ ],
+ "tray.auto_off": [
+  "Выключить авто-обход",
+  "Turn the Auto bypass off"
+ ],
+ "tray.exit": [
+  "Выход",
+  "Exit"
+ ],
+ "help.wizard": [
+  "Подбор стратегии zapret2 (nfqws2/winws2) по шагам: сайты → диагностика → подбор → проверка → где включить. Стратегию zapret2 можно поставить на роутер Keenetic, в zapret-gui или в свой zapret2.\nПример: впишите youtube.com и discord.com, нажмите «Найти» и дождитесь шага 5.",
+  "Step-by-step zapret2 (nfqws2/winws2) tuning: sites → diagnosis → search → check → where to turn it on. A zapret2 strategy installs on a Keenetic router, in zapret-gui or in your own zapret2.\nExample: enter youtube.com and discord.com, press 'Find' and wait for step 5."
+ ],
+ "help.monitor": [
+  "Держит найденную стратегию zapret2 включённой на этом ПК и следит, работает ли она; если перестала — подправляет. Пока работает защита zapret2, авто-обход geneva ждёт: два движка на одних пакетах мешают друг другу.",
+  "Keeps the found zapret2 strategy on on this PC and watches whether it works; repairs it when it stops. While zapret2 protection runs, the geneva Auto bypass waits: two engines on the same packets get in each other's way."
  ]
 }

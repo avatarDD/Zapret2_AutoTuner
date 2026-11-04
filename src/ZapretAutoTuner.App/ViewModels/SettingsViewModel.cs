@@ -37,6 +37,8 @@ public sealed partial class SettingsViewModel : PageViewModel
         _guiToken = host.Settings.GuiToken;
         _routerHost = host.Settings.RouterHost;
         _largeFont = host.Settings.LargeFont;
+        _minimizeToTray = host.Settings.MinimizeToTray;
+        _closeToTray = host.Settings.CloseToTray;
         _advisorEnabled = host.Settings.AdvisorEnabled;
         _advisorProviderIndex = host.Settings.AdvisorProvider == ZapretAutoTuner.Mcp.Advisor.AdvisorProvider.Claude ? 0 : 1;
         _advisorModel = host.Settings.AdvisorModel;
@@ -49,6 +51,16 @@ public sealed partial class SettingsViewModel : PageViewModel
     public static string[] Modes { get; } = ["Quick", "Standard", "Full"];
 
     public string DataDir => _host.DataDir;
+
+    [ObservableProperty]
+    private bool _minimizeToTray;
+
+    [ObservableProperty]
+    private bool _closeToTray;
+
+    partial void OnMinimizeToTrayChanged(bool value) => _host.Settings.MinimizeToTray = value;
+
+    partial void OnCloseToTrayChanged(bool value) => _host.Settings.CloseToTray = value;
 
     [ObservableProperty]
     private bool _english;

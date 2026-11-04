@@ -33,6 +33,8 @@ public sealed partial class HomeViewModel(MainViewModel main) : PageViewModel
 
     public override string TitleKey => "nav.home";
 
+    public override string? SectionKey => "nav.section_zapret2";
+
     public ObservableCollection<CheckerRowViewModel> Rows { get; } = [];
 
     [ObservableProperty]

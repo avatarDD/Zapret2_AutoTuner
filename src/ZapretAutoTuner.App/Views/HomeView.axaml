@@ -1,12 +1,16 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:v="using:ZapretAutoTuner.App.Views"
              xmlns:l="using:ZapretAutoTuner.App.Loc"
              x:Class="ZapretAutoTuner.App.Views.HomeView"
              x:DataType="vm:HomeViewModel">
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Spacing="10">
-      <TextBlock Classes="h1" Text="{l:T home.title}" />
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Classes="h1" Text="{l:T home.title}" />
+        <v:HelpButton Text="{l:T help.home}" Margin="8,0,0,8" />
+      </StackPanel>
       <TextBlock Classes="muted" Text="{l:T home.subtitle}" />
       <WrapPanel Margin="0,8">
         <Button Classes="accent" Padding="24,12" FontSize="16" Margin="0,0,8,8" Command="{Binding CheckCommand}">

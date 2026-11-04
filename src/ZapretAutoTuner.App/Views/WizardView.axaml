@@ -1,12 +1,16 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:v="using:ZapretAutoTuner.App.Views"
              xmlns:l="using:ZapretAutoTuner.App.Loc"
              x:Class="ZapretAutoTuner.App.Views.WizardView"
              x:DataType="vm:WizardViewModel">
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Spacing="4">
-      <TextBlock Classes="h1" Text="{l:T wizard.title}" />
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Classes="h1" Text="{l:T wizard.title}" />
+        <v:HelpButton Text="{l:T help.wizard}" Margin="8,0,0,8" />
+      </StackPanel>
       <TextBlock Classes="muted" Text="{l:T wizard.steps}" />
       <TextBlock Classes="error" Text="{Binding Error}" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
     </StackPanel>

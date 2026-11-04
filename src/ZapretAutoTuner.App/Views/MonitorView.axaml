@@ -1,12 +1,16 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:v="using:ZapretAutoTuner.App.Views"
              xmlns:l="using:ZapretAutoTuner.App.Loc"
              x:Class="ZapretAutoTuner.App.Views.MonitorView"
              x:DataType="vm:MonitorViewModel">
   <Grid RowDefinitions="Auto,Auto,*,Auto,160">
     <StackPanel Spacing="6">
-      <TextBlock Classes="h1" Text="{l:T monitor.title}" />
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Classes="h1" Text="{l:T monitor.title}" />
+        <v:HelpButton Text="{l:T help.monitor}" Margin="8,0,0,8" />
+      </StackPanel>
       <TextBlock Classes="muted" Text="{l:T monitor.subtitle}" />
       <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,6">
         <Button Classes="accent" Padding="20,10" Command="{Binding ToggleCommand}">

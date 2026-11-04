@@ -14,6 +14,7 @@
     <DataTemplate DataType="vm:SettingsViewModel"><v:SettingsView /></DataTemplate>
     <DataTemplate DataType="vm:AdvisorViewModel"><v:AdvisorView /></DataTemplate>
     <DataTemplate DataType="vm:EngineViewModel"><v:EngineView /></DataTemplate>
+    <DataTemplate DataType="vm:AutoViewModel"><v:AutoView /></DataTemplate>
   </Application.DataTemplates>
   <Application.Styles>
     <FluentTheme />

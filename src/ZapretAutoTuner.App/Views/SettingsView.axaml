@@ -17,6 +17,9 @@
         </ComboBox>
       </StackPanel>
       <CheckBox Content="{l:T settings.large_font}" IsChecked="{Binding LargeFont}" />
+      <CheckBox Content="{l:T settings.tray_minimize}" IsChecked="{Binding MinimizeToTray}" />
+      <CheckBox Content="{l:T settings.tray_close}" IsChecked="{Binding CloseToTray}" />
+      <TextBlock Classes="muted" Text="{l:T settings.tray_hint}" />
       <StackPanel Spacing="4">
         <TextBlock Text="{l:T settings.mode}" />
         <ComboBox SelectedIndex="{Binding ModeIndex}" MinWidth="200">

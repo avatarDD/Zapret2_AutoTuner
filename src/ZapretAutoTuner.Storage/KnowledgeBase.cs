@@ -101,8 +101,17 @@ public sealed partial class KnowledgeBase : IDisposable
         var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
         db.Open();
         var kb = new KnowledgeBase(db) { Path = path };
-        kb.Exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
-        kb.Migrate();
+        try
+        {
+            kb.Exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
+            kb.Migrate();
+        }
+        catch
+        {
+            // not a base (or a newer one): the file must not stay open, Windows would keep it locked
+            kb.Dispose();
+            throw;
+        }
         return kb;
     }
 

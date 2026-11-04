@@ -104,7 +104,17 @@ public static class PortableData
     /// <summary>A base with nothing of the user's: no history, resources, found or imported strategies, services.</summary>
     internal static bool Fresh(string db)
     {
-        using var kb = KnowledgeBase.Open(db);
+        KnowledgeBase kb;
+        try
+        {
+            kb = KnowledgeBase.Open(db);
+        }
+        catch (Exception e) when (e is Microsoft.Data.Sqlite.SqliteException or InvalidOperationException)
+        {
+            // unreadable here: it is not set aside, what is in it stays the user's
+            return false;
+        }
+        using var _ = kb;
         if (kb.HasUserData())
             return false;
         var g = GenevaState.Parse(kb.GetSetting(KbGenevaStore.Key));

@@ -798,7 +798,7 @@ FUSE-образ AppImage смонтирован от пользователя и
 сохранением прогресса и управлением через MCP. Справочник — skill `geneva`.
 
 Сделано:
-- Бандл из официального релиза v1.0.0 с пином SHA-256
+- Бандл из официального релиза (сейчас v1.2.0) с пином SHA-256
   (`tools/bundle/geneva.lock.json`, `bundle_geneva.py`), в CI и релизе.
 - Agent: `GenevaManager` — защищённая копия бандла, `geneva check` перед
   запуском, обход (`run`, очередь 330, управляющий сокет с токеном в env),
@@ -825,13 +825,18 @@ FUSE-образ AppImage смонтирован от пользователя и
   подбирается заново, ненайденный — продолжается позже. gRPC
   `GenevaAutoApply`, состояние в `geneva.state.auto`, MCP
   `geneva_auto_status/enable/disable/reset`.
+- «Авто» на Windows через внешний фильтр geneva_c 1.1 (`--filter`,
+  `set_filter`, `--first`); такой же режим «Авто» есть в zapret-gui.
+- v1.1.0: «Авто-обход» — главная страница, меню «Автоматически» /
+  «Вручную · geneva» / «Вручную · zapret2» / «Сервис», подсказки «?», трей.
+  Стартовый набор стратегий (`Core/Geneva/Data/geneva-preset.json`),
+  экспорт и импорт в формате zapret-gui (`GenevaShare`), широкий раунд после
+  двух пустых подборов, «Потоки подбора» 1–8 (geneva_c 1.2, фича
+  `external_workers`). Данные — в папке `data` рядом с программой
+  (`PortableData`), с переносом и слиянием старой базы.
 
 Осталось (TODO):
 - Проверить вживую на Windows (WinDivert) и на Linux с nft и iptables.
-- Режим «Авто» на Windows: нужна geneva_c 1.1 (`--filter`, `set_filter`,
-  `--first`); промт для неё — в общих файлах проекта
-  (`geneva-auto/prompt-geneva_c.md`). После релиза — обновить пин бандла.
-- Такой же режим «Авто» в zapret-gui (промт `geneva-auto/prompt-zapret-gui.md`).
 - Экспорт стратегий geneva на роутер: geneva_c на роутере пока не
   поддерживается ни одним из форматов экспорта.
 

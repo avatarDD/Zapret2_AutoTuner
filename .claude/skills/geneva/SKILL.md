@@ -1,6 +1,6 @@
 ---
 name: geneva
-description: Второй движок обхода — geneva_c (avatarDD/geneva_c, v1.1.1, протокол proto 1). Язык стратегий Geneva, команды run/evolve/check/library/db/fw, события JSON Lines, внешний пробник evolve, управляющий сокет, очереди и firewall, как AutoTuner его бандлит, запускает в Agent и показывает в UI и MCP. Читать перед любой правкой Geneva-кода, бандла geneva и MCP-инструментов geneva_*.
+description: Второй движок обхода — geneva_c (avatarDD/geneva_c, v1.2.0, протокол proto 1). Язык стратегий Geneva, команды run/evolve/check/library/db/fw, события JSON Lines, внешний пробник evolve, управляющий сокет, очереди и firewall, как AutoTuner его бандлит, запускает в Agent и показывает в UI и MCP. Читать перед любой правкой Geneva-кода, бандла geneva и MCP-инструментов geneva_*.
 ---
 
 # geneva_c в AutoTuner

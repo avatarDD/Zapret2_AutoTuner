@@ -110,6 +110,7 @@ public sealed partial class KnowledgeBase : IDisposable
         {
             // not a base (or a newer one): the file must not stay open, Windows would keep it locked
             kb.Dispose();
+            SqliteConnection.ClearAllPools();
             throw;
         }
         return kb;

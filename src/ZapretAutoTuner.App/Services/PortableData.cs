@@ -73,6 +73,9 @@ public static class PortableData
             return false;
         if (Path.GetFullPath(legacy).TrimEnd(Path.DirectorySeparatorChar) == Path.GetFullPath(portable).TrimEnd(Path.DirectorySeparatorChar))
             return false;
+        // a file that is not an SQLite base is not opened at all: an open that fails can leave it locked on Windows
+        if (File.Exists(newDb) && (!IsSqlite(newDb) || !IsSqlite(oldDb)))
+            return false;
         if (File.Exists(newDb))
         {
             if (!Fresh(newDb))
@@ -99,6 +102,23 @@ public static class PortableData
         if (File.Exists(oldDb) && File.Exists(newDb))
             SetAside(oldDb, "moved");
         return true;
+    }
+
+    /// <summary>Whether the file starts with SQLite's header; an empty file is a base SQLite has not written yet.</summary>
+    internal static bool IsSqlite(string path)
+    {
+        try
+        {
+            using var f = File.OpenRead(path);
+            if (f.Length == 0)
+                return true;
+            Span<byte> head = stackalloc byte[16];
+            return f.ReadAtLeast(head, 16, throwOnEndOfStream: false) == 16 && head.SequenceEqual("SQLite format 3\0"u8);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>A base with nothing of the user's: no history, resources, found or imported strategies, services.</summary>

@@ -9,13 +9,19 @@ public static class PortableData
 {
     public const string FolderName = "data";
 
-    /// <summary>The data folder for a program in <paramref name="programDir"/>; <paramref name="legacy"/> is the old place.</summary>
-    public static string Resolve(string programDir, string legacy)
+    /// <summary>
+    /// The data folder for a program in <paramref name="programDir"/>; <paramref name="legacy"/> is the old place. An
+    /// elevated start (<paramref name="privileged"/>, "Run as administrator") does not move the data next to the
+    /// program: it could write to Program Files, where the usual starts could not read back what moved there.
+    /// </summary>
+    public static string Resolve(string programDir, string legacy, bool? privileged = null)
     {
         // ZT_DATA_DIR: tests and users who want the data elsewhere
         if (Environment.GetEnvironmentVariable("ZT_DATA_DIR") is { Length: > 0 } explicitDir)
             return explicitDir;
         var portable = Path.Combine(programDir, FolderName);
+        if ((privileged ?? Environment.IsPrivilegedProcess) && !File.Exists(Path.Combine(portable, "knowledge.db")))
+            return legacy;
         if (!Writable(portable))
             return legacy;
         try

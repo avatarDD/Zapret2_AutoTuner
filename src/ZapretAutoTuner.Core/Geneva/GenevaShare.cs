@@ -146,7 +146,7 @@ public static class GenevaShare
                                     services.Add(name);
                             }
                         }
-                        double? fit = io["fitness"] is JsonValue fv && fv.GetValueKind() == JsonValueKind.Number ? (double)fv : null;
+                        double? fit = io["fitness"] is JsonValue fv && fv.GetValueKind() == JsonValueKind.Number && double.TryParse(fv.ToJsonString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var f) && double.IsFinite(f) ? f : null;
                         raw.Add((s.Trim(), services, fit));
                         break;
                     }

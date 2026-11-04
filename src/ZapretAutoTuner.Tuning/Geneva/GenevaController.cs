@@ -246,7 +246,13 @@ public sealed class GenevaController : IAsyncDisposable
         if (settings.Resume && State.ProgressOf(settings.Host, settings.Port) is { Population: > 0 } saved)
         {
             // geneva refuses to resume a search whose population changed; more generations are fine
-            settings = settings with { Population = saved.Population, Generations = Math.Max(settings.Generations, saved.Generations) };
+            // nor one whose layers changed: Auto's wider round saves "TCP,IP" under the same key a manual resume uses
+            settings = settings with
+            {
+                Population = saved.Population,
+                Generations = Math.Max(settings.Generations, saved.Generations),
+                Protos = saved.Protos is { Length: > 0 } p ? p : settings.Protos,
+            };
         }
         if (settings.Problems() is { Count: > 0 } bad)
             throw new GenevaRefusedException(string.Join("; ", bad));
@@ -384,13 +390,17 @@ public sealed class GenevaController : IAsyncDisposable
         // the Agent stops a search by closing its input, which geneva reports as a failed evaluation (code 1): the
         // user pressed Stop, the checkpoint is saved
         var ended = ports ?? (stopped && reason != "done" ? GenevaText.Exit(0, "signal") : GenevaText.Exit(exitCode, reason));
+        GenevaSearchView view;
         lock (_lock)
         {
+            // the view of this search, taken before another search may start once the slot is free
+            view = _search with { Running = false, Ended = ended };
             if (_searchId == id)
+            {
                 _searchId = null;
-            _search = _search with { Running = false, Ended = ended };
+                _search = view;
+            }
         }
-        var view = Search;
         Update(s => s.WithProgress(new GenevaSearchProgress
         {
             Host = view.Host,
@@ -408,7 +418,7 @@ public sealed class GenevaController : IAsyncDisposable
             return;
         AddLog(ended.Ru);
         Changed?.Invoke();
-        SearchEnded?.Invoke(Search);
+        SearchEnded?.Invoke(view);
     }
 
     private async Task OnSearchEventAsync(IGenevaAgent agent, string id, GenevaSearchSettings settings, GenevaEvent e, CancellationToken probeCt, CancellationToken ct)

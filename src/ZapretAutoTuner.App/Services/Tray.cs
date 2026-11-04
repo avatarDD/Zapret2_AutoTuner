@@ -69,9 +69,12 @@ public sealed class Tray : IDisposable
 
     private void UpdateTexts()
     {
-        var a = _host.GenevaAuto.View;
-        _toggle.Header = Loc.Loc.I[a.Running ? "tray.auto_off" : "tray.auto_on"];
-        var phase = a.Running ? (Loc.Loc.I.English ? a.Phase.En : a.Phase.Ru) : Loc.Loc.I["engine.auto_off"];
+        // not the whole View: it copies every service, and this runs on each change
+        var auto = _host.GenevaAuto;
+        bool running = auto.Running;
+        var p = auto.CurrentPhase;
+        _toggle.Header = Loc.Loc.I[running ? "tray.auto_off" : "tray.auto_on"];
+        var phase = running ? (Loc.Loc.I.English ? p.En : p.Ru) : Loc.Loc.I["engine.auto_off"];
         // the tooltip has a short limit on Windows (127 characters)
         var tip = "Zapret2 AutoTuner — " + phase;
         _icon.ToolTipText = tip.Length > 120 ? tip[..120] : tip;

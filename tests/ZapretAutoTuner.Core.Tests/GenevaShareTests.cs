@@ -87,6 +87,23 @@ public sealed class GenevaShareTests
     }
 
     [Fact]
+    public void A_fitness_out_of_range_is_dropped_not_thrown()
+    {
+        var (items, errors) = GenevaShare.Parse("{\"format\":\"zapret-gui/geneva-strategies\",\"items\":[{\"strategy\":\"" + Fragment.Replace("\\", "\\\\", StringComparison.Ordinal) + "\",\"fitness\":1e999}]}");
+        Assert.Empty(errors);
+        Assert.Null(Assert.Single(items).Fitness);
+    }
+
+    [Fact]
+    public void Every_workers_ports_are_the_searchs_not_the_users()
+    {
+        Assert.True(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase));
+        Assert.True(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase + GenevaArgv.LocalPortsCount * 7 + 63));
+        Assert.False(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase + GenevaArgv.LocalPortsCount * 8));
+        Assert.False(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase - 1));
+    }
+
+    [Fact]
     public void Limits_hold_items_services_and_size()
     {
         var many = new JsonArray([.. Enumerable.Range(0, GenevaShare.MaxItems + 5).Select(i => (JsonNode)new JsonObject

@@ -220,7 +220,8 @@ zapret-gui на роутере (например, 192.168.2.1).
 старого места (`%LOCALAPPDATA%\ZapretAutoTuner`, `~/.local/share/ZapretAutoTuner`)
 при первом запуске переносятся сюда сами. Если в папку программы писать
 нельзя (установка в `C:\Program Files`, `/opt` с владельцем root), данные
-остаются в старом месте. Свою папку можно задать переменной `ZT_DATA_DIR`.
+остаются в старом месте; запуск «от имени администратора» их тоже не
+переносит. Свою папку можно задать переменной `ZT_DATA_DIR`.
 Состояние агента с правами администратора хранится отдельно, в защищённой
 папке (`C:\ProgramData\ZapretAutoTuner-*`, `/var/lib/zapret-autotuner`):
 то, что запускается с правами, не должно лежать там, где его может
@@ -412,7 +413,8 @@ Stop on the banner cuts the bridge too.
   portable copy moves with it. Data from the old place
   (`%LOCALAPPDATA%\ZapretAutoTuner`, `~/.local/share/ZapretAutoTuner`) moves
   there at the first start. When the program folder is not writable
-  (`C:\Program Files`, a root-owned `/opt`), the data stays in the old place.
+  (`C:\Program Files`, a root-owned `/opt`), the data stays in the old place, and so does it on a "Run as
+  administrator" start.
   `ZT_DATA_DIR` sets a folder of your own. The administrator agent keeps its
   state apart, in a protected folder (`C:\ProgramData\ZapretAutoTuner-*`,
   `/var/lib/zapret-autotuner`): what runs with admin rights must not live where

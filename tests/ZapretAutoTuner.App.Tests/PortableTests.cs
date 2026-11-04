@@ -33,7 +33,7 @@ public sealed class PortableTests : IDisposable
         File.WriteAllText(Path.Combine(legacy, "agent-1.sock"), "");
         Directory.CreateDirectory(program);
 
-        var dir = PortableData.Resolve(program, legacy);
+        var dir = PortableData.Resolve(program, legacy, privileged: false);
 
         Assert.Equal(Path.Combine(program, "data"), dir);
         Assert.Equal("kb", File.ReadAllText(Path.Combine(dir, "knowledge.db")));
@@ -42,7 +42,7 @@ public sealed class PortableTests : IDisposable
         Assert.False(File.Exists(Path.Combine(dir, "agent-1.sock")));
         Assert.False(Directory.Exists(legacy));
         // the next start finds its data where it is
-        Assert.Equal(dir, PortableData.Resolve(program, legacy));
+        Assert.Equal(dir, PortableData.Resolve(program, legacy, privileged: false));
     }
 
     [Fact]
@@ -54,9 +54,25 @@ public sealed class PortableTests : IDisposable
         Directory.CreateDirectory(legacy);
         File.WriteAllText(Path.Combine(program, "data", "knowledge.db"), "new");
         File.WriteAllText(Path.Combine(legacy, "knowledge.db"), "old");
-        Assert.Equal(Path.Combine(program, "data"), PortableData.Resolve(program, legacy));
+        Assert.Equal(Path.Combine(program, "data"), PortableData.Resolve(program, legacy, privileged: false));
         Assert.Equal("new", File.ReadAllText(Path.Combine(program, "data", "knowledge.db")));
         Assert.True(File.Exists(Path.Combine(legacy, "knowledge.db")));
+    }
+
+    [Fact]
+    public void An_elevated_start_leaves_the_data_where_it_is()
+    {
+        var program = Path.Combine(_root, "pf");
+        var legacy = Path.Combine(_root, "user");
+        Directory.CreateDirectory(program);
+        Directory.CreateDirectory(legacy);
+        File.WriteAllText(Path.Combine(legacy, "knowledge.db"), "kb");
+        Assert.Equal(legacy, PortableData.Resolve(program, legacy, privileged: true));
+        Assert.True(File.Exists(Path.Combine(legacy, "knowledge.db")));
+        Assert.False(Directory.Exists(Path.Combine(program, "data")));
+        // data a usual start already moved next to the program stays in use
+        Assert.Equal(Path.Combine(program, "data"), PortableData.Resolve(program, legacy, privileged: false));
+        Assert.Equal(Path.Combine(program, "data"), PortableData.Resolve(program, legacy, privileged: true));
     }
 
     [Fact]
@@ -70,7 +86,7 @@ public sealed class PortableTests : IDisposable
         try
         {
             var legacy = Path.Combine(_root, "home");
-            Assert.Equal(legacy, PortableData.Resolve(program, legacy));
+            Assert.Equal(legacy, PortableData.Resolve(program, legacy, privileged: false));
         }
         finally
         {

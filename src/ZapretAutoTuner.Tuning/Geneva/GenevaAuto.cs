@@ -147,6 +147,16 @@ public sealed class GenevaAuto : IAsyncDisposable
         }
     }
 
+    /// <summary>What the loop is doing now, in Russian and English: the cheap part of <see cref="View"/> (the tray).</summary>
+    public (string Ru, string En) CurrentPhase
+    {
+        get
+        {
+            lock (_lock)
+                return _phase;
+        }
+    }
+
     public IReadOnlyList<string> Log
     {
         get
@@ -589,7 +599,13 @@ public sealed class GenevaAuto : IAsyncDisposable
             return;
         }
         var ended = new TaskCompletionSource<GenevaSearchView>(TaskCreationOptions.RunContinuationsAsynchronously);
-        void OnEnded(GenevaSearchView v) => ended.TrySetResult(v);
+        var since = DateTimeOffset.Now;
+        void OnEnded(GenevaSearchView v)
+        {
+            // only this search's end: another one (a manual search just finishing) may end after this subscribed
+            if (string.Equals(v.Host, host, StringComparison.OrdinalIgnoreCase) && v.Port == s.Port && v.Started >= since)
+                ended.TrySetResult(v);
+        }
         _controller.SearchEnded += OnEnded;
         try
         {

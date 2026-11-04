@@ -10,8 +10,9 @@
   или `.tar.gz`. Нужны nftables (или iptables) и polkit (`pkexec`). AppImage
   нет: агент с правами root не может запуститься из её FUSE-образа.
 
-Файлы можно сверить с `SHA256SUMS.txt` из релиза. Движок zapret2 внутри —
-официальная сборка bol-van/zapret2 без изменений.
+Файлы можно сверить с `SHA256SUMS.txt` из релиза. Движки внутри —
+официальные сборки без изменений: zapret2 из релиза bol-van/zapret2 и
+geneva_c из релиза avatarDD/geneva_c (с WinDivert из релиза его автора).
 
 **Права администратора и portable-архивы.** Агент запускает движок с правами
 администратора (root). Безопаснее всего установщик, `.deb` или `.rpm`: они кладут
@@ -35,6 +36,8 @@
 Программа открывается на странице «Авто-обход». Включите переключатель — и
 больше ничего настраивать не нужно. Один раз появится запрос прав
 администратора.
+
+![Авто-обход](img/auto.png)
 
 Программа сама следит за всем трафиком ПК: сайтами (TCP и QUIC), DNS,
 WireGuard, OpenVPN, DHT торрентов и любыми другими протоколами. Если
@@ -139,6 +142,8 @@ geneva не идёт. Если обход перестал работать, с�
    продолжается кнопкой «Продолжить», а обход с галочкой «Включать при
    запуске» возвращается после перезапуска программы. Одновременно работает
    только один движок: geneva (авто или вручную) или zapret2.
+
+   ![Ручной подбор geneva](img/manual-geneva.png)
 
 Под каждым пунктом меню написано, для чего он. При закрытии программы
 вместе с ней завершаются все запущенные ею процессы (браузер проверки и
@@ -248,8 +253,9 @@ zapret-gui на роутере (например, 192.168.2.1).
   iptables) and polkit (`pkexec`). There is no AppImage: the root agent cannot
   start from its FUSE mount.
 
-Check files against `SHA256SUMS.txt`. The bundled zapret2 is the unmodified
-official bol-van/zapret2 build.
+Check files against `SHA256SUMS.txt`. The bundled engines are unmodified
+official builds: zapret2 from bol-van/zapret2's release and geneva_c from
+avatarDD/geneva_c's release (with WinDivert from its author's release).
 
 **Administrator rights and portable archives.** The agent runs the engine as
 Administrator (root). The installer, `.deb` or `.rpm` are the safe choice: they put
@@ -271,6 +277,8 @@ short hint and an example.
 
 The program opens on the Auto bypass page. Turn the switch on and nothing else
 needs setting; administrator rights are asked for once.
+
+![Auto bypass](img/auto-en.png)
 
 The program watches all of the PC's traffic: sites (TCP and QUIC), DNS,
 WireGuard, OpenVPN, torrent DHT and any other protocol. When connections to a

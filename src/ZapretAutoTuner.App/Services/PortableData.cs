@@ -1,3 +1,6 @@
+using ZapretAutoTuner.Storage;
+using ZapretAutoTuner.Tuning.Geneva;
+
 namespace ZapretAutoTuner.App.Services;
 
 /// <summary>
@@ -28,7 +31,7 @@ public static class PortableData
         {
             Migrate(legacy, portable);
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException or InvalidOperationException)
         {
             // what could not move stays where it was; the program starts with what it has
             Console.Error.WriteLine("data: " + e.Message);
@@ -53,17 +56,34 @@ public static class PortableData
         }
     }
 
+    private const string Db = "knowledge.db";
+
     /// <summary>
-    /// Copies the old folder into the new one when the new one has no knowledge base yet, then removes the old copy
-    /// (only once everything was copied). Files the old folder holds that the user cannot read are left there.
+    /// Moves the old folder's data into the new one. With no knowledge base in the new folder yet, the old folder is
+    /// copied and then removed (only once everything was copied). When the new folder already has one (an earlier
+    /// start of this version, or the old version still running while it moved), a base with nothing of the user's in
+    /// it is set aside for the old one; otherwise the old base's found strategies and settings are merged into it.
+    /// The old base is renamed afterwards, so nothing is moved twice. Returns whether anything moved.
     /// </summary>
     internal static bool Migrate(string legacy, string portable)
     {
-        var oldDb = Path.Combine(legacy, "knowledge.db");
-        if (!File.Exists(oldDb) || File.Exists(Path.Combine(portable, "knowledge.db")))
+        var oldDb = Path.Combine(legacy, Db);
+        var newDb = Path.Combine(portable, Db);
+        if (!File.Exists(oldDb))
             return false;
         if (Path.GetFullPath(legacy).TrimEnd(Path.DirectorySeparatorChar) == Path.GetFullPath(portable).TrimEnd(Path.DirectorySeparatorChar))
             return false;
+        if (File.Exists(newDb))
+        {
+            if (!Fresh(newDb))
+            {
+                Merge(oldDb, newDb);
+                Copy(legacy, portable);
+                SetAside(oldDb, "merged");
+                return true;
+            }
+            SetAside(newDb, "unused");
+        }
         bool complete = Copy(legacy, portable);
         if (complete)
         {
@@ -76,7 +96,44 @@ public static class PortableData
                 // a file still open or owned by root (the Agent's): the copy is in place, the rest stays
             }
         }
+        if (File.Exists(oldDb) && File.Exists(newDb))
+            SetAside(oldDb, "moved");
         return true;
+    }
+
+    /// <summary>A base with nothing of the user's: no history, resources, found or imported strategies, services.</summary>
+    internal static bool Fresh(string db)
+    {
+        using var kb = KnowledgeBase.Open(db);
+        if (kb.HasUserData())
+            return false;
+        var g = GenevaState.Parse(kb.GetSetting(KbGenevaStore.Key));
+        return g.Found.Count == 0 && g.Imported.Count == 0 && g.Auto.Services.Count == 0 && g.Searches.Count == 0;
+    }
+
+    /// <summary>The old base's settings the new one lacks, and its geneva state merged into the new one's.</summary>
+    internal static void Merge(string oldDb, string newDb)
+    {
+        using var old = KnowledgeBase.Open(oldDb);
+        using var kb = KnowledgeBase.Open(newDb);
+        foreach (var (key, value) in old.AllSettings())
+        {
+            if (key == KbGenevaStore.Key)
+                kb.SetSetting(key, GenevaState.Parse(kb.GetSetting(key)).MergedWith(GenevaState.Parse(value), DateTimeOffset.Now).Serialize());
+            else if (kb.GetSetting(key) is null)
+                kb.SetSetting(key, value);
+        }
+    }
+
+    /// <summary>Renames a closed base with its journal files: kept for the user, never read again.</summary>
+    private static void SetAside(string db, string why)
+    {
+        var suffix = "." + why + "-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        foreach (var ext in new[] { "", "-wal", "-shm" })
+        {
+            if (File.Exists(db + ext))
+                File.Move(db + ext, db + suffix + ext);
+        }
     }
 
     private static bool Copy(string from, string to)
@@ -98,6 +155,12 @@ public static class PortableData
                 continue;
             if (new FileInfo(file).LinkTarget is not null)
                 continue;
+            // what the new folder already has stays, and the old copy with it
+            if (File.Exists(Path.Combine(to, name)))
+            {
+                complete = false;
+                continue;
+            }
             try
             {
                 File.Copy(file, Path.Combine(to, name), overwrite: false);

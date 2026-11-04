@@ -218,7 +218,10 @@ zapret-gui на роутере (например, 192.168.2.1).
 настройки, база найденных стратегий, импортированные стратегии, журналы и
 экспорт. Portable-копию можно переносить вместе с этой папкой. Данные из
 старого места (`%LOCALAPPDATA%\ZapretAutoTuner`, `~/.local/share/ZapretAutoTuner`)
-при первом запуске переносятся сюда сами. Если в папку программы писать
+при первом запуске переносятся сюда сами. Если папка `data` уже есть (новая версия
+уже запускалась), найденные стратегии geneva, импортированные стратегии и
+недостающие настройки старой базы добавляются к новой, а старая база
+остаётся на месте под именем `knowledge.db.merged-<дата>`. Если в папку программы писать
 нельзя (установка в `C:\Program Files`, `/opt` с владельцем root), данные
 остаются в старом месте; запуск «от имени администратора» их тоже не
 переносит. Свою папку можно задать переменной `ZT_DATA_DIR`.
@@ -412,7 +415,9 @@ Stop on the banner cuts the bridge too.
   program: settings, the found strategies, imports, logs and exports, so a
   portable copy moves with it. Data from the old place
   (`%LOCALAPPDATA%\ZapretAutoTuner`, `~/.local/share/ZapretAutoTuner`) moves
-  there at the first start. When the program folder is not writable
+  there at the first start. When a `data` folder is already there (this version ran
+  before), the old base's geneva strategies, imports and missing settings are
+  added to it, and the old base stays as `knowledge.db.merged-<date>`. When the program folder is not writable
   (`C:\Program Files`, a root-owned `/opt`), the data stays in the old place, and so does it on a "Run as
   administrator" start.
   `ZT_DATA_DIR` sets a folder of your own. The administrator agent keeps its

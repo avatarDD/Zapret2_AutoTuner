@@ -174,6 +174,23 @@ public sealed partial class KnowledgeBase : IDisposable
         }
     }
 
+    /// <summary>
+    /// Whether the base holds anything the user made: search history, results, checks, resources or the change journal.
+    /// A base with settings only (a first start) is not worth keeping over an older one.
+    /// </summary>
+    public bool HasUserData()
+    {
+        lock (_gate)
+        {
+            foreach (var table in new[] { "trials", "results", "search_sessions", "checker_runs", "resources", "change_journal", "monitor_windows" })
+            {
+                if (Scalar($"SELECT 1 FROM {table} LIMIT 1") is not null)
+                    return true;
+            }
+            return false;
+        }
+    }
+
     // ---- networks, strategies, targets ----
 
     /// <summary>The network row for this ASN and provider, created on first sight.</summary>

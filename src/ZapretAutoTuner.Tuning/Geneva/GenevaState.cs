@@ -193,6 +193,34 @@ public sealed record GenevaState
     public IEnumerable<GenevaSharedStrategy> Shared() =>
         Imported.Select(x => new GenevaSharedStrategy { Strategy = x.Strategy, Services = x.Services }).Concat(GenevaShare.Preset);
 
+    /// <summary>
+    /// This state with what an older copy of it holds (the data folder of an earlier version): its found and imported
+    /// strategies, the searches and the "Авто" services this one does not know. What this one has is kept as it is.
+    /// </summary>
+    public GenevaState MergedWith(GenevaState old, DateTimeOffset now)
+    {
+        var merged = WithFound(old.Found);
+        merged = merged.WithImported(old.Imported.Select(x => new GenevaSharedStrategy { Strategy = x.Strategy, Services = x.Services }), now).State;
+        var searches = Searches.ToList();
+        foreach (var p in old.Searches)
+        {
+            if (merged.ProgressOf(p.Host, p.Port) is null && searches.All(x => !(string.Equals(x.Host, p.Host, StringComparison.OrdinalIgnoreCase) && x.Port == p.Port)))
+                searches.Add(p);
+        }
+        var services = Auto.Services.ToList();
+        foreach (var s in old.Auto.Services)
+        {
+            if (services.All(x => x.Key != s.Key))
+                services.Add(s);
+        }
+        return merged with
+        {
+            Searches = [.. searches.Take(50)],
+            Auto = Auto with { Enabled = Auto.Enabled || old.Auto.Enabled, Services = services },
+            Active = Active ?? old.Active,
+        };
+    }
+
     public GenevaState WithProgress(GenevaSearchProgress p)
     {
         var list = Searches.Where(x => !(string.Equals(x.Host, p.Host, StringComparison.OrdinalIgnoreCase) && x.Port == p.Port)).ToList();

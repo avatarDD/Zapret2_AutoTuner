@@ -127,6 +127,39 @@ public sealed class GenevaControllerTests
     }
 
     [Fact]
+    public void An_older_state_merges_in_without_replacing_anything()
+    {
+        var t = DateTimeOffset.Parse("2026-11-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var now = new GenevaState
+        {
+            Found = [new GenevaFoundStrategy { Host = "a.com", Strategy = "S1", Fitness = 300 }],
+            Searches = [new GenevaSearchProgress { Host = "a.com", Population = 20 }],
+            Auto = new GenevaAutoState { Services = [new() { Key = "web:a.com", Name = "a.com", Strategy = "new" }] },
+            Workers = 4,
+        };
+        var old = new GenevaState
+        {
+            Found = [new GenevaFoundStrategy { Host = "a.com", Strategy = "S1", Fitness = 390 }, new GenevaFoundStrategy { Host = "b.com", Strategy = "S2", Fitness = 380 }],
+            Searches = [new GenevaSearchProgress { Host = "a.com", Population = 40 }, new GenevaSearchProgress { Host = "b.com", Population = 20 }],
+            Imported = [new GenevaImportedStrategy { Strategy = "S3", Services = ["c.com"], Imported = t }],
+            Auto = new GenevaAutoState { Enabled = true, Services = [new() { Key = "web:a.com", Name = "a.com", Strategy = "old" }, new() { Key = "web:b.com", Name = "b.com" }] },
+            Active = new GenevaActiveRun { Strategy = "S2" },
+            Workers = 1,
+        };
+        var m = now.MergedWith(old, t);
+        Assert.Equal(["S1", "S2"], m.Found.Select(f => f.Strategy));
+        Assert.Equal(390, m.Found[0].Fitness);
+        Assert.Equal(20, m.ProgressOf("a.com", 443)!.Population);
+        Assert.NotNull(m.ProgressOf("b.com", 443));
+        Assert.Equal("S3", Assert.Single(m.Imported).Strategy);
+        Assert.Equal("new", m.Auto.Services.Single(s => s.Key == "web:a.com").Strategy);
+        Assert.Contains(m.Auto.Services, s => s.Key == "web:b.com");
+        Assert.True(m.Auto.Enabled);
+        Assert.Equal("S2", m.Active!.Strategy);
+        Assert.Equal(4, m.Workers);
+    }
+
+    [Fact]
     public void Workers_and_imports_are_kept_and_imports_never_replace()
     {
         var store = new MemoryGenevaStore();

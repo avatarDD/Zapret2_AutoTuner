@@ -59,6 +59,84 @@ public sealed class PortableTests : IDisposable
         Assert.True(File.Exists(Path.Combine(legacy, "knowledge.db")));
     }
 
+    private static void Kb(string dir, Action<ZapretAutoTuner.Storage.KnowledgeBase> fill)
+    {
+        Directory.CreateDirectory(dir);
+        using var kb = ZapretAutoTuner.Storage.KnowledgeBase.Open(Path.Combine(dir, "knowledge.db"));
+        fill(kb);
+    }
+
+    private static T WithKb<T>(string dir, Func<ZapretAutoTuner.Storage.KnowledgeBase, T> read)
+    {
+        using var kb = ZapretAutoTuner.Storage.KnowledgeBase.Open(Path.Combine(dir, "knowledge.db"));
+        return read(kb);
+    }
+
+    private static string State(params (string Host, string Strategy)[] found) => new GenevaState
+    {
+        Found = [.. found.Select(f => new GenevaFoundStrategy { Host = f.Host, Strategy = f.Strategy, Fitness = 390 })],
+    }.Serialize();
+
+    [Fact]
+    public void A_knowledge_base_of_the_last_version_is_read_after_the_move()
+    {
+        var program = Path.Combine(_root, "v2");
+        var legacy = Path.Combine(_root, "v1");
+        Kb(legacy, kb =>
+        {
+            kb.SetSetting("geneva.state", State(("youtube.com", "A")));
+            kb.SetSetting("language", "en");
+        });
+        var dir = PortableData.Resolve(program, legacy, privileged: false);
+        Assert.Equal("youtube.com", WithKb(dir, kb => GenevaState.Parse(kb.GetSetting("geneva.state")).Found.Single().Host));
+        Assert.Equal("en", WithKb(dir, kb => kb.GetSetting("language")));
+    }
+
+    [Fact]
+    public void A_new_base_with_nothing_in_it_gives_way_to_the_old_one()
+    {
+        // this version started once before the old data could move (or the old version still held it)
+        var program = Path.Combine(_root, "v2");
+        var legacy = Path.Combine(_root, "v1");
+        Kb(legacy, kb => kb.SetSetting("geneva.state", State(("youtube.com", "A"))));
+        Kb(Path.Combine(program, "data"), kb => kb.SetSetting("language", "ru"));
+        var dir = PortableData.Resolve(program, legacy, privileged: false);
+        Assert.Equal("A", WithKb(dir, kb => GenevaState.Parse(kb.GetSetting("geneva.state")).Found.Single().Strategy));
+        Assert.Contains(Directory.EnumerateFiles(dir), f => Path.GetFileName(f).StartsWith("knowledge.db.unused-", StringComparison.Ordinal));
+        Assert.False(File.Exists(Path.Combine(legacy, "knowledge.db")));
+    }
+
+    [Fact]
+    public void A_new_base_in_use_gets_the_old_ones_strategies_merged_in_once()
+    {
+        var program = Path.Combine(_root, "v2");
+        var legacy = Path.Combine(_root, "v1");
+        Kb(legacy, kb =>
+        {
+            kb.SetSetting("geneva.state", State(("youtube.com", "A"), ("discord.com", "B")));
+            kb.SetSetting("language", "en");
+            kb.SetSetting("only.old", "1");
+            kb.AddChange("youtube.com", "test", "old history");
+        });
+        File.WriteAllText(Path.Combine(legacy, "current-solution.json"), "{}");
+        Kb(Path.Combine(program, "data"), kb =>
+        {
+            kb.SetSetting("geneva.state", State(("x.com", "C"), ("youtube.com", "A")));
+            kb.SetSetting("language", "ru");
+        });
+        var dir = PortableData.Resolve(program, legacy, privileged: false);
+        var found = WithKb(dir, kb => GenevaState.Parse(kb.GetSetting("geneva.state")).Found.Select(f => f.Host).Order().ToList());
+        Assert.Equal(["discord.com", "x.com", "youtube.com"], found);
+        // what the new base has stays; what only the old had comes over
+        Assert.Equal("ru", WithKb(dir, kb => kb.GetSetting("language")));
+        Assert.Equal("1", WithKb(dir, kb => kb.GetSetting("only.old")));
+        Assert.True(File.Exists(Path.Combine(dir, "current-solution.json")));
+        // the old base is renamed: the next start merges nothing again
+        Assert.False(File.Exists(Path.Combine(legacy, "knowledge.db")));
+        Assert.Contains(Directory.EnumerateFiles(legacy), f => Path.GetFileName(f).StartsWith("knowledge.db.merged-", StringComparison.Ordinal));
+        Assert.Equal(dir, PortableData.Resolve(program, legacy, privileged: false));
+    }
+
     [Fact]
     public void An_elevated_start_leaves_the_data_where_it_is()
     {

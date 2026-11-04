@@ -126,7 +126,8 @@ public sealed class AutoBook
 
     public AutoBook(IEnumerable<AutoService>? saved = null)
     {
-        foreach (var s in saved ?? [])
+        // copies: the saved ones belong to the controller's state, which serializes them under its own lock
+        foreach (var s in (saved ?? []).Select(x => x.Clone()))
         {
             if (s.Key.Length == 0)
                 continue;

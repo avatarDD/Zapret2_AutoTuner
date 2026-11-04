@@ -37,7 +37,12 @@ public sealed class AppHost : IAsyncDisposable
             Geneva,
             async ct => new Tuning.Geneva.AgentGeneva((await AgentAsync(ct).ConfigureAwait(false)).Client),
             new AgentMonitor(this),
-            new Tuning.Geneva.AutoProbes());
+            new Tuning.Geneva.AutoProbes())
+        {
+            // the wider round of the "Авто" mode: Geneva's client-side library, best first
+            Library = async ct => [.. (await GenevaBundle.LibraryAsync(ct).ConfigureAwait(false)).Where(l => !l.ServerSide && l.Rate > 0)
+                .OrderByDescending(l => l.Rate).Select(l => l.Strategy)],
+        };
     }
 
     /// <summary>The current solution on disk: restored at start (<see cref="SolutionStore.Restore"/>), saved on every change.</summary>
@@ -98,7 +103,18 @@ public sealed class AppHost : IAsyncDisposable
         }
     }
 
-    public static string DefaultDataDir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ZapretAutoTuner");
+    /// <summary>
+    /// Where the program keeps its files: <c>data</c> next to the program (everything in one folder, it moves with it),
+    /// unless that folder is read-only (Program Files, a package in /opt): then the user's folder as before. Files left
+    /// in the user's folder by an earlier version move into <c>data</c> once. The Agent's working copies stay in its
+    /// protected folder (ProgramData, /var/lib): what runs with admin rights must not live where the user can swap it.
+    /// </summary>
+    public static string DefaultDataDir => _defaultDataDir ??= PortableData.Resolve(AppContext.BaseDirectory, LegacyDataDir);
+
+    private static string? _defaultDataDir;
+
+    /// <summary>The user's folder of earlier versions (and of a read-only install).</summary>
+    public static string LegacyDataDir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ZapretAutoTuner");
 
     public string DataDir { get; }
 
@@ -189,6 +205,23 @@ public sealed class AppSettings
     {
         get => kb.GetSetting("ui.language") ?? "";
         set => kb.SetSetting("ui.language", value);
+    }
+
+    /// <summary>
+    /// The minimize button hides the window to the tray. On by default on Windows; off on Linux, where a desktop
+    /// without a tray (no StatusNotifier host) would leave no way back to a hidden window.
+    /// </summary>
+    public bool MinimizeToTray
+    {
+        get => kb.GetSetting("ui.tray_minimize") is { } v ? v == "1" : OperatingSystem.IsWindows();
+        set => kb.SetSetting("ui.tray_minimize", value ? "1" : "0");
+    }
+
+    /// <summary>Closing the window keeps the program in the tray, and its bypass on (off by default: closing exits).</summary>
+    public bool CloseToTray
+    {
+        get => kb.GetSetting("ui.tray_close") == "1";
+        set => kb.SetSetting("ui.tray_close", value ? "1" : "0");
     }
 
     public string Theme

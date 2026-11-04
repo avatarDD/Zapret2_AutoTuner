@@ -1,0 +1,145 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:v="using:ZapretAutoTuner.App.Views"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.AutoView"
+             x:DataType="vm:AutoViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="10" Margin="0,0,12,12">
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Classes="h1" Text="{l:T auto.title}" />
+        <v:HelpButton Text="{l:T help.auto}" Margin="8,0,0,8" />
+      </StackPanel>
+      <TextBlock Classes="muted" Text="{l:T auto.subtitle}" />
+
+      <!-- the one switch -->
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="2">
+              <TextBlock Classes="h2" Text="{l:T engine.auto}" />
+              <TextBlock Classes="muted" Text="{l:T engine.auto_about}" TextWrapping="Wrap" />
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" VerticalAlignment="Top" IsChecked="{Binding AutoOn, Mode=OneWay}" Command="{Binding ToggleAutoCommand}"
+                          IsEnabled="{Binding !AutoBusy}" OnContent="{l:T engine.auto_on}" OffContent="{l:T engine.auto_off_short}" />
+          </Grid>
+          <!-- what to expect before the first start -->
+          <StackPanel Spacing="4" IsVisible="{Binding FirstRun}">
+            <TextBlock Text="{l:T auto.first_1}" TextWrapping="Wrap" />
+            <TextBlock Text="{l:T auto.first_2}" TextWrapping="Wrap" />
+            <TextBlock Text="{l:T auto.first_3}" TextWrapping="Wrap" />
+          </StackPanel>
+          <TextBlock Text="{Binding AutoPhase}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding AutoSummary}" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding AutoSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <TextBlock Text="{Binding AutoNotice}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding AutoNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontWeight="SemiBold" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <WrapPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,16,4">
+              <TextBlock Text="{l:T auto.workers}" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <NumericUpDown Width="120" Minimum="1" Maximum="8" Increment="1" FormatString="0" Value="{Binding Workers}" />
+              <v:HelpButton Text="{l:T help.workers}" />
+            </StackPanel>
+            <TextBlock Text="{Binding WorkersNote}" Classes="muted" FontSize="12" VerticalAlignment="Center"
+                       IsVisible="{Binding WorkersNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </WrapPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- one strategy, many services: the groups -->
+      <Border Classes="card">
+        <StackPanel Spacing="6">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Classes="h2" Text="{l:T auto.working}" />
+            <v:HelpButton Text="{l:T help.groups}" />
+          </StackPanel>
+          <TextBlock Classes="muted" Text="{l:T auto.working_empty}" IsVisible="{Binding !AutoGroups.Count}" />
+          <ItemsControl ItemsSource="{Binding AutoGroups}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:AutoGroupRow">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+                  <StackPanel>
+                    <TextBlock Text="{Binding Services}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <SelectableTextBlock Text="{Binding Strategy}" FontFamily="monospace" FontSize="11" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Counters}" FontSize="12" Classes="muted" IsVisible="{Binding Counters, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top" Content="{l:T engine.copy}"
+                          Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).CopyCommand}" CommandParameter="{Binding Strategy}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!-- every service with a problem -->
+      <Border Classes="card">
+        <StackPanel Spacing="6">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Classes="h2" Text="{l:T auto.services}" />
+            <v:HelpButton Text="{l:T help.statuses}" />
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding AutoServices}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:AutoRow">
+                <Grid ColumnDefinitions="220,140,*,Auto" Margin="0,2">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Status}" Foreground="{Binding Brush}" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Detail}" FontSize="12" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <SelectableTextBlock Text="{Binding Strategy}" FontFamily="monospace" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding Strategy, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                  </StackPanel>
+                  <Button Grid.Column="3" Margin="8,0,0,0" Content="{l:T engine.auto_reset}" IsVisible="{Binding CanReset}" ToolTip.Tip="{l:T engine.auto_reset_tip}"
+                          Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).ResetAutoServiceCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <CheckBox Content="{l:T engine.auto_show_all}" IsChecked="{Binding AutoShowAll}" />
+        </StackPanel>
+      </Border>
+
+      <!-- exchange with other users -->
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Classes="h2" Text="{l:T auto.share}" />
+            <v:HelpButton Text="{l:T help.share}" />
+          </StackPanel>
+          <TextBlock Classes="muted" Text="{l:T auto.share_about}" />
+          <WrapPanel>
+            <Button Margin="0,0,8,4" Content="{l:T auto.export}" Command="{Binding ExportCommand}" />
+            <Button Margin="0,0,8,4" Content="{l:T auto.import}" Command="{Binding ImportCommand}" />
+          </WrapPanel>
+          <TextBlock Classes="muted" FontSize="12" Text="{Binding PresetText}" />
+          <Expander Header="{l:T auto.imported}" IsVisible="{Binding !!Imported.Count}">
+            <ItemsControl ItemsSource="{Binding Imported}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ImportedRow">
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                    <StackPanel>
+                      <SelectableTextBlock Text="{Binding Strategy}" FontFamily="monospace" FontSize="11" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding Services}" FontSize="12" Classes="muted" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top" Content="{l:T auto.remove}" ToolTip.Tip="{Binding When}"
+                            Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).RemoveImportedCommand}" CommandParameter="{Binding}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
+        </StackPanel>
+      </Border>
+
+      <Expander Header="{l:T engine.auto_log}" IsVisible="{Binding !!AutoLog.Count}">
+        <ItemsControl ItemsSource="{Binding AutoLog}" MaxHeight="300">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <SelectableTextBlock Text="{Binding}" FontFamily="monospace" FontSize="11" TextWrapping="Wrap" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Expander>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

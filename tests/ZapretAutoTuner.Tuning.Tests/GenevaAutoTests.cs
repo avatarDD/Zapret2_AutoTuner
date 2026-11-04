@@ -39,21 +39,23 @@ public sealed class GenevaAutoTests
     }
 
     private static (GenevaController Controller, GenevaAuto Auto, FakeGenevaAgent Agent, FakeProbes Probes, MemoryGenevaStore Store) Make(
-        Action<GenevaController, FakeGenevaAgent>? before = null)
+        Action<GenevaController, FakeGenevaAgent>? before = null, string? works = null, Func<CancellationToken, Task<IReadOnlyList<string>>>? library = null,
+        GenevaState? saved = null)
     {
         // a resolver that never answers: every slice holds the same unanswered query
         var monitor = new FakeMonitor(Capture(
             Udp(Me, 50003, "8.8.8.8", 53, DnsQuery("example.com")),
             Udp(Me, 50003, "8.8.8.8", 53, DnsQuery("example.com"))), new Dictionary<int, ObservedSocket[]>());
         var agent = new FakeGenevaAgent();
-        var store = new MemoryGenevaStore();
+        var store = new MemoryGenevaStore { Json = saved?.Serialize() };
         var controller = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, (h, p, t, l, ct) => Task.FromResult(new ProbeResult { Host = h, Address = "" }));
         before?.Invoke(controller, agent);
-        var probes = new FakeProbes(agent, AutoCandidates.Dns[1]);
+        var probes = new FakeProbes(agent, works ?? AutoCandidates.Dns[1]);
         var auto = new GenevaAuto(controller, _ => Task.FromResult<IGenevaAgent>(agent), monitor, probes,
             () => new DateTime(2026, 1, 1, 0, 0, 30, DateTimeKind.Utc))
         {
             Slice = TimeSpan.FromMilliseconds(30),
+            Library = library,
         };
         return (controller, auto, agent, probes, store);
     }
@@ -119,6 +121,49 @@ public sealed class GenevaAutoTests
         lock (probes.Checks)
             Assert.DoesNotContain(probes.Checks, c => c.Applied == AutoCandidates.Dns[1]);
         Assert.NotEqual(AutoCandidates.Dns[1], auto.View.Services.Single(x => x.Key == "dns:8.8.8.8").Strategy);
+    }
+
+    [Fact]
+    public async Task After_two_empty_searches_the_wider_round_tries_the_library_and_a_bigger_search()
+    {
+        const string fromLibrary = @"[UDP:dport:53]-fragment{ip:-1:True}-| \/";
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var saved = new GenevaState
+        {
+            Auto = new GenevaAutoState
+            {
+                Services =
+                [
+                    new AutoService
+                    {
+                        Key = "dns:8.8.8.8", Kind = AutoKind.Dns, Transport = Core.Model.L4Kind.Udp, Name = "DNS 8.8.8.8", App = "dns",
+                        Addresses = [new AutoAddress("8.8.8.8", t0)], Ports = [53], Replay = Convert.ToBase64String([1, 2, 3]),
+                        Status = AutoStatus.Blocked, Attempts = AutoRules.WideAfter,
+                    },
+                ],
+            },
+        }.WithProgress(new GenevaSearchProgress
+        {
+            // the two searches before ran to their end and found nothing
+            Host = "8.8.8.8", Port = 53, Population = AutoRules.Population, Generation = 14, Generations = 15, Finished = true, Protos = "UDP,IP,DNS,DNSQR",
+        });
+        var (controller, auto, agent, probes, _) = Make(works: "nothing works", library: _ => Task.FromResult<IReadOnlyList<string>>([fromLibrary]), saved: saved);
+        await using var _c = controller;
+        await using var _a = auto;
+        await auto.EnableAsync(default);
+
+        await Until(() => { lock (agent.Started) return agent.Started.Any(r => r.Mode == "evolve"); });
+        // the library's strategy was tried on the resolver's own traffic first
+        lock (probes.Checks)
+            Assert.Contains(probes.Checks, c => c.Applied == fromLibrary);
+        GenevaStartRequest evolve;
+        lock (agent.Started)
+            evolve = agent.Started.First(r => r.Mode == "evolve");
+        Assert.False(evolve.Resume);
+        Assert.Equal(AutoRules.WidePopulation, evolve.Population);
+        Assert.Equal(AutoRules.WideGenerations, evolve.Generations);
+        Assert.Equal("UDP,IP,DNS,DNSQR", evolve.Protos);
+        Assert.Contains(fromLibrary, evolve.Seeds);
     }
 
     [Fact]

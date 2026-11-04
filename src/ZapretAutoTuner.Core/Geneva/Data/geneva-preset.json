@@ -1,0 +1,28 @@
+{
+ "format": "zapret-gui/geneva-strategies",
+ "version": 1,
+ "exported_at": "2026-11-04T00:35:20Z",
+ "comment": "Стартовый набор: стратегии, которые режим «Авто» нашёл и проверил у пользователя (zapret-gui, ноябрь 2026). Каждая всё равно проверяется на трафике сервиса перед применением.",
+ "items": [
+  {
+   "strategy": "[TCP:flags:PA]-fragment{tcp:34:True:17}-| \\/ [TCP:seq:2285867905:4]-tamper{TCP:options-altchksumopt:replace:}-|",
+   "transport": "tcp",
+   "services": ["youtube.com", "googlevideo.com", "ytimg.com", "ggpht.com", "google.com", "googleusercontent.com", "googleadservices.com", "x.com", "twimg.com", "discord.com", "viber.com", "speedtest.net", "torproject.org", "ntc.party", "bip.com", "pornolab.net", "xvideos.com"]
+  },
+  {
+   "strategy": "[UDP:sport:*]-duplicate(tamper{UDP:load:corrupt},)-| \\/",
+   "transport": "udp",
+   "services": ["ytimg.com", "facebook.com", "cloudflare-ech.com", "stun.l.google.com"]
+  },
+  {
+   "strategy": "[TCP:flags:PA]-fragment{tcp:-1:False}-| \\/",
+   "transport": "tcp",
+   "services": ["rutor.info", "kinogo.ec", "adblockplus.org"]
+  },
+  {
+   "strategy": "[UDP:sport:*]-duplicate(tamper{UDP:load:corrupt}(duplicate,),)-| \\/",
+   "transport": "udp",
+   "services": ["doubleclick.net"]
+  }
+ ]
+}

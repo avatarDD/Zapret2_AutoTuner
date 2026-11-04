@@ -218,8 +218,9 @@ public static class AutoObserver
         return p.IndexOf("1:y1:q"u8) >= 0 || p.IndexOf("1:y1:r"u8) >= 0 || p.IndexOf("1:y1:e"u8) >= 0;
     }
 
-    /// <summary>The search's probes connect from geneva's block of local ports: not the user's traffic.</summary>
-    public static bool IsProbePort(int port) => port >= GenevaArgv.LocalPortsBase && port < GenevaArgv.LocalPortsBase + GenevaArgv.LocalPortsCount;
+    /// <summary>The search's probes connect from geneva's blocks of local ports, one per worker: not the user's traffic.</summary>
+    public static bool IsProbePort(int port) =>
+        port >= GenevaArgv.LocalPortsBase && port < GenevaArgv.LocalPortsBase + GenevaArgv.LocalPortsCount * GenevaSearchSettings.WorkersRange.Max;
 
     public static string AppTitle(string app) => app switch
     {

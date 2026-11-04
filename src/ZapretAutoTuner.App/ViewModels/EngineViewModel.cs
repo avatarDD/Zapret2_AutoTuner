@@ -20,19 +20,14 @@ public sealed record TrialRow(string Time, string Fitness, string Outcome, strin
 /// <summary>A strategy of Geneva's library.</summary>
 public sealed record LibraryRow(string Strategy, string Rate, string Where, string Description);
 
-/// <summary>A service of the "Авто" mode: what it is, where it stands, the strategy applied to it.</summary>
-public sealed record AutoRow(string Key, string Name, string Status, string Detail, string Strategy, string Brush, bool CanReset);
-
-/// <summary>A running strategy of the "Авто" mode with what it serves and its counters.</summary>
-public sealed record AutoGroupRow(string Strategy, string Services, string Counters);
-
 /// <summary>A counter tile of the bypass's telemetry.</summary>
 public sealed record StatTile(string Label, string Value);
 
 /// <summary>
-/// "Движок обхода": which engine bypasses on this PC (nfqws2 or geneva) and, for geneva, the whole cycle on one page:
-/// 1) find a strategy for a blocked site (geneva's genetic search, each strategy judged by the full download),
-/// 2) the strategies found (kept between runs), 3) the bypass with live telemetry. Everything privileged is the Agent's.
+/// "Ручной подбор geneva": the whole manual cycle for one site on one page: 1) find a strategy for a blocked site
+/// (geneva's genetic search, each strategy judged by the full download), 2) the strategies found (kept between runs),
+/// 3) the bypass with one strategy and live telemetry. The automatic mode is its own page (<see cref="AutoViewModel"/>).
+/// Everything privileged is the Agent's.
 /// </summary>
 public sealed partial class EngineViewModel : PageViewModel
 {
@@ -44,7 +39,6 @@ public sealed partial class EngineViewModel : PageViewModel
     {
         _host = host;
         var s = host.Geneva.State;
-        _isGeneva = s.Engine == BypassEngine.Geneva;
         _searchHost = s.LastHost;
         _port = s.LastPort.ToString(CultureInfo.InvariantCulture);
         _population = s.Population;
@@ -53,13 +47,14 @@ public sealed partial class EngineViewModel : PageViewModel
         _runPorts = s.Active?.Ports ?? "80,443";
         _autoStart = s.Active?.AutoStart ?? false;
         host.Geneva.Changed += () => _dirty = true;
-        host.GenevaAuto.Changed += () => _dirty = true;
         Loc.Loc.I.PropertyChanged += (_, _) => _dirty = true;
         _timer = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => Refresh());
         _timer.Start();
     }
 
     public override string TitleKey => "nav.engine";
+
+    public override string? SectionKey => "nav.section_manual";
 
     public override void OnShown()
     {
@@ -72,34 +67,6 @@ public sealed partial class EngineViewModel : PageViewModel
 
     /// <summary>The user's targets, offered for the search.</summary>
     public ObservableCollection<string> Targets { get; } = [];
-
-    // ---- engine choice
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsNfqws2))]
-    private bool _isGeneva;
-
-    public bool IsNfqws2
-    {
-        get => !IsGeneva;
-        set => IsGeneva = !value;
-    }
-
-    partial void OnIsGenevaChanged(bool value)
-    {
-        _host.Geneva.Engine = value ? BypassEngine.Geneva : BypassEngine.Nfqws2;
-        if (!value && (_host.Geneva.RunRunning || _host.GenevaAuto.Running))
-            Status = L["engine.switch_running"];
-    }
-
-    /// <summary>Set by the main view model: opens the wizard or the monitor (the nfqws2 side).</summary>
-    public Action<string>? Navigate { get; set; }
-
-    [RelayCommand]
-    private void OpenWizard() => Navigate?.Invoke("wizard");
-
-    [RelayCommand]
-    private void OpenMonitor() => Navigate?.Invoke("monitor");
 
     [ObservableProperty]
     private string _bundleStatus = "";
@@ -137,113 +104,19 @@ public sealed partial class EngineViewModel : PageViewModel
     [ObservableProperty]
     private string _status = "";
 
-    // ---- the "Авто" mode
-
-    [ObservableProperty]
-    private bool _autoOn;
-
-    [ObservableProperty]
-    private bool _autoBusy;
-
-    [ObservableProperty]
-    private string _autoPhase = "";
-
-    [ObservableProperty]
-    private string _autoSummary = "";
-
-    [ObservableProperty]
-    private string _autoNotice = "";
-
-    [ObservableProperty]
-    private bool _autoShowAll;
-
-    public ObservableCollection<AutoRow> AutoServices { get; } = [];
-
-    public ObservableCollection<AutoGroupRow> AutoGroups { get; } = [];
-
-    public ObservableCollection<string> AutoLog { get; } = [];
-
-    partial void OnAutoShowAllChanged(bool value) => _dirty = true;
-
-    /// <summary>The one switch of the mode: everything else it decides itself.</summary>
-    [RelayCommand]
-    private async Task ToggleAutoAsync()
+    /// <summary>Strategies judged at once (shared with the "Авто" page).</summary>
+    public decimal? Workers
     {
-        AutoBusy = true;
-        try
+        get => _host.Geneva.Workers;
+        set
         {
-            if (_host.GenevaAuto.Running)
-                await _host.GenevaAuto.DisableAsync();
-            else
+            if (value is { } v && (int)v != _host.Geneva.Workers)
             {
-                Status = L["engine.starting"];
-                await _host.GenevaAuto.EnableAsync(CancellationToken.None);
-                Status = "";
+                _host.Geneva.Workers = (int)v;
+                OnPropertyChanged();
             }
         }
-        catch (Exception e) when (e is GenevaRefusedException or Protocol.AgentStartException or InvalidOperationException or Grpc.Core.RpcException)
-        {
-            Status = L.F("engine.failed", e.Message);
-        }
-        finally
-        {
-            AutoBusy = false;
-            _dirty = true;
-        }
     }
-
-    [RelayCommand]
-    private async Task ResetAutoServiceAsync(AutoRow row)
-    {
-        try
-        {
-            await _host.GenevaAuto.ResetServiceAsync(row.Key, CancellationToken.None);
-        }
-        catch (Exception e) when (e is GenevaRefusedException or Grpc.Core.RpcException or InvalidOperationException)
-        {
-            Status = L.F("engine.failed", e.Message);
-        }
-    }
-
-    private void RefreshAuto(bool en)
-    {
-        var a = _host.GenevaAuto.View;
-        AutoOn = a.Running;
-        AutoPhase = a.Running ? Pick(a.Phase, en) : a.Enabled ? L["engine.auto_waiting"] : L["engine.auto_off"];
-        AutoSummary = a.Services.Count == 0 ? "" : L.F("engine.auto_summary", a.Services.Count, a.Count(Core.Geneva.Auto.AutoStatus.Applied),
-            a.Count(Core.Geneva.Auto.AutoStatus.Searching) + a.Count(Core.Geneva.Auto.AutoStatus.Blocked) + a.Count(Core.Geneva.Auto.AutoStatus.Suspected) + a.Count(Core.Geneva.Auto.AutoStatus.Degraded),
-            a.Count(Core.Geneva.Auto.AutoStatus.NotFound) + a.Count(Core.Geneva.Auto.AutoStatus.IpBlocked), a.Flows);
-        AutoNotice = a.Limited ? L["engine.auto_limited"] : string.Join("\n", a.Problems);
-        var rows = a.Services
-            .Where(x => AutoShowAll || x.Status is not (Core.Geneva.Auto.AutoStatus.Watching or Core.Geneva.Auto.AutoStatus.NotBlocked))
-            .Take(200)
-            .Select(x =>
-            {
-                var (status, brush) = AutoStatusText(x.Status);
-                var detail = x.Status == Core.Geneva.Auto.AutoStatus.Searching && x.Name == a.Current && a.Trying is { } t
-                    ? L.F("engine.auto_trying", t)
-                    : x.Why;
-                return new AutoRow(x.Key, x.Name, status, detail, x.Strategy ?? "", brush, x.Status != Core.Geneva.Auto.AutoStatus.Watching);
-            }).ToList();
-        Sync(AutoServices, rows);
-        Sync(AutoGroups, a.Groups.Select(g => new AutoGroupRow(g.Strategy, string.Join(", ", g.Services),
-            g.Stats is { } st ? L.F("engine.auto_counters", st.PktsOut + st.PktsIn, g.Rate.ToString("0", CultureInfo.InvariantCulture), st.Triggered, Uptime(st.UptimeMs)) : "")).ToList());
-        Sync(AutoLog, _host.GenevaAuto.Log.TakeLast(150).Reverse().ToList());
-    }
-
-    private (string Text, string Brush) AutoStatusText(Core.Geneva.Auto.AutoStatus s) => s switch
-    {
-        Core.Geneva.Auto.AutoStatus.Watching => (L["engine.as_watching"], "#8A8A8A"),
-        Core.Geneva.Auto.AutoStatus.Suspected => (L["engine.as_suspected"], "#C98A12"),
-        Core.Geneva.Auto.AutoStatus.Blocked => (L["engine.as_blocked"], "#D0443E"),
-        Core.Geneva.Auto.AutoStatus.NotBlocked => (L["engine.as_notblocked"], "#8A8A8A"),
-        Core.Geneva.Auto.AutoStatus.IpBlocked => (L["engine.as_ipblocked"], "#D0443E"),
-        Core.Geneva.Auto.AutoStatus.Fallback => (L["engine.as_fallback"], "#8A8A8A"),
-        Core.Geneva.Auto.AutoStatus.Searching => (L["engine.as_searching"], "#2F7FD0"),
-        Core.Geneva.Auto.AutoStatus.Applied => (L["engine.as_applied"], "#2E9E5B"),
-        Core.Geneva.Auto.AutoStatus.Degraded => (L["engine.as_degraded"], "#C98A12"),
-        _ => (L["engine.as_notfound"], "#D0443E"),
-    };
 
     // ---- 1. search
 
@@ -349,6 +222,7 @@ public sealed partial class EngineViewModel : PageViewModel
             Population = (int)(Population ?? 30),
             Generations = (int)(Generations ?? 15),
             Resume = resume,
+            Workers = _host.Geneva.Workers,
             Seeds = [.. seeds.Distinct().Where(s => GenevaStrategyText.Problem(s) is null).Take(GenevaArgv.MaxSeeds)],
         };
         try
@@ -508,10 +382,6 @@ public sealed partial class EngineViewModel : PageViewModel
         var search = g.Search;
         var state = g.State;
         bool en = Loc.Loc.I.English;
-        // MCP's engine_select and a started bypass change the choice too
-        if ((state.Engine == BypassEngine.Geneva) != IsGeneva)
-            IsGeneva = state.Engine == BypassEngine.Geneva;
-        RefreshAuto(en);
 
         Searching = search.Running;
         SearchPercent = search.Percent * 100;

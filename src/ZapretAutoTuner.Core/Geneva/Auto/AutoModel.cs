@@ -158,4 +158,20 @@ public static class AutoRules
 
     /// <summary>Generations added each time a search that found nothing is continued.</summary>
     public const int MoreGenerations = 5;
+
+    /// <summary>
+    /// Searches that found nothing in a row before the wider round: every known strategy and Geneva's library on the
+    /// service's traffic, then a new, bigger search with more layers (<see cref="WidePopulation"/>).
+    /// </summary>
+    public const int WideAfter = 2;
+
+    /// <summary>Strategies the wider round tries on the service's traffic before its search.</summary>
+    public const int MaxWideCandidates = 40;
+
+    public const int WidePopulation = 40;
+
+    public const int WideGenerations = 15;
+
+    /// <summary>The probes one search runs at once (geneva's workers): the user's choice, 1 by default.</summary>
+    public const int MaxWorkers = 8;
 }

@@ -55,6 +55,12 @@ public sealed record GenevaSearchView
 
     public bool Resumed { get; init; }
 
+    /// <summary>The layers geneva may change (<c>--protos</c>): a resumed search must keep them.</summary>
+    public string Protos { get; init; } = "TCP";
+
+    /// <summary>Strategies judged at once (geneva's workers) as asked; the Agent may run fewer.</summary>
+    public int Workers { get; init; } = 1;
+
     /// <summary>Why the last search ended, in Russian and English; null while it runs or before the first.</summary>
     public (string Ru, string En)? Ended { get; init; }
 
@@ -240,7 +246,13 @@ public sealed class GenevaController : IAsyncDisposable
         if (settings.Resume && State.ProgressOf(settings.Host, settings.Port) is { Population: > 0 } saved)
         {
             // geneva refuses to resume a search whose population changed; more generations are fine
-            settings = settings with { Population = saved.Population, Generations = Math.Max(settings.Generations, saved.Generations) };
+            // nor one whose layers changed: Auto's wider round saves "TCP,IP" under the same key a manual resume uses
+            settings = settings with
+            {
+                Population = saved.Population,
+                Generations = Math.Max(settings.Generations, saved.Generations),
+                Protos = saved.Protos is { Length: > 0 } p ? p : settings.Protos,
+            };
         }
         if (settings.Problems() is { Count: > 0 } bad)
             throw new GenevaRefusedException(string.Join("; ", bad));
@@ -263,6 +275,7 @@ public sealed class GenevaController : IAsyncDisposable
                 Tag = "geneva-search:" + settings.Host,
                 Protos = settings.Protos,
                 Probe = settings.Probe,
+                Workers = settings.Workers,
             };
             req.Seeds.AddRange(settings.Seeds);
             var reply = await agent.StartAsync(req, CancellationToken.None).ConfigureAwait(false);
@@ -285,6 +298,8 @@ public sealed class GenevaController : IAsyncDisposable
                     Generations = settings.Generations,
                     Started = DateTimeOffset.Now,
                     Resumed = settings.Resume,
+                    Protos = settings.Protos,
+                    Workers = settings.Workers,
                     Generation = settings.Resume && prev is not null ? prev.Generation : -1,
                     BestFitness = settings.Resume && prev is not null ? prev.BestFitness : 0,
                     Best = settings.Resume ? prev?.Best : null,
@@ -324,6 +339,7 @@ public sealed class GenevaController : IAsyncDisposable
     {
         int exitCode = -1;
         string? reason = null;
+        var inflight = new List<Task>();
         try
         {
             await foreach (var o in agent.WatchAsync(id, ct).ConfigureAwait(false))
@@ -342,6 +358,15 @@ public sealed class GenevaController : IAsyncDisposable
                     continue;
                 if (e.Ev == "exit")
                     reason = e.Str("reason");
+                if (e.Ev == "eval_request" && settings.Workers > 1)
+                {
+                    // several workers ask at once, each from its own ports: their probes run side by side, and geneva
+                    // takes the answers by id in any order. One worker keeps the old order: one probe at a time.
+                    var pending = Task.Run(() => AnswerAsync(agent, id, settings, e, probeCt, ct), CancellationToken.None);
+                    inflight.Add(pending);
+                    inflight.RemoveAll(t => t.IsCompleted);
+                    continue;
+                }
                 await OnSearchEventAsync(agent, id, settings, e, probeCt, ct).ConfigureAwait(false);
                 Changed?.Invoke();
             }
@@ -356,6 +381,8 @@ public sealed class GenevaController : IAsyncDisposable
             AddLog("Ошибка подбора / search error: " + e.Message);
             await agent.StopAsync(id, CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default).ConfigureAwait(false);
         }
+        // the probes still running answer nobody now (geneva is gone); they end with the probe's own timeout
+        await Task.WhenAny(Task.WhenAll(inflight), Task.Delay(TimeSpan.FromSeconds(15), CancellationToken.None)).ConfigureAwait(false);
         bool stopped;
         (string Ru, string En)? ports;
         lock (_lock)
@@ -363,13 +390,17 @@ public sealed class GenevaController : IAsyncDisposable
         // the Agent stops a search by closing its input, which geneva reports as a failed evaluation (code 1): the
         // user pressed Stop, the checkpoint is saved
         var ended = ports ?? (stopped && reason != "done" ? GenevaText.Exit(0, "signal") : GenevaText.Exit(exitCode, reason));
+        GenevaSearchView view;
         lock (_lock)
         {
+            // the view of this search, taken before another search may start once the slot is free
+            view = _search with { Running = false, Ended = ended };
             if (_searchId == id)
+            {
                 _searchId = null;
-            _search = _search with { Running = false, Ended = ended };
+                _search = view;
+            }
         }
-        var view = Search;
         Update(s => s.WithProgress(new GenevaSearchProgress
         {
             Host = view.Host,
@@ -379,6 +410,7 @@ public sealed class GenevaController : IAsyncDisposable
             Generations = view.Generations,
             BestFitness = view.BestFitness,
             Best = view.Best,
+            Protos = view.Protos,
             Updated = DateTimeOffset.Now,
             Finished = exitCode == 0 && reason == "done",
         }));
@@ -386,7 +418,7 @@ public sealed class GenevaController : IAsyncDisposable
             return;
         AddLog(ended.Ru);
         Changed?.Invoke();
-        SearchEnded?.Invoke(Search);
+        SearchEnded?.Invoke(view);
     }
 
     private async Task OnSearchEventAsync(IGenevaAgent agent, string id, GenevaSearchSettings settings, GenevaEvent e, CancellationToken probeCt, CancellationToken ct)
@@ -460,6 +492,7 @@ public sealed class GenevaController : IAsyncDisposable
                     Generations = view.Generations,
                     BestFitness = view.BestFitness,
                     Best = view.Best,
+                    Protos = view.Protos,
                     Updated = DateTimeOffset.Now,
                 }));
                 break;
@@ -737,6 +770,33 @@ public sealed class GenevaController : IAsyncDisposable
 
     /// <summary>Saves the "Авто" mode's state with the rest (one settings key).</summary>
     public void SaveAuto(GenevaAutoState auto) => Update(s => s with { Auto = auto });
+
+    /// <summary>Strategies a search judges at once, 1 to <see cref="GenevaSearchSettings.WorkersRange"/>'s maximum.</summary>
+    public int Workers
+    {
+        get => Math.Clamp(State.Workers, GenevaSearchSettings.WorkersRange.Min, GenevaSearchSettings.WorkersRange.Max);
+        set => Update(s => s with { Workers = Math.Clamp(value, GenevaSearchSettings.WorkersRange.Min, GenevaSearchSettings.WorkersRange.Max) });
+    }
+
+    /// <summary>
+    /// Adds strategies from another user's file (already checked by <c>geneva check</c>): next to the working ones,
+    /// nothing replaced. Returns how many were new. The "Авто" mode tries them on a service's traffic before use.
+    /// </summary>
+    public int Import(IEnumerable<GenevaSharedStrategy> rows)
+    {
+        int added = 0;
+        Update(s =>
+        {
+            var (next, n) = s.WithImported(rows, DateTimeOffset.Now);
+            added = n;
+            return next;
+        });
+        AddLog($"Импортировано новых стратегий: {added}");
+        return added;
+    }
+
+    /// <summary>Forgets one imported strategy (the user's list); what is applied is not touched.</summary>
+    public void RemoveImported(string strategy) => Update(s => s with { Imported = [.. s.Imported.Where(x => x.Strategy != strategy)] });
 
     /// <summary>The Agent's view: version, saved searches, the database's best strategies.</summary>
     public async Task<GenevaInfoReply> InfoAsync(CancellationToken ct) => await (await _agent(ct).ConfigureAwait(false)).InfoAsync(ct).ConfigureAwait(false);

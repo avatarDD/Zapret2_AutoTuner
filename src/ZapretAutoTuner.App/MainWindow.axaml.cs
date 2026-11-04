@@ -22,6 +22,9 @@ public sealed partial class MainWindow : Window
         m.Wizard.CopyText = m.Reports.CopyText = CopyAsync;
         m.Wizard.Confirm = (title, text) => ConfirmDialog.AskAsync(this, title, text);
         m.Expert.OpenFile = OpenFileAsync;
+        m.Auto.SaveFile = SaveFileAsync;
+        m.Auto.OpenFile = OpenFileAsync;
+        m.Auto.CopyText = CopyAsync;
         m.Mcp.Ask = (title, text, ct) => ConfirmDialog.AskAsync(this, title, text, ct);
         m.Resources.Confirm = (title, text) => ConfirmDialog.AskAsync(this, title, text);
         m.Resources.ApproveDialog = r => LuaApprovalDialog.AskAsync(this, r);

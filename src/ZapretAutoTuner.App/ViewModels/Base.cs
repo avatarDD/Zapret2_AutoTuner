@@ -8,6 +8,7 @@ public abstract class PageViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Hint));
+        OnPropertyChanged(nameof(Section));
     };
 
     /// <summary>The key of the page title in strings.json.</summary>
@@ -17,6 +18,14 @@ public abstract class PageViewModel : ObservableObject
 
     /// <summary>What the page is for, in a few words under its name in the menu (the key <c>TitleKey_hint</c>); null without one.</summary>
     public string? Hint => Loc.Loc.I.Keys.Contains(TitleKey + "_hint") ? Loc.Loc.I[TitleKey + "_hint"] : null;
+
+    /// <summary>
+    /// The menu's section header shown above this page (the first page of a section names it): "Автоматически",
+    /// "Вручную", "zapret2", "Сервис". Null: the page continues the section above.
+    /// </summary>
+    public virtual string? SectionKey => null;
+
+    public string? Section => SectionKey is { } k ? Loc.Loc.I[k] : null;
 
     protected static Loc.Loc L => Loc.Loc.I;
 

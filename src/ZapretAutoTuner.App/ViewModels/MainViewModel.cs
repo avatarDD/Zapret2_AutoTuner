@@ -22,10 +22,8 @@ public sealed partial class MainViewModel : ObservableObject
         Settings = new SettingsViewModel(host, Mcp);
         Advisor = new AdvisorViewModel(host, Mcp.Tools);
         Mcp.Stopped += Advisor.Cancel;
-        Engine = new EngineViewModel(host)
-        {
-            Navigate = page => Current = page == "monitor" ? Monitor : Wizard,
-        };
+        Engine = new EngineViewModel(host);
+        Auto = new AutoViewModel(host);
         // one engine bypasses at a time: geneva waits for zapret2's protection, the wizard and the model's runs
         host.Geneva.Busy = () =>
             Monitor.Active ? Loc.Loc.I["engine.busy_protection"]
@@ -43,8 +41,10 @@ public sealed partial class MainViewModel : ObservableObject
             if (SessionState.I.Last?.Solution is { } s)
                 await Monitor.ApplySolutionAsync(s);
         };
-        Pages = [Home, Wizard, Monitor, Engine, Reports, Expert, Resources, Advisor, Settings];
-        _current = Home;
+        // the menu by what the user does: the automatic mode first (the main one), then manual work by engine, then
+        // the service pages
+        Pages = [Auto, Engine, Home, Wizard, Monitor, Expert, Resources, Reports, Advisor, Settings];
+        _current = Auto;
         host.AgentLost += m => AgentStatus = Loc.Loc.I.F("agent.lost", m);
         // the geneva bypass the user left on with "Включать при запуске" comes back (one elevation prompt)
         Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = RestoreGenevaAsync(host), Avalonia.Threading.DispatcherPriority.Background);
@@ -58,11 +58,11 @@ public sealed partial class MainViewModel : ObservableObject
                 Engine.Status = Loc.Loc.I["engine.restored"];
             // the "Авто" mode the user left on comes back by itself
             else if (await host.GenevaAuto.RestoreAsync(CancellationToken.None))
-                Engine.Status = Loc.Loc.I["engine.auto_restored"];
+                Auto.Status = Loc.Loc.I["engine.auto_restored"];
         }
         catch (Exception e) when (e is Tuning.Geneva.GenevaRefusedException or Protocol.AgentStartException or InvalidOperationException or Grpc.Core.RpcException)
         {
-            Engine.Status = Loc.Loc.I.F("engine.failed", e.Message);
+            Auto.Status = Loc.Loc.I.F("engine.failed", e.Message);
         }
     }
 
@@ -82,8 +82,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     public AdvisorViewModel Advisor { get; }
 
-    /// <summary>"Движок обхода": nfqws2 or geneva, and geneva's search and bypass.</summary>
+    /// <summary>"Ручной подбор geneva": geneva's search for one site, the found strategies and the one-strategy bypass.</summary>
     public EngineViewModel Engine { get; }
+
+    /// <summary>"Авто": the main page, geneva finds and bypasses whatever is blocked by itself.</summary>
+    public AutoViewModel Auto { get; }
 
     public McpService Mcp { get; }
 

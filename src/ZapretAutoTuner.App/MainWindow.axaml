@@ -4,7 +4,7 @@
         xmlns:l="using:ZapretAutoTuner.App.Loc"
         x:Class="ZapretAutoTuner.App.MainWindow"
         x:DataType="vm:MainViewModel"
-        Title="Zapret2 AutoTuner" Width="1100" Height="740" MinWidth="760" MinHeight="520">
+        Title="Zapret2 AutoTuner" Icon="/Assets/icon.ico" Width="1100" Height="740" MinWidth="760" MinHeight="520">
   <DockPanel>
     <Border DockPanel.Dock="Top" Background="#D9A21B" Padding="12,6" IsVisible="{Binding Mcp.BannerVisible}">
       <DockPanel>
@@ -23,6 +23,8 @@
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:PageViewModel">
               <StackPanel>
+                <TextBlock Text="{Binding Section}" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,6,0,2"
+                           IsVisible="{Binding Section, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                 <TextBlock Text="{Binding Title}" />
                 <TextBlock Text="{Binding Hint}" Classes="muted" FontSize="11" TextWrapping="Wrap"
                            IsVisible="{Binding Hint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />

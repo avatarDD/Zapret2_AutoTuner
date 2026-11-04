@@ -240,6 +240,7 @@ message GenevaStartRequest {
   string tag = 10;
   string protos = 11;           // evolve: the layers the search may use ("TCP", "UDP,IP", ...); empty: TCP
   string probe = 12;            // evolve: what the UI's probe checks, for the target key ("web" or empty, "replay", ...)
+  int32 workers = 13;           // evolve: strategies judged at once; 0 or 1: one (more needs the feature external_workers)
 }
 
 message GenevaStartReply {

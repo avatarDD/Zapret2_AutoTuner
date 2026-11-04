@@ -12,6 +12,8 @@ public sealed partial class ReportsViewModel : PageViewModel
 {
     public override string TitleKey => "nav.reports";
 
+    public override string? SectionKey => "nav.section_service";
+
     public Func<string, byte[], Task>? SaveFile { get; set; }
 
     public Func<string, Task>? CopyText { get; set; }

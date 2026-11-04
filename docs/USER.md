@@ -25,9 +25,62 @@
 
 ## Как пользоваться
 
-1. **Главная → «Проверить блокировки».** Программа проверит популярные сайты и
+Меню разделено на три части: **«Автоматически»** (главный режим, подходит
+почти всем), **«Вручную · geneva»** и **«Вручную · zapret2»** (свой подбор под
+конкретный сайт или роутер) и **«Сервис»**. У разделов и важных настроек есть
+кнопка «?» — короткая подсказка с примером.
+
+### Авто-обход (главный режим)
+
+Программа открывается на странице «Авто-обход». Включите переключатель — и
+больше ничего настраивать не нужно. Один раз появится запрос прав
+администратора.
+
+Программа сама следит за всем трафиком ПК: сайтами (TCP и QUIC), DNS,
+WireGuard, OpenVPN, DHT торрентов и любыми другими протоколами. Если
+соединения с каким-то сервисом рвутся так, как это делает DPI, программа
+сначала проверяет его без обхода: обход ищется, только если сервис
+действительно заблокирован. Потом она пробует готовые стратегии: сначала
+те, что уже работают для других сервисов, и стартовый набор (проверенные
+стратегии для YouTube, Discord, X, Google и других сайтов — первые сайты
+обычно открываются за минуту-две), и только если они не помогают, запускает
+генетический подбор geneva. Если два подбора подряд ничего не нашли,
+следующий идёт шире: больше стратегий из библиотеки, вдвое большая
+популяция и подмена не только TCP, но и IP-заголовков.
+
+Найденная стратегия применяется только к трафику этого сервиса (его адресам
+и портам, а для торрента — его локальному порту), остальной трафик через
+geneva не идёт. Если обход перестал работать, стратегия подбирается заново.
+Если заблокирован сам адрес (соединение не устанавливается вовсе),
+программа так и пишет: здесь поможет только туннель.
+
+- **«Работающие стратегии».** Одна стратегия часто подходит многим сайтам,
+  поэтому они объединяются в группы: одна строка — одна стратегия и все её
+  сервисы. Новые сервисы сначала пробуют стратегии этих групп.
+- **«Сервисы».** Состояние каждого сервиса с проблемой и кнопка «Сбросить».
+- **«Потоков подбора».** Сколько стратегий проверяется одновременно (1–8).
+  Больше потоков — быстрее подбор, но больше соединений к сайту. Нужна
+  geneva_c 1.2 или новее; со старой версией подбор идёт в один поток, и
+  программа об этом пишет.
+- **«Обмен стратегиями».** «Экспорт в файл…» сохраняет рабочие стратегии с
+  именами сервисов (домен или протокол, ваши адреса в файл не попадают).
+  Формат тот же, что у zapret-gui (`zapret-gui/geneva-strategies`, JSON),
+  поэтому файл открывается и в zapret-gui на роутере. «Импорт из файла…»
+  принимает такой же файл или простой текст — одна стратегия на строку.
+  Импортированные стратегии добавляются рядом с вашими: рабочие не
+  затираются, а новые проверяются (`geneva check`) и пробуются на вашем
+  трафике так же, как стартовый набор.
+
+Режим остаётся включённым после перезапуска. Окно можно свернуть в трей
+(значок у часов): обход работает, пока программа запущена, а «Выход» в меню
+значка закрывает программу и снимает обход. На Windows для применения
+найденных стратегий нужна geneva_c 1.1 или новее.
+
+### Вручную
+
+1. **Проверка блокировок → «Проверить блокировки».** Программа проверит популярные сайты и
    покажет светофор: зелёный — работает, жёлтый — частично, красный — блок.
-2. **«Подобрать стратегию».** Впишите сайты (или нажмите готовый набор:
+2. **Подбор zapret2.** Впишите сайты (или нажмите готовый набор:
    YouTube, Discord, Telegram, Instagram) и нажмите «Начать». Программа
    определит тип блокировки, переберёт стратегии и проверит найденное полной
    загрузкой. Видно этап, процент, прошедшее и оставшееся время. Подбор
@@ -43,11 +96,11 @@
    сохраняется.
 3. **«Где включить».** Найденная стратегия сама по себе нигде не работает:
    программа хранит её у себя (файл `current-solution.json` в папке данных,
-   переживает перезапуск, на главной есть кнопка «Где включить…»). Дальше
+   переживает перезапуск, в «Проверке блокировок» есть кнопка «Где включить…»). Дальше
    выберите одно место, на каждой карточке написано, куда попадёт стратегия
    и как она включается:
    - **Этот компьютер.** «Включить на этом компьютере» запускает встроенный
-     zapret2 и открывает «Монитор»; обход работает, пока открыт AutoTuner.
+     zapret2 и открывает «Защиту zapret2»; обход работает, пока открыт AutoTuner.
      В Windows есть «Установить как службу Windows» (служба `zt_winws2`
      работает и без AutoTuner, с загрузки) и «Удалить службу Windows». Ещё
      можно сохранить архив для своего zapret2/winws2.
@@ -61,7 +114,7 @@
    - **Другие системы:** архив для zapret2 на Linux/OpenWrt
      (`/opt/zapret2/config`) и строка аргументов.
    Ничего не устанавливается и не применяется без вашего «Да».
-4. **Монитор.** «Включить защиту» держит стратегию запущенной и следит за её
+4. **Защита zapret2.** «Включить защиту» держит стратегию запущенной и следит за её
    сайтами. Если сайт перестал открываться, программа ищет исправление и
    спрашивает, применить ли его (или применяет сама, если вы это разрешили в
    настройках). Кнопка «Не работает сейчас» запускает починку сразу.
@@ -75,35 +128,17 @@
    из «Ресурсов» с тем же именем (`list-general`).
 7. **Ресурсы.** Свои хостлисты, ipset'ы, блобы и Lua-скрипты. Имя можно
    ввести с расширением: «youtube.txt» сохранится как «youtube».
-8. **Движок.** Выбор, чем обходить блокировки на этом ПК: nfqws2 (zapret2,
-   всё описанное выше) или geneva (geneva_c). У geneva три шага:
-   «Подбор» — генетический поиск стратегии для заблокированного сайта
-   (каждую стратегию программа проверяет полной загрузкой страницы, видно
-   поколение, процент, лучший результат и график); «Найденные» — стратегии,
-   с которыми сайт загрузился; «Обход» — включение выбранной стратегии с
-   живыми счётчиками пакетов и срабатываний. Прогресс подбора, найденное и
-   включённый обход сохраняются: остановленный подбор продолжается кнопкой
-   «Продолжить», а обход с галочкой «Включать при запуске» возвращается
-   после перезапуска программы. Одновременно работает только один движок.
-
-   **Режим «Авто»** — один переключатель над этими шагами, после которого
-   ничего настраивать не нужно. Программа сама следит за всем трафиком ПК:
-   сайтами (TCP и QUIC), DNS, WireGuard, OpenVPN, DHT торрентов и любыми
-   другими протоколами. Если соединения с каким-то сервисом рвутся так, как
-   это делает DPI, программа сначала проверяет его без обхода: обход
-   ищется, только если сервис действительно заблокирован. Потом она пробует
-   уже известные стратегии, а если они не помогают, запускает подбор geneva.
-   Найденная стратегия применяется только к трафику этого сервиса (его
-   адресам и портам, а для торрента — его локальному порту), остальной
-   трафик через geneva не идёт. Если обход перестал работать, стратегия
-   подбирается заново, а неудачный подбор продолжается позже с новыми
-   поколениями. Если заблокирован сам адрес (соединение не устанавливается
-   вовсе), программа так и пишет: здесь поможет только туннель. Список
-   сервисов показывает состояние каждого, у каждого есть кнопка «Сбросить».
-   Режим остаётся включённым после перезапуска. На Windows для применения
-   найденных стратегий нужна geneva_c 1.1 или новее; со старой версией
-   блокировки находятся, но обход не включается, и программа об этом
-   предупреждает.
+8. **Подбор для сайта (geneva вручную).** Свой подбор geneva для одного
+   сайта в три шага: «Подбор» — генетический поиск стратегии для
+   заблокированного сайта (каждую стратегию программа проверяет полной
+   загрузкой страницы, видно поколение, процент, лучший результат и график;
+   число потоков настраивается так же, как в «Авто»); «Найденные» —
+   стратегии, с которыми сайт загрузился; «Обход» — включение выбранной
+   стратегии с живыми счётчиками пакетов и срабатываний. Прогресс подбора,
+   найденное и включённый обход сохраняются: остановленный подбор
+   продолжается кнопкой «Продолжить», а обход с галочкой «Включать при
+   запуске» возвращается после перезапуска программы. Одновременно работает
+   только один движок: geneva (авто или вручную) или zapret2.
 
 Под каждым пунктом меню написано, для чего он. При закрытии программы
 вместе с ней завершаются все запущенные ею процессы (браузер проверки и
@@ -179,6 +214,23 @@ zapret-gui на роутере (например, 192.168.2.1).
 Установленные у вас браузеры, их профили и настройки программа не трогает.
 Если папки `browsers` нет, проверка идёт загрузкой страницы самой программой.
 
+**Где хранятся данные.** Всё в одной папке `data` рядом с программой:
+настройки, база найденных стратегий, импортированные стратегии, журналы и
+экспорт. Portable-копию можно переносить вместе с этой папкой. Данные из
+старого места (`%LOCALAPPDATA%\ZapretAutoTuner`, `~/.local/share/ZapretAutoTuner`)
+при первом запуске переносятся сюда сами. Если в папку программы писать
+нельзя (установка в `C:\Program Files`, `/opt` с владельцем root), данные
+остаются в старом месте; запуск «от имени администратора» их тоже не
+переносит. Свою папку можно задать переменной `ZT_DATA_DIR`.
+Состояние агента с правами администратора хранится отдельно, в защищённой
+папке (`C:\ProgramData\ZapretAutoTuner-*`, `/var/lib/zapret-autotuner`):
+то, что запускается с правами, не должно лежать там, где его может
+подменить обычный пользователь.
+
+**Трей.** В Windows свёрнутое окно по умолчанию уходит в трей. В настройках
+можно включить и закрытие окна в трей; тогда программа завершается только
+через «Выход» в меню значка.
+
 **Телеметрия.** Её нет. Настройки, база знаний и журнал хранятся только
 локально (путь показан в настройках).
 
@@ -207,8 +259,58 @@ cannot be protected that way: a replaced agent gets the rights on its next start
 
 ## Use
 
-1. **Home → Check for blocks** shows what is blocked.
-2. **Find a strategy:** enter sites or pick a ready set and press Start. You
+The menu has three parts: **Automatic** (the main mode, fits almost everyone),
+**Manual · geneva** and **Manual · zapret2** (your own search for one site or
+the router) and **Service**. Sections and key settings have a "?" button with a
+short hint and an example.
+
+### Auto bypass (the main mode)
+
+The program opens on the Auto bypass page. Turn the switch on and nothing else
+needs setting; administrator rights are asked for once.
+
+The program watches all of the PC's traffic: sites (TCP and QUIC), DNS,
+WireGuard, OpenVPN, torrent DHT and any other protocol. When connections to a
+service fail the way DPI makes them fail, it first checks the service without a
+bypass: a bypass is searched only for what is really blocked. Then it tries
+ready strategies first: the ones already working for other services and the
+starting set (checked strategies for YouTube, Discord, X, Google and other
+sites, so the first sites usually open within a minute or two). Only if none
+helps does it run geneva's genetic search. After two empty searches the next one
+goes wider: more strategies from the library, a population twice as big, and
+IP headers tampered as well as TCP.
+
+A strategy it finds applies to that service's traffic only (its addresses and
+ports, or a torrent's local port); the rest of the traffic never goes through
+geneva. When a bypass stops working, a new one is searched. When the address
+itself is blocked (no connection at all), the program says so: only a tunnel
+helps there.
+
+- **Working strategies.** One strategy often suits many sites, so they are
+  grouped: one row is one strategy with all its services. New services try
+  these strategies first.
+- **Services** shows each service with a problem and a Reset button.
+- **Search threads** sets how many strategies are tried at once (1–8). More
+  threads search faster but open more connections to the site. This needs
+  geneva_c 1.2 or newer; with an older one the search runs in one thread and
+  the program says so.
+- **Share strategies.** "Export to a file…" saves the working strategies with
+  the names of their services (a domain or a protocol, never your addresses).
+  The format is zapret-gui's (`zapret-gui/geneva-strategies`, JSON), so
+  zapret-gui on the router opens the file too. "Import from a file…" takes such
+  a file or plain text, one strategy per line. Imported strategies are added
+  next to yours: working ones are never replaced, and new ones are checked
+  (`geneva check`) and tried on your traffic like the starting set.
+
+The mode stays on across restarts. The window can be minimized to the tray: the
+bypass works while the program runs, and Exit in the tray menu closes the
+program and removes the bypass. On Windows, applying the strategies needs
+geneva_c 1.1 or newer.
+
+### Manual
+
+1. **Block check → Check for blocks** shows what is blocked.
+2. **zapret2 tuning:** enter sites or pick a ready set and press Start. You
    see the stage, percent, elapsed and remaining time. Stop any time (Stop takes
    the best found so far) or Pause: the current trial finishes and the engine
    stops. What was tried is saved as it goes, so after a pause, closing the
@@ -220,7 +322,7 @@ cannot be protected that way: a replaced agent gets the rights on its next start
    of their own, the strategy for the main site is kept.
 3. **Where to turn it on.** A found strategy works nowhere by itself: the app
    keeps it (`current-solution.json` in the data folder, it survives a restart;
-   Home has "Where to turn it on…"). Each card says where the strategy goes and
+   Block check has "Where to turn it on…"). Each card says where the strategy goes and
    how it is turned on: **this PC** (the built-in zapret2 while AutoTuner is
    open, a Windows service `zt_winws2` that runs without it, or an archive),
    **Keenetic** over SSH (only the strategy variables of `nfqws2.conf` are
@@ -228,7 +330,7 @@ cannot be protected that way: a replaced agent gets the rights on its next start
    "AutoTuner: <sites>" strategy, applying is a separate question) or as an
    archive, and **other systems**: zapret2 on Linux/OpenWrt, an argument line.
    Nothing is installed or applied without your Yes.
-4. **Monitor** keeps the strategy running and repairs it when a site breaks,
+4. **zapret2 protection** keeps the strategy running and repairs it when a site breaks,
    asking first unless you allowed automatic fixes.
 5. **Reports** builds an archive for analysis with your IPs masked. Nothing is
    sent anywhere.
@@ -237,32 +339,15 @@ cannot be protected that way: a replaced agent gets the rights on its next start
    is taken from Resources under the same name (`list-general`).
 7. **Resources** keeps your hostlists, ipsets, blobs and Lua scripts. A name may
    have an extension: "youtube.txt" is saved as "youtube".
-8. **Engine** chooses what bypasses blocks on this PC: nfqws2 (zapret2, all of
-   the above) or geneva (geneva_c). geneva has three steps: Search (a genetic
-   search for a blocked site, every strategy judged by a full page load, with
-   the generation, percent, best result and a chart), Found (the strategies
-   the site loaded with) and Bypass (turns the chosen strategy on, with live
-   packet and trigger counters). Search progress, found strategies and the
-   bypass are saved: Continue resumes a stopped search, and a bypass with
-   "Turn on at start" comes back after the program restarts. Only one engine
-   runs at a time.
-
-   **Auto mode** is one switch above these steps, and nothing else needs
-   setting. The program watches all of the PC's traffic: sites (TCP and
-   QUIC), DNS, WireGuard, OpenVPN, torrent DHT and any other protocol. When
-   connections to a service fail the way DPI makes them fail, it first checks
-   the service without a bypass: a bypass is searched only for what is really
-   blocked. Then it tries the strategies it already knows, and if none helps,
-   runs geneva's search. A strategy it finds applies to that service's
-   traffic only (its addresses and ports, or a torrent's local port); the rest
-   of the traffic never goes through geneva. When a bypass stops working, a
-   new one is searched, and a search that found nothing continues later with
-   more generations. When the address itself is blocked (no connection at
-   all), the program says so: only a tunnel helps there. The list shows each
-   service's state with a Reset button. The mode stays on across restarts.
-   On Windows, applying the strategies needs geneva_c 1.1 or newer; with an
-   older one blocks are found but no bypass is turned on, and the program
-   says so.
+8. **Search for a site (manual geneva)** is your own geneva search for one
+   site in three steps: Search (a genetic search for a blocked site, every
+   strategy judged by a full page load, with the generation, percent, best
+   result and a chart; threads are set as in Auto), Found (the strategies the
+   site loaded with) and Bypass (turns the chosen strategy on, with live packet
+   and trigger counters). Search progress, found strategies and the bypass are
+   saved: Continue resumes a stopped search, and a bypass with "Turn on at
+   start" comes back after the program restarts. Only one engine runs at a
+   time: geneva (auto or manual) or zapret2.
 
 Every menu item says what it is for. Closing the program ends every process it
 started (the check's browser and others); the agent stops the engine and
@@ -323,4 +408,18 @@ Stop on the banner cuts the bridge too.
   temporary profile each time. Your installed browsers, their profiles and
   settings are never touched. Without the `browsers` folder the program checks
   by loading the page itself.
+- **Where the data lives:** all of it in one `data` folder next to the
+  program: settings, the found strategies, imports, logs and exports, so a
+  portable copy moves with it. Data from the old place
+  (`%LOCALAPPDATA%\ZapretAutoTuner`, `~/.local/share/ZapretAutoTuner`) moves
+  there at the first start. When the program folder is not writable
+  (`C:\Program Files`, a root-owned `/opt`), the data stays in the old place, and so does it on a "Run as
+  administrator" start.
+  `ZT_DATA_DIR` sets a folder of your own. The administrator agent keeps its
+  state apart, in a protected folder (`C:\ProgramData\ZapretAutoTuner-*`,
+  `/var/lib/zapret-autotuner`): what runs with admin rights must not live where
+  a user can swap it.
+- **Tray:** on Windows a minimized window goes to the tray by default; Settings
+  can also make closing the window go to the tray, and then Exit in the tray
+  menu closes the program.
 - **No telemetry.** All data stays local.

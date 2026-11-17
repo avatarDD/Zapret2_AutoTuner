@@ -189,6 +189,9 @@ public static class Classifier
     /// <summary>Incoming bytes where the "16 KB" cut-off usually bites (§2.8).</summary>
     public const long CutoffMin = 8 * 1024, CutoffMax = 32 * 1024;
 
+    /// <summary>The lowest wire count (handshake included) read as a cut-off when the cut fell inside a TLS record.</summary>
+    public const long CutoffWireMin = 14 * 1024;
+
     public static ClassifierVerdict Classify(TargetObservation t)
     {
         var findings = new List<LabelFinding>();
@@ -356,7 +359,7 @@ public static class Classifier
 
         if (IsCutoff(b, 64 * 1024))
         {
-            add(BlockLabel.Cutoff16K, [$"TLS прошёл, входящие данные остановились на {b.StalledAt ?? b.BytesIn} B", .. Evidence(b)]);
+            add(BlockLabel.Cutoff16K, [$"TLS прошёл, входящие данные остановились на {b.StalledAt ?? b.BytesIn} B{(b.WireBytesIn > 0 ? $" ({b.WireBytesIn} B на проводе)" : "")}", .. Evidence(b)]);
             return;
         }
 
@@ -405,12 +408,24 @@ public static class Classifier
 
     private static bool IsCutoff(ProbeResult p, long need) =>
         p.TlsOk && !p.Passes(ProbeLevel.L2Body, need) && p.Error is ProbeError.Stalled or ProbeError.HttpReset or ProbeError.Truncated
-        && (p.StalledAt ?? p.BytesIn) is >= CutoffMin and <= CutoffMax;
+        && IsVolumeStop(p);
+
+    /// <summary>
+    /// Where the response stopped looks like a volume cut-off: the decrypted count in the window, or — when the cut fell
+    /// inside a TLS record and almost nothing decrypted — the wire count, which a volume DPI counts, in
+    /// <see cref="CutoffWireMin"/>..<see cref="CutoffMax"/>. The wire count includes the handshake, hence the higher floor.
+    /// </summary>
+    public static bool IsVolumeStop(ProbeResult p)
+    {
+        long decrypted = p.StalledAt ?? p.BytesIn;
+        return decrypted is >= CutoffMin and <= CutoffMax
+            || (decrypted < CutoffMin && p.WireBytesIn is >= CutoffWireMin and <= CutoffMax);
+    }
 
     /// <summary>The padded probe died after the flow passed the cut-off size (sent and received together).</summary>
     internal static bool IsPaddedCutoff(ProbeResult p) =>
         p.TlsOk && !p.Complete && p.Error is ProbeError.Stalled or ProbeError.HttpReset or ProbeError.HttpTimeout or ProbeError.Truncated
-        && p.BytesOut + p.BytesIn >= CutoffMin;
+        && p.BytesOut + Math.Max(p.BytesIn, p.WireBytesIn) >= CutoffMin;
 
     /// <summary>
     /// HTTP block (§2.6): a redirect to another registrable domain, or a reset or silence on the request. A redirect to

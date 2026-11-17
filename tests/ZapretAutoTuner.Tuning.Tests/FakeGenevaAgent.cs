@@ -184,9 +184,17 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
     /// <summary>Strategies whose group does not start (left out of the reply, as the Agent does).</summary>
     public HashSet<string> AutoRefused { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>geneva_c 2.0: site strategies by name, x-actions.</summary>
+    public bool AutoByName { get; set; }
+
     public Task<GenevaAutoApplyReply> AutoApplyAsync(GenevaAutoApplyRequest request, CancellationToken ct)
     {
-        var reply = new GenevaAutoApplyReply { Limited = AutoLimited };
+        var reply = new GenevaAutoApplyReply { Limited = AutoLimited, ByName = AutoByName, Ext = AutoByName };
+        if (AutoByName && request.Hosts.Count > 0)
+        {
+            reply.Host = new GenevaAutoGroupState { Id = "autohost", Queue = 348, Pid = 1 };
+            reply.Host.Requested.AddRange(request.Hosts.Select(h => h.Strategy));
+        }
         lock (_lock)
         {
             AutoApplied.Add(request.Clone());

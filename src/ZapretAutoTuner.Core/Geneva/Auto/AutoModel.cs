@@ -59,6 +59,33 @@ public enum AutoStatus
     NotFound,
 }
 
+/// <summary>
+/// How much a service matters (issue 28): the order of confirmation and search, who may interrupt whose search, who
+/// leaves a full book first. Lower is more important.
+/// </summary>
+public enum AutoPriority
+{
+    /// <summary>The user's list and the well-known services people wait for (YouTube, Discord, Telegram...).</summary>
+    Important = 0,
+
+    /// <summary>Sites and QUIC by name, DNS resolvers.</summary>
+    Normal = 1,
+
+    /// <summary>A server with a name or a known protocol (WireGuard, OpenVPN, STUN...).</summary>
+    Low = 2,
+
+    /// <summary>A bare address on a high port, DHT, peer-to-peer: never interrupts anyone and leaves a full book first.</summary>
+    Background = 3,
+}
+
+/// <summary>The user's word about one service: it overrides the computed priority.</summary>
+public enum AutoUserPriority
+{
+    None = 0,
+    Important = 1,
+    Unimportant = 2,
+}
+
 /// <summary>How one observed flow of a service went.</summary>
 public enum AutoHealth
 {
@@ -174,4 +201,27 @@ public static class AutoRules
 
     /// <summary>The probes one search runs at once (geneva's workers): the user's choice, 1 by default.</summary>
     public const int MaxWorkers = 8;
+
+    /// <summary>
+    /// Probes in a row a strategy must pass on the service before it is applied: one lucky load (a DPI that lets some
+    /// connections through) is not a working bypass.
+    /// </summary>
+    public const int TrialPasses = 2;
+
+    /// <summary>A waiting background service rises one level for each such wait (never above <see cref="AutoPriority.Low"/>).</summary>
+    public static TimeSpan StarvationStep { get; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>Places of the book only important and normal services may take: peers cannot crowd them out.</summary>
+    public const int ReservedPlaces = 60;
+
+    /// <summary>Strategies applied by the site's name at once (geneva_c 2.0 profiles in one process).</summary>
+    public const int MaxHostProfiles = 24;
+
+    /// <summary>The queue of the process that applies strategies by name: after the groups' 340–347.</summary>
+    public const int HostQueue = 348;
+
+    /// <summary>Ports whose connections the name-based process sees (TLS and HTTP; QUIC over UDP 443).</summary>
+    public const string HostTcpPorts = "80,443";
+
+    public const string HostUdpPorts = "443";
 }

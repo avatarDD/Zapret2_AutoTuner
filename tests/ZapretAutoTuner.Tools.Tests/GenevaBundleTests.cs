@@ -81,6 +81,32 @@ public sealed class GenevaBundleTests
         Assert.True(c[0].Ok);
         Assert.False(c[1].Ok);
         Assert.False(c[2].Ok);
+
+        // geneva_c 2.0: every candidate of the "Авто" mode, zapret2's methods included, parses; the grid comes without rights
+        if (!v.Features.Contains("ext_xact"))
+            return;
+        var all = Core.Geneva.Auto.AutoCandidates.Tcp.Concat(Core.Geneva.Auto.AutoCandidates.Udp).Concat(Core.Geneva.Auto.AutoCandidates.Dns)
+            .Concat(Core.Geneva.Auto.AutoCandidates.XTcp).Concat(Core.Geneva.Auto.AutoCandidates.XQuic).ToList();
+        var checks = await b.CheckAsync(all, default, ext: true);
+        Assert.All(checks.Zip(all), x => Assert.True(x.First.Ok, x.Second + ": " + x.First.Error));
+        // told there are no x-actions, it does not ask geneva; not told, it asks the binary (MCP geneva_check, import)
+        Assert.False((await b.CheckAsync([Core.Geneva.Auto.AutoCandidates.XTcp[0]], default, ext: false))[0].Ok);
+        Assert.True((await b.CheckAsync([Core.Geneva.Auto.AutoCandidates.XTcp[0]]))[0].Ok);
+        var grid = await b.GridAsync("tls12", 24);
+        Assert.Equal(24, grid.Count);
+        Assert.All(await b.CheckAsync(grid, default, ext: true), x => Assert.True(x.Ok, x.Error));
+        Assert.NotEmpty(await b.GridAsync("http3", 13));
+    }
+
+    [Fact]
+    public void The_grid_is_sampled_evenly()
+    {
+        var text = string.Join("\n", Enumerable.Range(0, 100).Select(i => $"--lua-desync=x:{i}\t[FLOW:n:a]-xsplit{{pos={i + 1}}}-| \\/")) + "\nnoise\n";
+        var g = GenevaBundle.ParseGrid(text, 10);
+        Assert.Equal(10, g.Count);
+        Assert.Equal(@"[FLOW:n:a]-xsplit{pos=1}-| \/", g[0]);
+        Assert.Equal(@"[FLOW:n:a]-xsplit{pos=91}-| \/", g[^1]);
+        Assert.Equal(100, GenevaBundle.ParseGrid(text, 0).Count);
     }
 
     [Fact]

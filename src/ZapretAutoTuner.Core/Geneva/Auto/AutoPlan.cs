@@ -25,6 +25,13 @@ public sealed record AutoTarget
 /// <summary>One strategy and the services it is applied to: one <c>geneva run</c> with its own queue.</summary>
 public sealed record AutoGroup(string Strategy, IReadOnlyList<string> Services, IReadOnlyList<AutoTarget> Targets);
 
+/// <summary>
+/// One strategy applied by the site's name (geneva_c 2.0, <c>run --ext</c> profiles with host lists): every connection
+/// to a listed name gets it, whatever address the CDN gave, so a new address works at once and sites behind one
+/// address with different strategies do not share a group.
+/// </summary>
+public sealed record AutoHostProfile(string Strategy, bool Udp, IReadOnlyList<string> Domains, IReadOnlyList<string> Services);
+
 /// <summary>Turns the book into what the Agent applies (skill <c>geneva</c>, §9).</summary>
 public static class AutoPlan
 {
@@ -32,12 +39,34 @@ public static class AutoPlan
     /// The groups: the active services by strategy, the biggest groups first, at most <see cref="AutoRules.MaxGroups"/>.
     /// <paramref name="trial"/> adds a strategy being tried on one service (the quick check of known strategies).
     /// </summary>
-    public static List<AutoGroup> Groups(IEnumerable<AutoService> services, (AutoService Service, string Strategy)? trial = null)
+    /// <para><paramref name="byName"/>: the sites the running name-based process covers (<see cref="ByNameCovers"/>). An
+    /// address that such sites with different strategies share goes to no group: the name decides which strategy its
+    /// connection gets. A site it does not cover (no process, a port it does not catch) keeps its addresses.</para>
+    public static List<AutoGroup> Groups(IEnumerable<AutoService> services, (AutoService Service, string Strategy)? trial = null,
+        IReadOnlySet<string>? byName = null)
     {
         var active = services.Where(s => s.IsActive && (trial is null || s.Key != trial.Value.Service.Key))
             .Select(s => (Service: s, Strategy: s.Strategy!)).ToList();
         if (trial is { } tried)
             active.Add((tried.Service, tried.Strategy));
+        HashSet<string> shared = [];
+        if (byName is { Count: > 0 })
+        {
+            bool Named((AutoService Service, string Strategy) x) => x.Service.Kind == AutoKind.Web
+                && (trial is null || x.Service.Key != trial.Value.Service.Key) && byName.Contains(x.Service.Key);
+            // an address is left to the names only when every active service on it is a site the names cover
+            var uncovered = active.Where(x => !Named(x)).SelectMany(x => x.Service.Addresses.Select(a => a.Ip)).ToHashSet(StringComparer.Ordinal);
+            shared = [.. active.Where(Named)
+                .SelectMany(x => x.Service.Addresses.Select(a => (a.Ip, x.Strategy)))
+                .Where(x => !uncovered.Contains(x.Ip))
+                .GroupBy(x => x.Ip, StringComparer.Ordinal)
+                .Where(g => g.Select(x => x.Strategy).Distinct(StringComparer.Ordinal).Count() > 1)
+                .Select(g => g.Key)];
+            if (shared.Count > 0)
+            {
+                active = [.. active.Select(x => !Named(x) ? x : (Service: Without(x.Service, shared), x.Strategy))];
+            }
+        }
         var ordered = active
             .GroupBy(x => x.Strategy, StringComparer.Ordinal)
             .Select(g => new AutoGroup(g.Key, [.. g.Select(x => x.Service.Key)], [.. g.Select(x => Target(x.Service)).Where(x => x is not null).Select(x => x!)]))
@@ -96,6 +125,75 @@ public static class AutoPlan
                 break;
         }
         return result;
+    }
+
+    private static AutoService Without(AutoService s, HashSet<string> addresses)
+    {
+        var c = s.Clone();
+        c.Addresses.RemoveAll(a => addresses.Contains(a.Ip));
+        return c;
+    }
+
+    /// <summary>
+    /// The strategies applied by name: one profile per strategy and transport of the applied sites (and QUIC with
+    /// <paramref name="quic"/>), each with the sites' domains. A site's family (<see cref="AutoFamilies"/>) joins its
+    /// profile, unless a member has its own life in the book (its own strategy, a probe or search under way): YouTube's
+    /// videos get the site's strategy before they ever fail. The service on trial is left out (its address group
+    /// decides); a domain belongs to the first profile that names it; at most <see cref="AutoRules.MaxHostProfiles"/>.
+    /// </summary>
+    public static List<AutoHostProfile> HostProfiles(IEnumerable<AutoService> services, string? trialKey = null, bool quic = false, bool families = true)
+    {
+        var all = services.ToList();
+        var busy = all.Where(s => s.Kind is AutoKind.Web or AutoKind.Quic
+                && (s.IsActive || s.Status is AutoStatus.Searching or AutoStatus.Blocked or AutoStatus.Suspected or AutoStatus.NotFound or AutoStatus.Degraded))
+            .Select(s => (Site: AutoFamilies.SiteOf(s), Udp: s.Kind == AutoKind.Quic))
+            .ToHashSet();
+        var active = all.Where(s => s.IsActive && s.Key != trialKey && (s.Kind == AutoKind.Web || (quic && s.Kind == AutoKind.Quic)))
+            .GroupBy(s => (s.Strategy!, Udp: s.Kind == AutoKind.Quic))
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key.Item1, StringComparer.Ordinal)
+            .ToList();
+        var claimed = new HashSet<(string, bool)>();
+        var result = new List<AutoHostProfile>();
+        foreach (var g in active)
+        {
+            var udp = g.Key.Udp;
+            var domains = new List<string>();
+            foreach (var s in g.OrderBy(x => x.Key, StringComparer.Ordinal))
+            {
+                var site = AutoFamilies.SiteOf(s);
+                if (claimed.Add((site, udp)))
+                    domains.Add(site);
+            }
+            if (families)
+            {
+                foreach (var family in g.Select(AutoFamilies.Of).Where(f => f is not null).Distinct(StringComparer.Ordinal))
+                {
+                    foreach (var d in AutoFamilies.Domains(family!))
+                    {
+                        if (!busy.Contains((d, udp)) && claimed.Add((d, udp)))
+                            domains.Add(d);
+                    }
+                }
+            }
+            if (domains.Count == 0)
+                continue;
+            result.Add(new AutoHostProfile(g.Key.Item1, udp, domains, [.. g.Select(x => x.Key)]));
+            if (result.Count == AutoRules.MaxHostProfiles)
+                break;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// The sites the name-based process covers: those named in <paramref name="profiles"/> whose ports are all ones it
+    /// catches (<see cref="AutoRules.HostTcpPorts"/>).
+    /// </summary>
+    public static HashSet<string> ByNameCovers(IEnumerable<AutoService> services, IEnumerable<AutoHostProfile> profiles)
+    {
+        var named = profiles.Where(p => !p.Udp).SelectMany(p => p.Services).ToHashSet(StringComparer.Ordinal);
+        var ports = AutoRules.HostTcpPorts.Split(',').Select(p => int.Parse(p, CultureInfo.InvariantCulture)).ToHashSet();
+        return [.. services.Where(s => s.Kind == AutoKind.Web && named.Contains(s.Key) && s.Ports.All(ports.Contains)).Select(s => s.Key)];
     }
 
     /// <summary>The traffic of one service; null when nothing is known to aim at (no address seen).</summary>
@@ -220,6 +318,33 @@ public static class AutoCandidates
         @"[UDP:sport:*]-duplicate(tamper{UDP:load:corrupt}(duplicate,),)-| \/",
     ];
 
+    /// <summary>
+    /// zapret2's working methods as geneva_c 2.0 x-actions (<c>--ext</c>): splits and disorders at the SNI, fakes with
+    /// a low or automatic TTL, MD5 or a broken checksum, a fake host, a split TLS record. They act on the ClientHello
+    /// only (the default <c>payload=known</c>), whole even when the browser sends it in two packets.
+    /// </summary>
+    public static IReadOnlyList<string> XTcp { get; } =
+    [
+        @"[TCP:flags:PA]-xdisorder{pos=1,midsld}-| \/",
+        @"[TCP:flags:PA]-xsplit{pos=1,midsld}-| \/",
+        @"[TCP:flags:PA]-xfake{blob=fake_default_tls;ttl=auto:-2:3-20}(xdisorder{pos=1,midsld},)-| \/",
+        @"[TCP:flags:PA]-xfake{blob=fake_default_tls;md5}(xsplit{pos=1,midsld},)-| \/",
+        @"[TCP:flags:PA]-xfake{blob=fake_default_tls;badsum;tlsmod=rnd,rndsni,dupsid}(xsplit{pos=midsld},)-| \/",
+        @"[TCP:flags:PA]-xfakedsplit{pos=midsld;ttl=4}-| \/",
+        @"[TCP:flags:PA]-xhostfake{ttl=auto:-2:3-20}-| \/",
+        @"[TCP:flags:PA]-xtlsrec{pos=sniext+1}-| \/",
+        @"[TCP:flags:PA]-xsplit{pos=sniext+1}-| \/",
+        @"[TCP:flags:PA]-xfake{blob=fake_default_tls;ttl=4;repeats=2}(xdisorder{pos=midsld},)-| \/",
+    ];
+
+    /// <summary>QUIC as zapret2 does it: fake Initials before the real one, the Initial in IP fragments.</summary>
+    public static IReadOnlyList<string> XQuic { get; } =
+    [
+        @"[UDP:dport:443]-xfake{blob=fake_quic_initial;repeats=6;ttl=4}-| \/",
+        @"[UDP:dport:443]-xfake{blob=fake_default_quic;repeats=6;badsum}-| \/",
+        @"[UDP:dport:443]-xsend{ipfrag;ipfrag_pos_udp=8}-| \/",
+    ];
+
     /// <summary>DNS: Geneva's question compression, then the UDP tricks.</summary>
     public static IReadOnlyList<string> Dns { get; } =
     [
@@ -233,23 +358,33 @@ public static class AutoCandidates
     /// opening a new one), the ones found before, the other shared ones, the classics and <paramref name="extra"/>
     /// (Geneva's library on a wider round), at most <paramref name="max"/>.
     /// </summary>
+    /// <para><paramref name="family"/>: the strategy working for another member of the service's family, tried first.
+    /// <paramref name="ext"/>: geneva_c knows x-actions (2.0): zapret2's methods follow the classics (sites and QUIC),
+    /// beyond <paramref name="max"/>.</para>
     public static List<string> For(AutoService s, IEnumerable<string> running, IEnumerable<string> found,
-        IEnumerable<GenevaSharedStrategy>? shared = null, IEnumerable<string>? extra = null, int max = AutoRules.MaxQuickCandidates)
+        IEnumerable<GenevaSharedStrategy>? shared = null, IEnumerable<string>? extra = null, int max = AutoRules.MaxQuickCandidates,
+        string? family = null, bool ext = false)
     {
         var classics = s.Kind == AutoKind.Dns ? [.. Dns, .. Udp] : s.Transport == L4Kind.Udp ? Udp : Tcp;
+        IReadOnlyList<string> xs = !ext ? [] : s.Kind == AutoKind.Quic ? XQuic : s.Kind == AutoKind.Web || (s.Transport == L4Kind.Tcp && s.App == "tls") ? XTcp : [];
         var sharedList = (shared ?? []).ToList();
         var named = sharedList.Where(x => GenevaShare.Names(x, s.Name, s.Host)).Select(x => x.Strategy);
         var others = sharedList.Select(x => x.Strategy).Where(x => Fits(s, x));
         // the shared strategies were found for sites and QUIC; a resolver tries its own classics before them
-        return named.Where(x => Fits(s, x))
-            .Concat(running.Where(x => Fits(s, x)))
-            .Concat(found.Where(x => Fits(s, x)))
+        var head = (family is null ? [] : new[] { family }).Where(c => Fits(s, c))
+            .Concat(named.Where(c => Fits(s, c)))
+            .Concat(running.Where(c => Fits(s, c)))
+            .Concat(found.Where(c => Fits(s, c)))
             .Concat(s.Kind == AutoKind.Dns ? classics.Concat(others) : others.Concat(classics))
-            .Concat((extra ?? []).Where(x => Fits(s, x)))
-            .Where(x => GenevaStrategyText.Problem(x) is null)
+            .Where(c => GenevaStrategyText.Problem(c) is null && (ext || !GenevaStrategyText.NeedsExt(c)))
             .Distinct(StringComparer.Ordinal)
             .Take(max)
             .ToList();
+        var rest = xs.Concat((extra ?? []).Where(c => Fits(s, c)))
+            .Where(c => GenevaStrategyText.Problem(c) is null && (ext || !GenevaStrategyText.NeedsExt(c)) && !head.Contains(c, StringComparer.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .Take(max + xs.Count - Math.Min(head.Count, max));
+        return [.. head, .. rest];
     }
 
     /// <summary>A strategy that can act on the service's packets: TCP trees for TCP, UDP (or DNS, IP) trees for UDP.</summary>

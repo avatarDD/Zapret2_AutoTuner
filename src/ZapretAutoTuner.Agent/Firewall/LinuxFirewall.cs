@@ -218,7 +218,9 @@ internal sealed class FirewallManager
         }
         if (_candidates.Count == 0)
             return "не найден ни nft, ни iptables: установите пакет nftables";
-        var rules = _rules.Values.ToList();
+        // in the order of their owners: the "Авто" mode's catch-all rule by name ("geneva-auto/~host") comes after its
+        // groups' rules by address, so a group's packet never reaches it (nft takes the first queue rule that matches)
+        var rules = _rules.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => r.Value).ToList();
         if (_active is not null)
             return _active.Apply(rules, _fwmark);
         var errors = new List<string>();

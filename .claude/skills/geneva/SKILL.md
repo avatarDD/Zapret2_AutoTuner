@@ -1,6 +1,6 @@
 ---
 name: geneva
-description: Второй движок обхода — geneva_c (avatarDD/geneva_c, v1.2.0, протокол proto 1). Язык стратегий Geneva, команды run/evolve/check/library/db/fw, события JSON Lines, внешний пробник evolve, управляющий сокет, очереди и firewall, как AutoTuner его бандлит, запускает в Agent и показывает в UI и MCP. Читать перед любой правкой Geneva-кода, бандла geneva и MCP-инструментов geneva_*.
+description: Второй движок обхода — geneva_c (avatarDD/geneva_c, v2.0.0, протокол proto 1, расширения --ext). Язык стратегий Geneva, команды run/evolve/check/library/db/fw, события JSON Lines, внешний пробник evolve, управляющий сокет, очереди и firewall, как AutoTuner его бандлит, запускает в Agent и показывает в UI и MCP. Читать перед любой правкой Geneva-кода, бандла geneva и MCP-инструментов geneva_*.
 ---
 
 # geneva_c в AutoTuner
@@ -8,7 +8,7 @@ description: Второй движок обхода — geneva_c (avatarDD/genev
 Факты берутся из исходников и `docs/` закреплённого релиза geneva_c
 (`tools/bundle/geneva.lock.json`): `docs/STRATEGY.md` (язык),
 `docs/PROTOCOL.md` (события и сокет), `docs/EVOLVE.md`, `docs/EVAL.md`,
-`docs/INTEGRATION.md`. Если skill расходится с ними, исправь skill.
+`docs/INTEGRATION.md`, `docs/EXT.md` (расширения 2.0). Если skill расходится с ними, исправь skill.
 
 ## 1. Что это и когда
 
@@ -50,8 +50,18 @@ action   := name ["{" params "}"] ["(" [left] "," [right] ")"]
 
 | режим | argv | очередь |
 |---|---|---|
-| обход | `run -s S -p PORTS -q 330 -c tcp:PORT -e - --stats-interval 2 --quiet` | 330 |
+| обход | `run [--ext] -s S -p PORTS -q 330 -c tcp:PORT -e - --stats-interval 2 --quiet [--ipset-exclude-ip F --hostlist-exclude-domains D]` | 330 |
 | подбор | `evolve --probe external --host H --port P --population N --generations G --workers W --local-ports 30000 -q 331 --checkpoint C --db D --target external:H:P --top 10 -e - --quiet` + `--resume` или `--load-from seeds.txt` | 331 |
+
+`--ext` (geneva_c 2.0) ставится, когда стратегия содержит x-действие или
+триггер `[L7:|FLOW:|META:` (`GenevaStrategyText.NeedsExt`) или заданы
+исключения пользователя (`GenevaRunSettings.ExcludeSubnets/ExcludeDomains`:
+VPN, прокси, банк — их трафик ручной обход не трогает). `evolve --ext`
+ставится сразу после `evolve`, если семена требуют расширений; продолжение
+подбора помнит это в файле `<dir>/ext`. `geneva check --ext` — для x-строк
+(`GenevaBundle.CheckAsync` делит список на обычные и расширенные). Сетка
+zapret2-методов: `blockcheck --ext --print-grid --test tls12|http3 --level
+quick` (`GenevaBundle.GridAsync`, равномерная выборка колонки geneva).
 
 `W` — «Потоков подбора» (1–8, `GenevaSearchSettings.Workers`). Больше 1
 только при фиче `external_workers` (geneva_c 1.2): Agent иначе ставит 1.
@@ -167,7 +177,10 @@ Golden-тест — `tests/testdata/geneva-share/zapret-gui-export.json`,
 `geneva_auto_status`. Управление: `engine_select`, `geneva_search_start`
 (только цель из `targets_list`), `geneva_search_stop`, `geneva_run_start`
 (ждёт «Да» пользователя в окне), `geneva_run_pause`, `geneva_run_stop`,
-`geneva_auto_enable` (ждёт «Да»), `geneva_auto_disable`, `geneva_auto_reset`.
+`geneva_auto_enable` (ждёт «Да»), `geneva_auto_disable`, `geneva_auto_reset`,
+`geneva_auto_check_now`, `geneva_auto_priority` (important/auto/unimportant),
+`geneva_auto_pin`, `geneva_auto_lists` (важные, неважные, исключения,
+known_important, by_name).
 
 ## 9. Режим «Авто»
 
@@ -200,8 +213,9 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
    dtls, dns, stun, openvpn, mtproto): открытый HTTP (cookies) и
    неизвестные протоколы (могут нести логин) не сохраняются и не
    отправляются повторно; такие сервисы судятся по их собственному трафику.
-5. **Подбор** (по одному сервису, приоритет: сайт, DNS, сервер, QUIC,
-   DHT): сначала до 12 известных стратегий на трафике самого сервиса
+5. **Подбор** (по одному сервису; очередь `AutoBook.Queue`: важность
+   `AutoPriorities.Effective`, затем деградировавшие, затем сайт, DNS, QUIC,
+   сервер, свежесть и трафик; см. п. 10): сначала до 12 известных стратегий на трафике самого сервиса
    (`AutoCandidates.For`, по порядку: общие стратегии, в которых назван
    этот сервис (импорт, затем стартовый набор), стратегии работающих
    групп, найденные раньше, прочие общие и шаблоны; у DNS шаблоны идут
@@ -217,6 +231,15 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
    TCP, найденное — семенами. Продолжение подбора всегда идёт с теми
    `--protos`, что сохранены в прогрессе (иначе geneva откажет). Без пробы (WireGuard, DHT)
    успех — хотя бы один успешный поток программы за 50 с.
+   С geneva_c 2.0 (`ext_xact`) к кандидатам добавляются x-стратегии
+   (`AutoCandidates.XTcp`/`XQuic`: xsplit, xdisorder, xfake с
+   `fake_default_tls`, xfakedsplit, xhostfake, xtlsrec), в широком раунде —
+   сетка zapret2-методов из `blockcheck --print-grid`; первой пробуется
+   стратегия семейства (`AutoBook.FamilyStrategy`). Пробная стратегия
+   засчитывается после `AutoRules.TrialPasses` (2) успешных проверок подряд
+   и, для сайта, повтора записанного ClientHello браузера (`WorksAsync`,
+   `HandshakesAsync`); сайт хранит два ClientHello разной длины
+   (`Replay`/`ReplayAlt`, например Chrome с Kyber и без).
 6. **Применение.** Активные сервисы (`Applied`, `Degraded`) группируются
    по стратегии; ≤ 8 групп, одна `geneva run` на группу, очереди 340–347.
    Linux: `--firewall none` + правила в таблице `inet ztuner` через
@@ -232,7 +255,27 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
    первой группе (`AutoPlan.Groups`: пробная, затем крупные): сайты за одним
    адресом CDN с разными стратегиями не делят пакеты. Пробная стратегия
    считается сработавшей, только если её группа запущена (`requested` в
-   ответе Agent). Группами «Авто» управляет только `AutoApply`: через
+   ответе Agent). **По имени** (geneva_c 2.0 с `ext`, `ext_profile`,
+   `ext_lists`, `ext_l7`; на Windows ещё `filter`): кроме групп Agent
+   держит один процесс `run --ext --ext-profile profiles.ini
+   --ext-ipcache-hostname` (Linux — очередь 348, ключ правил
+   `geneva-auto/~host` идёт последним; Windows — `--priority -100`) на
+   TCP 80/443 (+ UDP 443 при `ext_crypto`), который не трогает адреса групп
+   (`exclude-ip.txt`) и исключения пользователя, а сайтам применяет их
+   стратегию по имени: профиль `[profile N]` = стратегия + `hostlist`
+   (`AutoPlan.HostProfiles`, ≤ 24, домен — одному профилю, домены
+   семейства — если у них нет своей судьбы). Так новый адрес CDN работает
+   сразу. Файлы — в `StateDir/auto-host`, пишутся атомарно; при смене
+   только списков — `reload_lists`, иначе перезапуск. Пустой hostlist в
+   geneva_c значит «всё», поэтому профиль без доменов не пишется. Когда
+   процесс по имени запущен (`reply.Host`), адрес web, общий для сайтов с
+   разными стратегиями, из групп убирается, если все сайты на нём покрыты
+   именами (`AutoPlan.ByNameCovers`: в профиле и только порты 80/443) —
+   его ведёт процесс по имени; иначе адрес остаётся группам. Ответ
+   `AutoApply` несёт `ext`/`by_name` и на пустой запрос: режим знает о
+   x-действиях до первого применения. Ручной `run` с исключениями без
+   `ext_lists` не стартует (обещание «не трогать» не нарушается молча).
+   Группами «Авто» управляет только `AutoApply`: через
    `GenevaControl` им доступны лишь `status` и `stats`.
 7. **Мониторинг.** У применённого сервиса считаются только потоки после
    `AppliedAt`: провалы без успехов → `Degraded` → проверка с обходом →
@@ -244,7 +287,26 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
    раз в минуту; после перезапуска режим восстанавливается. Сервис,
    сохранённый «в подборе» (пропало питание, процесс убит), при загрузке
    становится `Blocked` и подбирается снова: сам подбор перезапуск не
-   переживает, а `NextToSearch` берёт только `Blocked`.
+   переживает, а `NextToSearch` берёт только `Blocked`. Списки
+   пользователя (`AutoLists`) — в `GenevaState.Lists`, флаг «по имени» —
+   `GenevaState.ByName`.
 9. **Взаимоисключения.** «Авто» не стартует при защите nfqws2, мастере,
    опытах MCP и обходе geneva с одной стратегией; пока он работает, они
    ждут. Ручной подбор на странице занимает слот подбора — «Авто» ждёт.
+10. **Важность** (`Core/Geneva/Auto/AutoPriorities.cs`, issue 28).
+    `AutoPriority`: Important (метка пользователя, список «важные»,
+    семейства `AutoFamilies` — YouTube, Discord, Telegram, WhatsApp,
+    Instagram/Facebook, X — при `KnownImportant`), Normal (сайт, QUIC,
+    DNS), Low (сервер), Background (локальный порт, «голый» пир: без имени,
+    протокол не распознан, порт ≥ 10000; список «неважные»). Фоновый
+    сервис, ждущий ≥ `StarvationStep` (30 мин), поднимается до Low.
+    Важный заблокированный сервис прерывает подбор менее важного
+    (`Preempting` → отмена подбора, сервис снова `Blocked`). Места в книге:
+    пирам — не больше `MaxServices − ReservedPlaces`, вытесняются сначала
+    фоновые и давно не виденные. Провалы на адресе, которого ещё нет в
+    наборе применённого сервиса, не считаются деградацией (новый адрес CDN
+    сначала добавляется в группу). «Закрепить» (`Pin`) — сервис не уходит
+    в `Degraded`; «Проверить сейчас» (`CheckNow`) — подтверждение вне
+    очереди; «Своя стратегия» (`TryStrategyAsync`) — пробуется как найденная
+    и закрепляется. Список «исключения» (адреса, подсети, домены) убирает
+    сервисы из «Авто» и передаётся ручному обходу.

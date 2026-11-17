@@ -42,6 +42,8 @@ public sealed class AppHost : IAsyncDisposable
             // the wider round of the "Авто" mode: Geneva's client-side library, best first
             Library = async ct => [.. (await GenevaBundle.LibraryAsync(ct).ConfigureAwait(false)).Where(l => !l.ServerSide && l.Rate > 0)
                 .OrderByDescending(l => l.Rate).Select(l => l.Strategy)],
+            // and zapret2's blockcheck2 methods as geneva_c 2.0 strategies, a sample spread over the whole grid
+            Grid = (quic, ct) => GenevaBundle.GridAsync(quic ? "http3" : "tls12", quic ? 13 : 24, ct),
         };
     }
 

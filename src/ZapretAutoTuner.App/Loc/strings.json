@@ -2074,5 +2074,129 @@
  "help.monitor": [
   "Держит найденную стратегию zapret2 включённой на этом ПК и следит, работает ли она; если перестала — подправляет. Пока работает защита zapret2, авто-обход geneva ждёт: два движка на одних пакетах мешают друг другу.",
   "Keeps the found zapret2 strategy on on this PC and watches whether it works; repairs it when it stops. While zapret2 protection runs, the geneva Auto bypass waits: two engines on the same packets get in each other's way."
+ ],
+ "auto.actions": [
+  "Действия с сервисом",
+  "Service actions"
+ ],
+ "auto.by_name": [
+  "по имени",
+  "by name"
+ ],
+ "auto.by_name_switch": [
+  "Применять стратегии сайтов и по имени (geneva_c 2.0)",
+  "Apply site strategies by name too (geneva_c 2.0)"
+ ],
+ "auto.by_name_tip": [
+  "Новый адрес CDN (видео YouTube) получает стратегию сразу, сайты за одним адресом не мешают друг другу, родственные домены (googlevideo.com для youtube.com) получают стратегию сайта заранее.",
+  "A new CDN address (YouTube's videos) gets the strategy at once, sites behind one address do not get in each other's way, related domains (googlevideo.com for youtube.com) get the site's strategy beforehand."
+ ],
+ "auto.check_now": [
+  "Проверить сейчас",
+  "Check now"
+ ],
+ "auto.checking": [
+  "{0}: проверяю сейчас",
+  "{0}: checking now"
+ ],
+ "auto.known_important": [
+  "Считать важными YouTube, Discord, Telegram, WhatsApp, Instagram и X",
+  "Treat YouTube, Discord, Telegram, WhatsApp, Instagram and X as important"
+ ],
+ "auto.list_excluded": [
+  "Не трогать (VPN, прокси)",
+  "Never touch (VPN, proxy)"
+ ],
+ "auto.list_important": [
+  "Важно",
+  "Important"
+ ],
+ "auto.list_unimportant": [
+  "Не важно",
+  "Not important"
+ ],
+ "auto.lists": [
+  "Важные сервисы и исключения",
+  "Important services and exclusions"
+ ],
+ "auto.lists_about": [
+  "По одному в строке: домен (с поддоменами), адрес или подсеть. Важные подбираются первыми и прерывают подбор для фоновых; неважные идут в последнюю очередь. «Не трогать» — то, к чему geneva не применяется никогда (сервер VPN или прокси), и в «Авто», и в обходе одной стратегией.",
+  "One per line: a domain (with subdomains), an address or a subnet. Important ones are searched first and interrupt a search for background ones; unimportant ones go last. \"Never touch\" is what geneva is never applied to (a VPN or proxy server), in Auto and in the single-strategy bypass."
+ ],
+ "auto.lists_save": [
+  "Сохранить",
+  "Save"
+ ],
+ "auto.lists_saved": [
+  "Сохранено: «Авто» уже учитывает списки",
+  "Saved: Auto uses the lists now"
+ ],
+ "auto.mark_auto": [
+  "Важность — по умолчанию",
+  "Importance: automatic"
+ ],
+ "auto.mark_important": [
+  "Важно: подбирать первым",
+  "Important: search it first"
+ ],
+ "auto.mark_unimportant": [
+  "Не важно: в последнюю очередь",
+  "Not important: last"
+ ],
+ "auto.pin": [
+  "Закрепить стратегию",
+  "Pin the strategy"
+ ],
+ "auto.tag_background": [
+  "фон",
+  "background"
+ ],
+ "auto.tag_important": [
+  "важно",
+  "important"
+ ],
+ "auto.tag_pinned": [
+  "закреплена",
+  "pinned"
+ ],
+ "auto.try_about": [
+  "Стратегия применится только к трафику этого сервиса и пройдёт ту же проверку, что найденные (две загрузки подряд и рукопожатие браузера). Сработает — будет применена и закреплена.",
+  "The strategy is applied to this service's traffic alone and checked like a found one (two loads in a row and the browser's handshake). If it works, it is applied and pinned."
+ ],
+ "auto.try_cancel": [
+  "Отмена",
+  "Cancel"
+ ],
+ "auto.try_failed": [
+  "{0}: стратегия не прошла проверку, оставляю прежнее",
+  "{0}: the strategy failed the check, nothing changed"
+ ],
+ "auto.try_ok": [
+  "{0}: стратегия работает, применена и закреплена",
+  "{0}: the strategy works, applied and pinned"
+ ],
+ "auto.try_own": [
+  "Проверить свою стратегию…",
+  "Try my own strategy…"
+ ],
+ "auto.try_run": [
+  "Проверить и применить",
+  "Check and apply"
+ ],
+ "auto.try_running": [
+  "{0}: проверяю стратегию…",
+  "{0}: checking the strategy…"
+ ],
+ "auto.try_strategy": [
+  "Стратегия geneva",
+  "geneva strategy"
+ ],
+ "auto.try_title": [
+  "Своя стратегия для {0}",
+  "Own strategy for {0}"
+ ],
+ "auto.unpin": [
+  "Снять закрепление",
+  "Unpin the strategy"
  ]
 }

@@ -119,15 +119,83 @@ public sealed class GenevaBundle
             .Where(e => e.Strategy.Length > 0)];
     }
 
-    /// <summary>Parses strategies with geneva itself: the canonical form, or why one does not parse.</summary>
-    public async Task<IReadOnlyList<GenevaCheck>> CheckAsync(IReadOnlyList<string> strategies, CancellationToken ct = default)
+    /// <summary>
+    /// zapret2's blockcheck2 grid as geneva strategies (geneva_c 2.0, <c>blockcheck --ext --print-grid</c>, no probes,
+    /// no rights): <paramref name="max"/> lines spread evenly over the whole grid of the test (<c>tls12</c> or
+    /// <c>http3</c>), the TTL sweeps left out (their fakes need the right TTL for the path). The "Авто" mode's wider
+    /// round tries them on a blocked service before its bigger search.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GridAsync(string test, int max, CancellationToken ct = default)
+    {
+        var (code, stdout, stderr) = await RunAsync(["blockcheck", "--ext", "--print-grid", "--test", test, "--level", "quick",
+            "--max-ttl", "0", "--max-autottl-delta", "0", "--quiet"], null, ct).ConfigureAwait(false);
+        if (code != 0)
+            throw new InvalidOperationException($"geneva blockcheck --print-grid: {stderr.Trim()}");
+        return ParseGrid(stdout, max);
+    }
+
+    /// <summary>The geneva column of <c>--print-grid</c> (<c>nfqws2 line TAB geneva strategy</c>), at most <paramref name="max"/> spread evenly.</summary>
+    public static IReadOnlyList<string> ParseGrid(string output, int max)
+    {
+        var all = output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Split('\t'))
+            .Where(p => p.Length == 2 && p[1].Contains("\\/", StringComparison.Ordinal))
+            .Select(p => p[1].Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (max <= 0 || all.Count <= max)
+            return all;
+        double step = (double)all.Count / max;
+        return [.. Enumerable.Range(0, max).Select(i => all[(int)(i * step)])];
+    }
+
+    /// <summary>
+    /// Parses strategies with geneva itself: the canonical form, or why one does not parse. <paramref name="ext"/>: the
+    /// binary has geneva_c 2.0's x-actions (<c>ext_xact</c>); null asks it (<c>version --json</c>) when a strategy needs them.
+    /// </summary>
+    public async Task<IReadOnlyList<GenevaCheck>> CheckAsync(IReadOnlyList<string> strategies, CancellationToken ct = default, bool? ext = null)
     {
         if (strategies.Count == 0)
             return [];
-        // strategies on stdin, not argv: one may start with '-'
-        var (_, stdout, _) = await RunAsync(["check", "--json", "-f", "-"], string.Join("\n", strategies) + "\n", ct).ConfigureAwait(false);
-        return ParseCheck(stdout);
+        if (ext is null && strategies.Any(NeedsExt))
+        {
+            try
+            {
+                ext = (await GetVersionAsync(ct).ConfigureAwait(false)).Features.Contains("ext_xact");
+            }
+            catch (Exception e) when (e is InvalidOperationException or FormatException or System.Text.Json.JsonException or IOException)
+            {
+                ext = false;
+            }
+        }
+        // Geneva's own strategies are checked as before; the ones with geneva_c 2.0's extensions (x-actions, L7 and
+        // FLOW triggers) need --ext, and without it (or with an older geneva) they do not parse
+        var plain = strategies.Select((x, i) => (x, i)).Where(t => !NeedsExt(t.x)).ToList();
+        var extended = strategies.Select((x, i) => (x, i)).Where(t => NeedsExt(t.x)).ToList();
+        var result = new GenevaCheck?[strategies.Count];
+        async Task Run(List<(string Text, int Index)> part, bool withExt)
+        {
+            if (part.Count == 0)
+                return;
+            if (withExt && ext != true)
+            {
+                foreach (var (_, i) in part)
+                    result[i] = new GenevaCheck(false, null, 0, "x-действия требуют geneva_c 2.0 / x-actions need geneva_c 2.0");
+                return;
+            }
+            // strategies on stdin, not argv: one may start with '-'
+            List<string> args = withExt ? ["check", "--ext", "--json", "-f", "-"] : ["check", "--json", "-f", "-"];
+            var (_, stdout, _) = await RunAsync(args, string.Join("\n", part.Select(p => p.Text)) + "\n", ct).ConfigureAwait(false);
+            var parsed = ParseCheck(stdout);
+            for (int k = 0; k < part.Count; k++)
+                result[part[k].Index] = k < parsed.Count ? parsed[k] : new GenevaCheck(false, null, 0, "?");
+        }
+        await Run(plain, false).ConfigureAwait(false);
+        await Run(extended, true).ConfigureAwait(false);
+        return [.. result.Select(r => r ?? new GenevaCheck(false, null, 0, "?"))];
     }
+
+    private static bool NeedsExt(string s) => ZapretAutoTuner.Core.Geneva.GenevaStrategyText.NeedsExt(s);
 
     public static IReadOnlyList<GenevaCheck> ParseCheck(string output)
     {

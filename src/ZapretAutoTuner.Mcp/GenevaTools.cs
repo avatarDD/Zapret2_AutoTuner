@@ -73,6 +73,24 @@ public sealed class GenevaTools(McpSession session)
         new("geneva_auto_reset", McpScope.Control,
             "Forgets what the \"Авто\" mode knows about one service (its key from geneva_auto_status): its bypass goes and watching starts over.",
             S.Obj([("key", S.Str("The service's key", 300))], "key")),
+        new("geneva_auto_check_now", McpScope.Control,
+            "Checks one service of the \"Авто\" mode now, pauses included: an applied one with its bypass on (searched again if it fails), any other without a bypass (searched if blocked), one that found nothing is searched again.",
+            S.Obj([("key", S.Str("The service's key from geneva_auto_status", 300))], "key")),
+        new("geneva_auto_priority", McpScope.Control,
+            "Sets how much a service matters to the \"Авто\" mode: important ones are confirmed and searched first and interrupt a search for less important ones; unimportant ones go last (background). auto: the program decides (sites and DNS normal, YouTube, Discord, Telegram, WhatsApp, Instagram, X important, bare peers background).",
+            S.Obj([("key", S.Str("The service's key", 300)), ("priority", S.Str("important, auto or unimportant", values: ["important", "auto", "unimportant"]))], "key", "priority")),
+        new("geneva_auto_pin", McpScope.Control,
+            "Pins (or unpins) the strategy applied to a service: a pinned strategy stays even when the service fails again, and no new search replaces it.",
+            S.Obj([("key", S.Str("The service's key", 300)), ("pinned", S.Bool("true pins, false unpins"))], "key", "pinned")),
+        new("geneva_auto_lists", McpScope.Control,
+            "Reads or replaces the user's lists for geneva (domains with subdomains, addresses, subnets): important and unimportant services of the \"Авто\" mode, and excluded — never touched by any geneva bypass (a VPN or proxy server). A list left out stays as it is. Also whether site strategies are applied by name (geneva_c 2.0).",
+            S.Obj([
+                ("important", S.Arr("Important services", S.Str("A domain, an address or a subnet", 260), 200)),
+                ("unimportant", S.Arr("Unimportant services", S.Str("A domain, an address or a subnet", 260), 200)),
+                ("excluded", S.Arr("Never touched by geneva", S.Str("A domain, an address or a subnet", 260), 200)),
+                ("known_important", S.Bool("YouTube, Discord, Telegram, WhatsApp, Instagram and X count as important (default true)")),
+                ("by_name", S.Bool("Apply site strategies by name too (geneva_c 2.0; default true)")),
+            ])),
     ];
 
     public IEnumerable<KeyValuePair<string, Func<JsonObject, CancellationToken, Task<JsonObject>>>> Handlers() =>
@@ -115,6 +133,30 @@ public sealed class GenevaTools(McpSession session)
                 await auto.DisableAsync(ct).ConfigureAwait(false);
                 return new JsonObject { ["ok"] = true, ["status"] = "off" };
             },
+            ["geneva_auto_check_now"] = (a, ct) => Task.FromResult(WithService(a, (auto, key) =>
+            {
+                auto.CheckNow(key);
+                return new JsonObject { ["ok"] = true, ["key"] = key, ["hint"] = "geneva_auto_status shows the result after the next slice" };
+            })),
+            ["geneva_auto_priority"] = (a, ct) => Task.FromResult(WithService(a, (auto, key) =>
+            {
+                var p = (string?)a["priority"] switch
+                {
+                    "important" => Core.Geneva.Auto.AutoUserPriority.Important,
+                    "unimportant" => Core.Geneva.Auto.AutoUserPriority.Unimportant,
+                    _ => Core.Geneva.Auto.AutoUserPriority.None,
+                };
+                auto.SetPriority(key, p);
+                return new JsonObject { ["ok"] = true, ["key"] = key, ["priority"] = (string?)a["priority"] };
+            })),
+            ["geneva_auto_pin"] = (a, ct) => Task.FromResult(WithService(a, (auto, key) =>
+            {
+                bool pinned = (bool?)a["pinned"] ?? true;
+                return auto.Pin(key, pinned)
+                    ? new JsonObject { ["ok"] = true, ["key"] = key, ["pinned"] = pinned }
+                    : McpErrors.Error("the service has no applied strategy to pin / у сервиса нет применённой стратегии");
+            })),
+            ["geneva_auto_lists"] = (a, ct) => Task.FromResult(Lists(a)),
             ["geneva_auto_reset"] = async (a, ct) =>
             {
                 if (session.Host.GenevaAuto is not { } auto)
@@ -152,6 +194,9 @@ public sealed class GenevaTools(McpSession session)
                 ["status"] = Snake(x.Status),
                 ["why"] = x.Why.Length > 0 ? x.Why : null,
                 ["strategy"] = x.Strategy,
+                ["priority"] = x.Priority.ToString().ToLowerInvariant(),
+                ["user_priority"] = x.UserPriority == Core.Geneva.Auto.AutoUserPriority.None ? null : x.UserPriority.ToString().ToLowerInvariant(),
+                ["pinned"] = x.Pinned ? true : null,
                 ["addresses"] = x.Addresses.Count,
                 ["since"] = x.Since == default ? null : new DateTimeOffset(x.Since, TimeSpan.Zero).ToString("o"),
             });
@@ -166,6 +211,7 @@ public sealed class GenevaTools(McpSession session)
                 ["packets"] = g.Stats is { } st ? st.PktsOut + st.PktsIn : null,
                 ["triggered"] = g.Stats?.Triggered,
                 ["rate"] = Math.Round(g.Rate, 1),
+                ["by_name"] = g.ByName ? true : null,
             });
         }
         return new JsonObject
@@ -179,11 +225,69 @@ public sealed class GenevaTools(McpSession session)
             ["services_total"] = v.Services.Count,
             ["searching"] = v.Current,
             ["trying"] = v.Trying,
+            ["by_name"] = v.ByName,
+            ["x_actions"] = v.Ext,
             ["limited"] = v.Limited ? "Windows with geneva_c older than 1.1: strategies are found but not applied" : null,
             ["problems"] = new JsonArray([.. v.Problems.Select(p => (JsonNode)p)]),
             ["services"] = services,
             ["groups"] = groups,
             ["log"] = new JsonArray([.. auto.Log.TakeLast(30).Select(l => (JsonNode)l)]),
+        };
+    }
+
+    private JsonObject WithService(JsonObject a, Func<Tuning.Geneva.GenevaAuto, string, JsonObject> act)
+    {
+        if (session.Host.GenevaAuto is not { } auto)
+            return NoGeneva();
+        var key = (string?)a["key"] ?? "";
+        if (auto.View.Services.All(x => x.Key != key))
+            return McpErrors.Error($"no such service: {key} (geneva_auto_status lists them) / нет такого сервиса");
+        return act(auto, key);
+    }
+
+    private JsonObject Lists(JsonObject a)
+    {
+        if (session.Host.Geneva is not { } g)
+            return NoGeneva();
+        List<string>? Read(string name)
+        {
+            if (a[name] is not JsonArray arr)
+                return null;
+            return [.. arr.Select(x => ((string?)x ?? "").Trim()).Where(x => x.Length > 0)];
+        }
+        var lists = g.Lists;
+        var changed = false;
+        foreach (var (name, apply) in new (string, Func<List<string>, Core.Geneva.Auto.AutoLists>)[]
+        {
+            ("important", l => lists with { Important = l }),
+            ("unimportant", l => lists with { Unimportant = l }),
+            ("excluded", l => lists with { Excluded = l }),
+        })
+        {
+            if (Read(name) is not { } l)
+                continue;
+            if (l.Select(Core.Geneva.Auto.AutoNameList.Problem).FirstOrDefault(p => p is not null) is { } bad)
+                return McpErrors.Error($"{name}: {bad}");
+            lists = apply(l);
+            changed = true;
+        }
+        if ((bool?)a["known_important"] is { } known)
+        {
+            lists = lists with { KnownImportant = known };
+            changed = true;
+        }
+        if (changed)
+            g.Lists = lists;
+        if ((bool?)a["by_name"] is { } byName)
+            g.ByName = byName;
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["important"] = new JsonArray([.. lists.Important.Select(x => (JsonNode)x)]),
+            ["unimportant"] = new JsonArray([.. lists.Unimportant.Select(x => (JsonNode)x)]),
+            ["excluded"] = new JsonArray([.. lists.Excluded.Select(x => (JsonNode)x)]),
+            ["known_important"] = lists.KnownImportant,
+            ["by_name"] = g.ByName,
         };
     }
 

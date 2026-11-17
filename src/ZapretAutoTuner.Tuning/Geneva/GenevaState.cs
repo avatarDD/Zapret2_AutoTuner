@@ -121,6 +121,15 @@ public sealed record GenevaState
     /// <summary>Imported strategies, oldest first: added next to the working ones, never replacing them.</summary>
     public List<GenevaImportedStrategy> Imported { get; init; } = [];
 
+    /// <summary>
+    /// The user's lists for geneva: important and unimportant services of the "Авто" mode, and what no geneva bypass
+    /// touches (a VPN or proxy server), "Авто" and the single-strategy bypass alike.
+    /// </summary>
+    public AutoLists Lists { get; init; } = new();
+
+    /// <summary>The "Авто" mode also applies site strategies by name (geneva_c 2.0); off: by address only, as before.</summary>
+    public bool ByName { get; init; } = true;
+
     public const int MaxFound = 200;
 
     public const int MaxImported = 200;
@@ -218,6 +227,7 @@ public sealed record GenevaState
             Searches = [.. searches.Take(50)],
             Auto = Auto with { Enabled = Auto.Enabled || old.Auto.Enabled, Services = services },
             Active = Active ?? old.Active,
+            Lists = Lists.Important.Count + Lists.Unimportant.Count + Lists.Excluded.Count > 0 ? Lists : old.Lists,
         };
     }
 

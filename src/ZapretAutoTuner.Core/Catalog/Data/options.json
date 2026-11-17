@@ -488,6 +488,12 @@
    "platform": "windows"
   },
   {
+   "name": "wf-priority",
+   "arg": "required",
+   "scope": "global",
+   "platform": "windows"
+  },
+  {
    "name": "wf-save",
    "arg": "required",
    "scope": "global",

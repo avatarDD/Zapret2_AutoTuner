@@ -1,9 +1,9 @@
 {
   "repo": "bol-van/zapret2",
-  "tag": "v1.0.6",
-  "version": "1.0.6",
+  "tag": "v1.0.7",
+  "version": "1.0.7",
   "asset_pattern": "^zapret2-v[0-9.]+\\.zip$",
-  "sha256": "e141b51b60c895fe9548f4d644365461dcad8155e068d284a9aae1724504237d",
+  "sha256": "35e14e4e1f345b870c3b87269fa45353efd597241a25304d38375c46b9fd2967",
   "lua_compat": 6,
   "rids": {
     "linux-x64": { "dir": "binaries/linux-x86_64", "files": ["nfqws2"] },

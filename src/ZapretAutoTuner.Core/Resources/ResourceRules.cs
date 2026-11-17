@@ -134,14 +134,16 @@ public static partial class ResourceRules
 
     /// <summary>
     /// Normalises hostlist domains: lower case, IDN to punycode, scheme, port, path and a trailing dot removed, a
-    /// leading <c>*.</c> or <c>.</c> dropped (subdomains match anyway), <c>^</c> kept; blank and comment lines skipped,
-    /// duplicates dropped. Addresses are refused with a hint to use an ipset.
+    /// leading <c>*.</c> or <c>.</c> dropped (subdomains match anyway), the prefixes <c>^</c> (no subdomains) and
+    /// <c>!</c> (local exemption, zapret2 1.0.7+) kept in any order and written as <c>!^</c>; blank and comment lines
+    /// skipped, duplicates dropped: the engine keeps the first entry for a name, so a later one with other prefixes
+    /// is reported and dropped too. Addresses are refused with a hint to use an ipset.
     /// </summary>
     public static (List<string> Domains, List<ResourceProblem> Problems) NormalizeDomains(IEnumerable<string> lines)
     {
         var result = new List<string>();
         var problems = new List<ResourceProblem>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var firstEntry = new Dictionary<string, string>(StringComparer.Ordinal);
         var idn = new IdnMapping { AllowUnassigned = false, UseStd3AsciiRules = false };
         foreach (var raw in lines.SelectMany(l => (l ?? "").Split('\n')))
         {
@@ -149,9 +151,9 @@ public static partial class ResourceRules
             if (item.Length == 0 || item[0] is '#' or ';' or '/')
                 continue;
             var original = item;
-            bool exact = item.StartsWith('^');
-            if (exact)
-                item = item[1..];
+            var prefix = Hosts.HostlistEntry.Parse(item);
+            bool exact = prefix.Strict, exempt = prefix.Exempt;
+            item = item.TrimStart('^', '!');
             int scheme = item.IndexOf("://", StringComparison.Ordinal);
             if (scheme >= 0)
                 item = item[(scheme + 3)..];
@@ -200,9 +202,12 @@ public static partial class ResourceRules
                     "invalid domain (letters, digits, - and _; dot-separated parts up to 63 characters)", original));
                 continue;
             }
-            var entry = exact ? "^" + ascii : ascii;
-            if (seen.Add(entry))
+            var entry = new Hosts.HostlistEntry(ascii, exact, exempt).ToString();
+            if (firstEntry.TryAdd(ascii, entry))
                 result.Add(entry);
+            else if (firstEntry[ascii] != entry)
+                problems.Add(new(false, "domain.duplicate", "домен уже есть в списке с другим префиксом: движок берёт первую запись, эта убрана",
+                    "the domain is already in the list with other prefixes: the engine takes the first entry, this one is dropped", original));
         }
         if (result.Count > MaxListItems)
             problems.Add(new(true, "list.size", $"больше {MaxListItems} записей", $"more than {MaxListItems} entries"));

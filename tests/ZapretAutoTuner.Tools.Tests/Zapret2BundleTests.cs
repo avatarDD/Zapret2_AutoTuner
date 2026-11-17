@@ -49,7 +49,22 @@ public sealed class Zapret2BundleTests : IDisposable
         Assert.Contains(check.Problems, p => p.Contains("не найден движок", StringComparison.Ordinal));
     }
 
-    private Zapret2Bundle MakeBundle(int compat = 6)
+    [Fact]
+    public void Verify_reports_a_bundle_older_than_the_app()
+    {
+        var b = MakeBundle(version: "1.0.6");
+        Assert.Contains(b.Verify().Problems, p => p.Contains("бандл zapret2 1.0.6 старее", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("1.0.6", "1.0.7", true)]
+    [InlineData("1.0.7", "1.0.7", false)]
+    [InlineData("1.0.10", "1.0.7", false)]
+    [InlineData("v1.0.5.2", "1.0.7", true)]
+    [InlineData("", "1.0.7", false)]
+    public void Compares_versions(string v, string than, bool older) => Assert.Equal(older, Zapret2Bundle.IsOlder(v, than));
+
+    private Zapret2Bundle MakeBundle(int compat = 6, string version = Core.AppInfo.Zapret2Version)
     {
         var b = new Zapret2Bundle(_dir.FullName);
         Directory.CreateDirectory(b.LuaDir);
@@ -61,7 +76,7 @@ public sealed class Zapret2BundleTests : IDisposable
         var files = new SortedDictionary<string, string>(StringComparer.Ordinal);
         foreach (var f in Directory.GetFiles(_dir.FullName, "*", SearchOption.AllDirectories))
             files[Path.GetRelativePath(_dir.FullName, f).Replace('\\', '/')] = Zapret2Bundle.Sha256File(f);
-        var manifest = new { tag = "v1.0.6", version = "1.0.6", rid = "linux-x64", lua_compat = 6, source_sha256 = "x", files };
+        var manifest = new { tag = "v" + version, version, rid = "linux-x64", lua_compat = 6, source_sha256 = "x", files };
         File.WriteAllText(b.ManifestPath, JsonSerializer.Serialize(manifest));
         return b;
     }

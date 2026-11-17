@@ -6,13 +6,16 @@ using ZapretAutoTuner.Core.Export;
 using ZapretAutoTuner.Core.Model;
 using ZapretAutoTuner.Core.Resources;
 using ZapretAutoTuner.Core.Validation;
+using ZapretAutoTuner.Protocol;
 using ZapretAutoTuner.Tuning;
 
 namespace ZapretAutoTuner.App.ViewModels;
 
 /// <summary>
 /// "Эксперт": import a strategy from any supported format (PLAN 5.2), see what the Validator says about every
-/// profile, and use it as the current solution (export, protection). Also a single strategy line checked alone.
+/// profile, and use it as the current solution (export, protection). Also a single strategy line: checked by the
+/// Validator, then on a real site (baseline without a bypass, then full loads with it), and used or exported from
+/// the same tab.
 /// </summary>
 public sealed partial class ExpertViewModel : PageViewModel
 {
@@ -21,6 +24,20 @@ public sealed partial class ExpertViewModel : PageViewModel
     public override string TitleKey => "nav.expert";
 
     public Func<Task<(string Name, byte[] Bytes)?>>? OpenFile { get; set; }
+
+    /// <summary>The Agent, the bundle and the resources for «Проверить на сайте»; null in tests that only validate.</summary>
+    public AppHost? Host { get; init; }
+
+    /// <summary>Why the engine cannot run a check now (geneva bypasses, the wizard tunes); null when it can.</summary>
+    public Func<string?>? Busy { get; set; }
+
+    /// <summary>«Экспортировать»: the wizard's export step for the current solution.</summary>
+    public Action? OpenExport { get; set; }
+
+    /// <summary>«Включить на этом компьютере»: the monitor runs the current solution as protection.</summary>
+    public Func<Task>? ProtectHere { get; set; }
+
+    private CancellationTokenSource? _checkCts;
 
     /// <summary>The user's resources: approved Lua functions pass the Validator, drafts are refused (PLAN 4a.5).</summary>
     public Storage.ResourceStore? Resources { get; init; }
@@ -46,6 +63,27 @@ public sealed partial class ExpertViewModel : PageViewModel
 
     [ObservableProperty]
     private string _status = "";
+
+    /// <summary>The site the single strategy is checked on and used for.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CheckOnSiteCommand))]
+    [NotifyCanExecuteChangedFor(nameof(UseStrategyCommand))]
+    private string _siteText = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CheckOnSiteCommand))]
+    [NotifyCanExecuteChangedFor(nameof(UseStrategyCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopCheckCommand))]
+    private bool _checking;
+
+    [ObservableProperty]
+    private string _siteResult = "";
+
+    /// <summary>A solution was made current here: show «Экспортировать» and «Включить на этом компьютере».</summary>
+    [ObservableProperty]
+    private bool _hasNextStep;
+
+    partial void OnStrategyTextChanged(string value) => UseStrategyCommand.NotifyCanExecuteChanged();
 
     [RelayCommand]
     private async Task OpenAsync()
@@ -113,22 +151,169 @@ public sealed partial class ExpertViewModel : PageViewModel
             return;
         SessionState.I.Last = new PipelineResult([], null, _imported);
         Status = L["expert.used"];
+        HasNextStep = true;
     }
 
     [RelayCommand]
-    private void CheckStrategy()
+    private void Export() => OpenExport?.Invoke();
+
+    [RelayCommand]
+    private async Task ProtectAsync()
+    {
+        if (ProtectHere is not null)
+            await ProtectHere();
+    }
+
+    /// <summary>The site as typed («https://site/path» is fine), or null when it is not a domain.</summary>
+    private string? Site()
+    {
+        var (domains, problems) = ResourceRules.NormalizeDomains([SiteText]);
+        return domains.Count == 1 && !problems.Any(p => p.IsError) && domains[0][0] is not ('^' or '!') ? domains[0] : null;
+    }
+
+    /// <summary>The strategy line if it parses and the Validator finds no error; problems go to <see cref="StrategyResult"/>.</summary>
+    private Strategy? ValidStrategy()
     {
         try
         {
             var s = Strategy.Parse(StrategyText);
             var v = Validator(null).ValidateStrategy(s);
             StrategyResult = v.Issues.Count == 0 ? L["expert.valid"] : string.Join("\n", v.Issues.Select(i => (i.Severity == Severity.Error ? "✖ " : "⚠ ") + i.Message(!L.English)));
+            return v.Ok ? s : null;
         }
         catch (FormatException e)
         {
             StrategyResult = "✖ " + e.Message;
+            return null;
         }
     }
+
+    private bool CanCheckOnSite() => !Checking && Host is not null && SiteText.Trim().Length > 0;
+
+    /// <summary>
+    /// «Проверить на сайте»: Validator, then the site without a bypass (it must be blocked, AGENTS.md rule 5), then
+    /// a series of full loads with the strategy in a short-lived engine instance of its own.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanCheckOnSite))]
+    private async Task CheckOnSiteAsync()
+    {
+        if (Host is not { } host)
+            return;
+        if (Site() is not { } site)
+        {
+            SiteResult = "✖ " + L["expert.site_bad"];
+            return;
+        }
+        if (ValidStrategy() is not { } strategy)
+        {
+            SiteResult = "✖ " + L["expert.site_invalid"];
+            return;
+        }
+        if (Busy?.Invoke() is { } busy)
+        {
+            SiteResult = busy;
+            return;
+        }
+        var solution = StrategySiteCheck.SolutionFor(strategy, site);
+        try
+        {
+            host.Resources.AttachTo(solution);
+        }
+        catch (ResourceException e)
+        {
+            SiteResult = "✖ " + L.Pick(e.Ru, e.En);
+            return;
+        }
+        Checking = true;
+        _checkCts = new CancellationTokenSource();
+        var ct = _checkCts.Token;
+        try
+        {
+            SiteResult = L.F("expert.site_resolving", site);
+            var addresses = await LiveAddresses.ResolveAsync(site, ct);
+            if (addresses.Count == 0)
+            {
+                SiteResult = "✖ " + L.F("expert.site_no_address", site);
+                return;
+            }
+            SiteResult = L.F("expert.site_running", site, StrategySiteCheck.Attempts);
+            var agent = await host.AgentAsync(ct);
+            var options = new AgentTrialOptions
+            {
+                LuaDir = host.Bundle.LuaDir,
+                QueueNum = StrategySiteCheck.QueueNum,
+                Blobs = solution.Blobs.ToDictionary(b => b.Key, b => "0x" + Convert.ToHexString(b.Value), StringComparer.Ordinal),
+                UserLua = host.Resources.ApprovedLuaPaths(),
+            };
+            var executor = new AgentTrialExecutor(new AgentEngineControl(agent.Client), new TrialTarget { Host = site, Addresses = addresses }, options);
+            var r = await Task.Run(() => StrategySiteCheck.RunAsync(executor, (n, c) => executor.ProbeSeriesAsync(n, _ => false, c), strategy, ct), ct);
+            SiteResult = Describe(r, site);
+        }
+        catch (OperationCanceledException)
+        {
+            SiteResult = L["common.stopped"];
+        }
+        catch (Exception e) when (e is EngineRefusedException or AgentStartException or InvalidOperationException or Grpc.Core.RpcException or System.Net.Sockets.SocketException)
+        {
+            SiteResult = "✖ " + e.Message;
+        }
+        finally
+        {
+            Checking = false;
+            _checkCts?.Dispose();
+            _checkCts = null;
+        }
+    }
+
+    private bool CanStopCheck() => Checking;
+
+    [RelayCommand(CanExecute = nameof(CanStopCheck))]
+    private void StopCheck() => _checkCts?.Cancel();
+
+    private string Describe(SiteCheckResult r, string site) => r.Verdict switch
+    {
+        SiteCheckVerdict.NotBlocked => "ℹ " + L.F("expert.site_not_blocked", site),
+        SiteCheckVerdict.Works => "✓ " + L.F("expert.site_works", site, r.Ok, r.Outcomes.Count),
+        SiteCheckVerdict.Unstable => "⚠ " + L.F("expert.site_unstable", site, r.Ok, r.Outcomes.Count, L["expert.failure." + r.MainFailure.ToString().ToLowerInvariant()]),
+        _ => "✖ " + L.F("expert.site_fails", site, L["expert.failure." + r.MainFailure.ToString().ToLowerInvariant()]),
+    };
+
+    private bool CanUseStrategy() => !Checking && StrategyText.Trim().Length > 0 && SiteText.Trim().Length > 0;
+
+    /// <summary>
+    /// «Использовать»: the strategy for the site as the current solution (one TCP 80,443 profile limited to the site),
+    /// which «Экспортировать» and «Включить на этом компьютере» then take.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanUseStrategy))]
+    private void UseStrategy()
+    {
+        if (Site() is not { } site)
+        {
+            SiteResult = "✖ " + L["expert.site_bad"];
+            return;
+        }
+        if (ValidStrategy() is not { } strategy)
+        {
+            SiteResult = "✖ " + L["expert.site_invalid"];
+            return;
+        }
+        var solution = StrategySiteCheck.SolutionFor(strategy, site);
+        try
+        {
+            Resources?.AttachTo(solution);
+        }
+        catch (ResourceException e)
+        {
+            SiteResult = "✖ " + L.Pick(e.Ru, e.En);
+            return;
+        }
+        SessionState.I.Last = new PipelineResult([], null, solution);
+        SiteResult = L.F("expert.strategy_used", site);
+        HasNextStep = true;
+    }
+
+    [RelayCommand]
+    private void CheckStrategy() => ValidStrategy();
 
     private StrategyValidator Validator(Solution? s)
     {

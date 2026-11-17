@@ -600,8 +600,8 @@
   "Strategy"
  ],
  "expert.strategy_hint": [
-  "Одна стратегия (--lua-desync=…), проверка Validator'ом.",
-  "One strategy (--lua-desync=…), checked by the Validator."
+  "Одна стратегия (--lua-desync=…): проверьте её Validator'ом, затем на заблокированном сайте, и используйте для этого сайта.",
+  "One strategy (--lua-desync=…): check it with the Validator, then on a blocked site, and use it for that site."
  ],
  "expert.use": [
   "Использовать",
@@ -614,6 +614,102 @@
  "expert.valid": [
   "Ошибок нет",
   "No problems"
+ ],
+ "expert.site": [
+  "Сайт",
+  "Site"
+ ],
+ "expert.site_hint": [
+  "Заблокированный сайт, например youtube.com. Проверка: сначала без обхода (сайт должен не открываться), затем 5 полных загрузок со стратегией, TCP 80 и 443.",
+  "A blocked site such as youtube.com. The check loads it without a bypass first (it must fail), then 5 full loads with the strategy, TCP 80 and 443."
+ ],
+ "expert.check_site": [
+  "Проверить на сайте",
+  "Check on the site"
+ ],
+ "expert.use_site": [
+  "Использовать для сайта",
+  "Use for the site"
+ ],
+ "expert.export": [
+  "Экспортировать",
+  "Export"
+ ],
+ "expert.protect": [
+  "Включить на этом компьютере",
+  "Turn on on this computer"
+ ],
+ "expert.busy_geneva": [
+  "Сейчас работает geneva (обход или подбор): остановите её, затем проверяйте стратегию zapret2 — два движка на одном порту мешают друг другу.",
+  "geneva is running (bypass or search): stop it, then check the zapret2 strategy — two engines on one port get in each other's way."
+ ],
+ "expert.site_bad": [
+  "Впишите домен сайта, например youtube.com.",
+  "Enter the site's domain, for example youtube.com."
+ ],
+ "expert.site_invalid": [
+  "В стратегии ошибки Validator'а, исправьте их выше.",
+  "The strategy has Validator errors, fix them above."
+ ],
+ "expert.site_resolving": [
+  "Ищу адреса {0}…",
+  "Resolving {0}…"
+ ],
+ "expert.site_no_address": [
+  "У {0} нет адресов, которые отвечают: проверьте имя или DNS.",
+  "{0} has no answering addresses: check the name or DNS."
+ ],
+ "expert.site_running": [
+  "Проверяю {0}: без обхода, затем {1} загрузок со стратегией…",
+  "Checking {0}: without a bypass, then {1} loads with the strategy…"
+ ],
+ "expert.site_not_blocked": [
+  "{0} открывается и без обхода: проверять стратегию не на чем. Возьмите заблокированный сайт.",
+  "{0} loads without any bypass: there is nothing to check the strategy on. Pick a blocked site."
+ ],
+ "expert.site_works": [
+  "Работает: {0} загрузился {1} из {2} раз, без обхода не открывается.",
+  "Works: {0} loaded {1} of {2} times, and does not load without a bypass."
+ ],
+ "expert.site_unstable": [
+  "Нестабильно: {0} загрузился {1} из {2} раз, чаще всего — {3}. Лучше подобрать стратегию мастером.",
+  "Unstable: {0} loaded {1} of {2} times, mostly {3}. Better tune a strategy with the wizard."
+ ],
+ "expert.site_fails": [
+  "Не работает: {0} так и не загрузился ({1}).",
+  "Does not work: {0} never loaded ({1})."
+ ],
+ "expert.strategy_used": [
+  "Стратегия выбрана для {0}: экспортируйте её или включите на этом компьютере.",
+  "The strategy is selected for {0}: export it or turn it on on this computer."
+ ],
+ "expert.failure.none": [
+  "без ошибки",
+  "no error"
+ ],
+ "expert.failure.reset": [
+  "сброс соединения",
+  "connection reset"
+ ],
+ "expert.failure.timeout": [
+  "нет ответа",
+  "no reply"
+ ],
+ "expert.failure.stalled": [
+  "загрузка обрывается",
+  "the load stalls"
+ ],
+ "expert.failure.badcertificate": [
+  "чужой сертификат",
+  "a wrong certificate"
+ ],
+ "expert.failure.noconnect": [
+  "адрес не отвечает (блок по IP?)",
+  "the address does not answer (IP block?)"
+ ],
+ "expert.failure.other": [
+  "другая ошибка",
+  "another error"
  ],
  "export.argv": [
   "Строка аргументов",

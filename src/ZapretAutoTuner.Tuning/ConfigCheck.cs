@@ -87,6 +87,7 @@ public static class ConfigCheck
             Profiles = profiles,
             QueueNum = options.QueueNum,
             TargetAddresses = addresses,
+            WinDivertPriority = options.WinDivertPriority,
             IpcacheHostname = Unifier.NeedsIpcacheHostname(solution),
         };
         var argv = EngineArgsBuilder.Build(launch);

@@ -104,6 +104,7 @@ public sealed class GenevaAuto : IAsyncDisposable
     private bool _byName;
     private bool _ext;
     private bool _hostUp;
+    private IReadOnlyList<string> _blobs = [];
     private List<AutoGroupView> _groups = [];
     private List<string> _problems = [];
     private bool _limited;
@@ -178,10 +179,12 @@ public sealed class GenevaAuto : IAsyncDisposable
     public Func<CancellationToken, Task<IReadOnlyList<string>>>? Library { get; init; }
 
     /// <summary>
-    /// zapret2's blockcheck2 grid as geneva strategies (geneva_c 2.0), a spread sample; the argument is true for QUIC.
-    /// The wider round tries it after Geneva's library. Null: without it.
+    /// zapret2's blockcheck2 grid as geneva strategies (geneva_c 2.0): a spread slice of the test's grid (<c>tls12</c>,
+    /// <c>http</c> or <c>http3</c>); the round number moves the slice, so each wider round tries lines the earlier ones
+    /// did not. The wider round tries it after Geneva's library. Null: without it.
     /// </summary>
-    public Func<bool, CancellationToken, Task<IReadOnlyList<string>>>? Grid { get; init; }
+    public Func<string, int, CancellationToken, Task<IReadOnlyList<string>>>? Grid { get; init; }
+
 
     /// <summary>Why the mode may not start now (zapret2's protection runs, the wizard tunes, MCP experiments), or null.</summary>
     public Func<string?>? Busy { get; set; }
@@ -747,19 +750,24 @@ public sealed class GenevaAuto : IAsyncDisposable
         bool ext;
         lock (_lock)
             ext = _ext;
-        // zapret2's whole method grid (geneva_c 2.0) for sites and QUIC after the library
+        // zapret2's whole method grid (geneva_c 2.0) for sites and QUIC after everything else: a slice of it each round,
+        // tried on the service but not a seed of the search (the search has the methods themselves among its seeds)
+        IReadOnlyList<string> gridSlice = [];
         if (wide && ext && Grid is { } grid && (s.Kind is AutoKind.Web or AutoKind.Quic))
         {
             try
             {
-                library = [.. library, .. await grid(s.Kind == AutoKind.Quic, ct).ConfigureAwait(false)];
+                // a site seen only on port 80 is plain HTTP (tls13's grid is a part of tls12's); the round moves the
+                // slice over the whole grid
+                var test = s.Kind == AutoKind.Quic ? "http3" : s.Ports.Count > 0 && !s.Ports.Contains(443) && s.Ports.Contains(80) ? "http" : "tls12";
+                gridSlice = await grid(test, s.Attempts - AutoRules.WideAfter, ct).ConfigureAwait(false);
             }
             catch (Exception e) when (e is InvalidOperationException or IOException or FormatException or System.ComponentModel.Win32Exception)
             {
                 AddLog($"{s.Name}: сетка blockcheck недоступна / the blockcheck grid is unavailable: {e.Message}");
             }
         }
-        List<string> candidates;
+        List<string> candidates, seeds;
         lock (_lock)
         {
             var state = _controller.State;
@@ -767,7 +775,10 @@ public sealed class GenevaAuto : IAsyncDisposable
             var found = state.Found.Where(f => f.Fitness > 0).Select(f => f.Strategy)
                 .Concat(_book.Services.Where(x => x.Strategy is not null).Select(x => x.Strategy!));
             var family = _book.FamilyStrategy(s);
-            candidates = AutoCandidates.For(s, running, found, state.Shared(), library, wide ? AutoRules.MaxWideCandidates : AutoRules.MaxQuickCandidates, family, ext);
+            candidates = AutoCandidates.For(s, running, found, state.Shared(), library, wide ? AutoRules.MaxWideCandidates : AutoRules.MaxQuickCandidates, family, ext, wide, _blobs, s.Attempts - AutoRules.WideAfter);
+            seeds = [.. candidates];
+            // the grid's lines pass the same checks as every other candidate (rule 4)
+            candidates = [.. candidates, .. gridSlice.Where(g => AutoCandidates.Fits(s, g) && GenevaStrategyText.Problem(g) is null && !candidates.Contains(g, StringComparer.Ordinal))];
             if (family is not null)
                 AddLog($"{s.Name}: сначала стратегия того же сервиса ({AutoFamilies.Of(s)})");
         }
@@ -795,7 +806,7 @@ public sealed class GenevaAuto : IAsyncDisposable
             AddLog($"{s.Name}: известные стратегии не помогли; повторю позже");
             return;
         }
-        await EvolveAsync(s, [.. candidates.Where(c => ext || !GenevaStrategyText.NeedsExt(c))], wide, ct).ConfigureAwait(false);
+        await EvolveAsync(s, [.. seeds.Where(c => ext || !GenevaStrategyText.NeedsExt(c))], wide, ct).ConfigureAwait(false);
     }
 
     /// <summary>geneva's search for the service, continued from its checkpoint when there is one.</summary>
@@ -1017,6 +1028,8 @@ public sealed class GenevaAuto : IAsyncDisposable
                 _hostUp = reply.Host is not null;
                 _byName = reply.ByName;
                 _ext = reply.Ext;
+                // the fakes the Agent really loads: a candidate never names one geneva does not have
+                _blobs = [.. reply.Blobs];
                 _applied = json;
                 _appliedAt = _now();
                 _problems = [.. reply.Problems];

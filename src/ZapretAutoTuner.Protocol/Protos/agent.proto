@@ -359,4 +359,5 @@ message GenevaAutoApplyReply {
   bool by_name = 4;              // geneva_c can apply by name (ext_profile, ext_lists, ext_l7)
   GenevaAutoGroupState host = 5; // the name-based process when it runs; requested: its strategies
   bool ext = 6;                  // geneva_c knows x-actions (ext_xact): zapret2's methods may be tried
+  repeated string blobs = 7;     // zapret2's fakes every geneva with --ext gets (z2_ names): strategies may name them
 }

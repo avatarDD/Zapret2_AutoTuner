@@ -121,21 +121,26 @@ public sealed class GenevaBundle
 
     /// <summary>
     /// zapret2's blockcheck2 grid as geneva strategies (geneva_c 2.0, <c>blockcheck --ext --print-grid</c>, no probes,
-    /// no rights): <paramref name="max"/> lines spread evenly over the whole grid of the test (<c>tls12</c> or
-    /// <c>http3</c>), the TTL sweeps left out (their fakes need the right TTL for the path). The "Авто" mode's wider
-    /// round tries them on a blocked service before its bigger search.
+    /// no rights): <paramref name="max"/> lines spread evenly over the whole grid of the test (<c>tls12</c>, <c>tls13</c>,
+    /// <c>http</c> or <c>http3</c>) with its autottl sweeps; the fixed-TTL sweeps (1 to 12 of each fake) are left out:
+    /// autottl finds the TTL for the path itself, and they would more than double the grid. <paramref name="round"/> shifts the sample, so successive rounds walk the whole grid.
+    /// The "Авто" mode's wider round tries them on a blocked service before its bigger search.
     /// </summary>
-    public async Task<IReadOnlyList<string>> GridAsync(string test, int max, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> GridAsync(string test, int max, CancellationToken ct = default, int round = 0)
     {
         var (code, stdout, stderr) = await RunAsync(["blockcheck", "--ext", "--print-grid", "--test", test, "--level", "quick",
-            "--max-ttl", "0", "--max-autottl-delta", "0", "--quiet"], null, ct).ConfigureAwait(false);
+            "--max-ttl", "0", "--quiet"], null, ct).ConfigureAwait(false);
         if (code != 0)
             throw new InvalidOperationException($"geneva blockcheck --print-grid: {stderr.Trim()}");
-        return ParseGrid(stdout, max);
+        return ParseGrid(stdout, max, round);
     }
 
-    /// <summary>The geneva column of <c>--print-grid</c> (<c>nfqws2 line TAB geneva strategy</c>), at most <paramref name="max"/> spread evenly.</summary>
-    public static IReadOnlyList<string> ParseGrid(string output, int max)
+    /// <summary>
+    /// The geneva column of <c>--print-grid</c> (<c>nfqws2 line TAB geneva strategy</c>), at most <paramref name="max"/>
+    /// spread evenly; <paramref name="round"/> N starts each stride N lines later (wrapping), so the rounds together
+    /// cover every line.
+    /// </summary>
+    public static IReadOnlyList<string> ParseGrid(string output, int max, int round = 0)
     {
         var all = output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(l => l.Split('\t'))
@@ -145,8 +150,11 @@ public sealed class GenevaBundle
             .ToList();
         if (max <= 0 || all.Count <= max)
             return all;
+        // always max lines; the shift runs over a whole step, so the rounds together reach every line
         double step = (double)all.Count / max;
-        return [.. Enumerable.Range(0, max).Select(i => all[(int)(i * step)])];
+        int span = (int)Math.Ceiling(step);
+        int shift = ((round % span) + span) % span;
+        return [.. Enumerable.Range(0, max).Select(i => all[((int)(i * step) + shift) % all.Count]).Distinct(StringComparer.Ordinal)];
     }
 
     /// <summary>

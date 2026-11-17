@@ -251,9 +251,30 @@ internal sealed class GenevaManager : IDisposable
         return new GenevaStartReply { Id = inst.Id, Pid = inst.Pid };
     }
 
+    /// <summary>
+    /// Where zapret2's fakes are (files/fake of the verified zapret2 bundle, never the user's folder: geneva reads them
+    /// with the Agent's rights); null when there is none.
+    /// </summary>
+    public Func<string?>? FakeDir { get; set; }
+
+    /// <summary>
+    /// A geneva with extensions gets every fake of zapret2 as a blob (<c>--ext-blob z2_NAME:@FILE</c>,
+    /// <see cref="GenevaBlobs"/>): a strategy, a search resumed from its checkpoint or one the user wrote may name any.
+    /// </summary>
+    internal List<string> WithBlobs(List<string> argv)
+    {
+        int i = argv.IndexOf("--ext");
+        if (i < 0 || FakeDir?.Invoke() is not { } dir)
+            return argv;
+        var a = new List<string>(argv);
+        a.InsertRange(i + 1, GenevaBlobs.Argv(dir));
+        return a;
+    }
+
     private GenevaInstance Launch(string mode, string geneva, List<string> argv, Dictionary<string, string> env, bool supervise,
         int controlPort = 0, string token = "", string ports = "", int queue = 0)
     {
+        argv = WithBlobs(argv);
         var id = "g" + Interlocked.Increment(ref _seq).ToString(CultureInfo.InvariantCulture);
         var inst = GenevaInstance.Start(id, mode, geneva, argv, env, supervise, _job, controlPort, token, ports, queue);
         _running[id] = inst;
@@ -589,6 +610,8 @@ internal sealed class GenevaManager : IDisposable
             feats = new HashSet<string>();
         }
         reply.Ext = feats.Contains("ext_xact");
+        if (reply.Ext)
+            reply.Blobs.AddRange(GenevaBlobs.Files(FakeDir?.Invoke()).Select(f => f.Name));
         reply.ByName = HostFeatures.All(feats.Contains) && (!windows || feats.Contains("filter"));
         if (r.Hosts.Count > 0 && reply.ByName)
         {

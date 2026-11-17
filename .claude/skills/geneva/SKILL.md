@@ -232,10 +232,27 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
    `--protos`, что сохранены в прогрессе (иначе geneva откажет). Без пробы (WireGuard, DHT)
    успех — хотя бы один успешный поток программы за 50 с.
    С geneva_c 2.0 (`ext_xact`) к кандидатам добавляются x-стратегии
-   (`AutoCandidates.XTcp`/`XQuic`: xsplit, xdisorder, xfake с
-   `fake_default_tls`, xfakedsplit, xhostfake, xtlsrec), в широком раунде —
-   сетка zapret2-методов из `blockcheck --print-grid`; первой пробуется
-   стратегия семейства (`AutoBook.FamilyStrategy`). Пробная стратегия
+   (`AutoCandidates.XFor`): в обычном раунде — основные (`XTcp`, `XQuic`,
+   для сайта только на 80 `XHttp`, для UDP `XUdp`, для DHT `XDht`, для
+   прочего TCP `XTcpAny`), в широком — все клиентские x-действия
+   (`XTcpWide`, `XQuicWide`: seqovl, tcpseg, fakeddisorder, tlsclone,
+   repeat, rst, drip, ipfrag, syndata, oob, synack, wsize/wssize, все
+   fooling, xwhen/xcutoff…) и фейки zapret2 по `AutoRules.FakesPerRound`
+   (8) за раунд, каждый раунд следующие (`GenevaBlobs`: `files/fake/*.bin`
+   бандла zapret2 → блобы `z2_<имя>` до 63 символов, по протоколу:
+   ClientHello для сайтов, Initial для QUIC, WireGuard/STUN/DTLS/нули для
+   UDP, DHT для DHT). Agent отдаёт каждому geneva с `--ext` все фейки
+   (`GenevaManager.WithBlobs`: `--ext-blob z2_X:@файл` из проверенной
+   копии zapret2, `FakeDir`) и называет их в ответе `AutoApply`
+   (`blobs`): кандидаты берут имена только оттуда. `xsend{ipfrag}` всегда
+   с `(drop,)`: иначе целый пакет уходит вслед за фрагментами. `Fits`
+   пропускает триггеры `[FLOW:`, `[L7:`, `[META:` для любого транспорта.
+   Затем в широком раунде — срез сетки zapret2 из `blockcheck
+   --print-grid --max-ttl 0` (с autottl, без фиксированных TTL; 48 строк
+   TCP, 13 QUIC; `tls12`, для сайта только на 80 — `http`; `tls13` —
+   часть `tls12`): раунд N сдвигает срез, раунды вместе обходят всю сетку;
+   строки проходят `Problem`, пробуются, но в семена подбора не идут.
+   Первой пробуется стратегия семейства (`AutoBook.FamilyStrategy`). Пробная стратегия
    засчитывается после `AutoRules.TrialPasses` (2) успешных проверок подряд
    и, для сайта, повтора записанного ClientHello браузера (`WorksAsync`,
    `HandshakesAsync`); сайт хранит два ClientHello разной длины

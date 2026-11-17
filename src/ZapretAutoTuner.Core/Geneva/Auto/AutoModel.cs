@@ -217,6 +217,9 @@ public static class AutoRules
     /// <summary>Strategies applied by the site's name at once (geneva_c 2.0 profiles in one process).</summary>
     public const int MaxHostProfiles = 24;
 
+    /// <summary>zapret2's fakes a wider round tries (<see cref="AutoCandidates.XFor"/>); the next round takes the next ones.</summary>
+    public const int FakesPerRound = 8;
+
     /// <summary>The queue of the process that applies strategies by name: after the groups' 340–347.</summary>
     public const int HostQueue = 348;
 

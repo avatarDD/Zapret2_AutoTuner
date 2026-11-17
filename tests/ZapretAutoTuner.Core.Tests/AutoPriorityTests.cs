@@ -324,4 +324,92 @@ public class AutoPriorityTests
         Assert.Equal("YouTube", AutoFamilies.Of("rr3---sn-4g5e6nsz.googlevideo.com"));
         Assert.Null(AutoFamilies.Of("notyoutube.com"));
     }
+
+    // ---- the whole of geneva_c 2.0
+
+    /// <summary>zapret2's fakes as the bundled zapret2 v1.0.6 names them (files/fake).</summary>
+    private static readonly string[] Zapret2Fakes =
+    [
+        "bgp_open", "bitcoin", "dht_find_node", "dht_get_peers", "discord-ip-discovery-with-port", "dns", "dtls_clienthello_w3_org",
+        "http_iana_org", "isakmp_initiator_request", "ntp4", "quic2_example_com", "quic_initial_www_google_com",
+        "quic_initial_rr1---sn-xguxaxjvh-n8me_googlevideo_com_kyber_1", "quic_short_header", "rdp", "rtsp_options", "sip_register",
+        "smtp_ehlo", "stun", "tls_alert", "tls_clienthello_www_google_com", "tls_clienthello_vk_com_kyber", "wireguard_initiation", "zero_256",
+    ];
+
+    private static AutoService Svc(AutoKind kind, L4Kind transport, string app, params int[] ports) =>
+        new() { Key = $"{kind}:{app}", Kind = kind, Transport = transport, App = app, Name = app, Ports = [.. ports] };
+
+    [Fact]
+    public void The_wider_round_tries_every_client_side_x_action_of_geneva_c_2()
+    {
+        // every x-action that acts on the client's own packets (docs/EXT.md X5a, X5b, X5c, X8); the rest need a server
+        // (xsynhide, xudp2icmp), only log or record (xlog, xpcap, xtag) or are pieces of the others (xmod, xstop, xwhen,
+        // xcutoff: the grid uses xwhen)
+        string[] actions =
+        [
+            "xfake", "xsplit", "xdisorder", "xtcpseg", "xhostfake", "xfakedsplit", "xfakeddisorder", "xsend", "xsynack", "xwsize",
+            "xwssize", "xsyndata", "xrst", "xhttp", "xudplen", "xdhtdn", "xtlsclone", "xrepeat", "xoob", "xtlsrec", "xdrip", "xwhen", "xcutoff",
+        ];
+        var blobs = Zapret2Fakes.Select(GenevaBlobs.NameOf).ToList();
+        var services = new[]
+        {
+            Svc(AutoKind.Web, L4Kind.Tcp, "tls", 443, 80), Svc(AutoKind.Quic, L4Kind.Udp, "quic", 443), Svc(AutoKind.Endpoint, L4Kind.Udp, "wireguard", 51820),
+            Svc(AutoKind.LocalPort, L4Kind.Udp, "dht"), Svc(AutoKind.Endpoint, L4Kind.Tcp, "openvpn", 1194),
+        };
+        // the fakes go a few a round: the rounds together try them all
+        var all = services.SelectMany(x => Enumerable.Range(0, 6).SelectMany(r => AutoCandidates.XFor(x, ext: true, wide: true, blobs, r))).Distinct().ToList();
+        Assert.True(AutoCandidates.XFor(services[0], true, true, blobs, 0).Count(c => c.Contains("z2_", StringComparison.Ordinal)) <= AutoRules.FakesPerRound);
+        var many = Enumerable.Range(0, 10).Select(i => $"z2_tls_clienthello_{i}").ToList();
+        Assert.NotEqual(AutoCandidates.XFor(services[0], true, true, many, 0), AutoCandidates.XFor(services[0], true, true, many, 1));
+        Assert.Equal(21, Enumerable.Range(0, 3).SelectMany(r => AutoCandidates.XFor(services[0], true, true, many, r)).Count(c => c.Contains("z2_", StringComparison.Ordinal)) - 3);
+        Assert.All(actions, a => Assert.Contains(all, c => c.Contains(a + "{", StringComparison.Ordinal) || c.Contains(a + "-", StringComparison.Ordinal)));
+        // every built-in blob of geneva and every fake of zapret2 is tried somewhere
+        Assert.All(new[] { "fake_default_tls", "fake_default_http", "fake_default_quic", "fake_quic_initial" }.Concat(blobs),
+            b => Assert.Contains(all, c => c.Contains("blob=" + b + ";", StringComparison.Ordinal) || c.Contains("blob=" + b + "}", StringComparison.Ordinal)
+                || c.Contains("pattern=" + b, StringComparison.Ordinal)));
+        Assert.All(all, c => Assert.Null(GenevaStrategyText.Problem(c)));
+        // the quick round stays short: the usual few, no blobs
+        var site = services[0];
+        Assert.True(AutoCandidates.XFor(site, true, false, blobs).Count < AutoCandidates.XFor(site, true, true, blobs).Count / 3);
+        Assert.DoesNotContain(AutoCandidates.XFor(site, true, false, blobs), c => c.Contains(GenevaBlobs.Prefix, StringComparison.Ordinal));
+        // xhttp only where HTTP may be: not in the quick round of an HTTPS site, first for a site only on 80
+        Assert.DoesNotContain(AutoCandidates.XFor(site, true, false, blobs), c => c.Contains("xhttp", StringComparison.Ordinal));
+        var plain = Svc(AutoKind.Web, L4Kind.Tcp, "http", 80);
+        Assert.StartsWith("[TCP:flags:PA]-xhttp", AutoCandidates.XFor(plain, true, false, blobs)[0], StringComparison.Ordinal);
+        Assert.DoesNotContain(Enumerable.Range(0, 6).SelectMany(r => AutoCandidates.XFor(plain, true, true, blobs, r)), c => c.Contains("z2_tls_clienthello", StringComparison.Ordinal));
+        // geneva_c 2.0's flow triggers fit either transport (the blockcheck grid's form)
+        Assert.True(AutoCandidates.Fits(site, @"[FLOW:n:a]-xoob{urp=b}-| \/"));
+        Assert.True(AutoCandidates.Fits(services[1], @"[FLOW:n:a]-xwhen{iff=L7:payload:quic_initial}(xfake{blob=fake_default_quic},)-| \/"));
+        Assert.Empty(AutoCandidates.XFor(site, false, true, blobs));
+        // a fake fits its protocol: no QUIC Initial on a TLS site, no ClientHello on WireGuard
+        Assert.DoesNotContain(AutoCandidates.XFor(site, true, true, blobs), c => c.Contains("z2_quic_initial", StringComparison.Ordinal));
+        Assert.DoesNotContain(AutoCandidates.XFor(services[2], true, true, blobs), c => c.Contains("z2_tls_clienthello", StringComparison.Ordinal));
+        // the wide round hands them all on beyond the usual limit
+        var wide = AutoCandidates.For(site, [], [], max: AutoRules.MaxWideCandidates, ext: true, wide: true, blobs: blobs);
+        Assert.Superset(AutoCandidates.XFor(site, true, true, blobs).ToHashSet(), wide.ToHashSet());
+    }
+
+    [Fact]
+    public void Zapret2s_fakes_are_named_and_handed_to_geneva()
+    {
+        Assert.Equal("z2_quic_initial_rr1___sn_xguxaxjvh_n8me_googlevideo_com_kyber_1", GenevaBlobs.NameOf("/x/quic_initial_rr1---sn-xguxaxjvh-n8me_googlevideo_com_kyber_1.bin"));
+        Assert.Equal(BlobKind.TlsHello, GenevaBlobs.KindOf("z2_tls_clienthello_vk_com"));
+        Assert.Equal(BlobKind.QuicInitial, GenevaBlobs.KindOf("z2_quic2_example_com"));
+        Assert.Equal(BlobKind.UdpOther, GenevaBlobs.KindOf("z2_wireguard_initiation"));
+        Assert.Equal(BlobKind.TcpOther, GenevaBlobs.KindOf("z2_tls_alert"));
+        var dir = Directory.CreateTempSubdirectory("fakes").FullName;
+        try
+        {
+            File.WriteAllBytes(Path.Combine(dir, "stun.bin"), [1, 2]);
+            File.WriteAllBytes(Path.Combine(dir, "empty.bin"), []);
+            File.WriteAllText(Path.Combine(dir, "readme.txt"), "x");
+            Assert.Equal(["--ext-blob", "z2_stun:@" + Path.Combine(dir, "stun.bin")], GenevaBlobs.Argv(dir));
+            Assert.Empty(GenevaBlobs.Argv(Path.Combine(dir, "missing")));
+            Assert.Empty(GenevaBlobs.Argv(null));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
 }

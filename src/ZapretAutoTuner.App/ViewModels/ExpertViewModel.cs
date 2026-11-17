@@ -45,7 +45,55 @@ public sealed partial class ExpertViewModel : PageViewModel
     private string _strategyResult = "";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStatus))]
     private string _status = "";
+
+    public bool HasStatus => Status.Length > 0;
+
+    /// <summary>For which sites the single strategy is meant: its hostlist (one per line or separated by spaces/commas).</summary>
+    [ObservableProperty]
+    private string _strategySites = "";
+
+    /// <summary>The single strategy passed the Validator: "Использовать" can make it the current solution.</summary>
+    [ObservableProperty]
+    private bool _canUseStrategy;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStrategyStatus))]
+    private string _strategyStatus = "";
+
+    public bool HasStrategyStatus => StrategyStatus.Length > 0;
+
+    /// <summary>
+    /// A strategy was made the current one here: the next steps (turn it on here, install it elsewhere) are offered next
+    /// to the button, not left for the user to find (UX audit: "после «Использовать» нет кнопки «что дальше»").
+    /// </summary>
+    [ObservableProperty]
+    private bool _used;
+
+    /// <summary>"Включить на этом компьютере": the protection runs the current solution (set by the window's view model).</summary>
+    public Func<Task>? ProtectHere { get; set; }
+
+    /// <summary>The wizard's last step for the current solution (set by the window's view model).</summary>
+    public Action? OpenExport { get; set; }
+
+    [RelayCommand]
+    private async Task ProtectAsync()
+    {
+        if (ProtectHere is not null)
+            await ProtectHere();
+    }
+
+    [RelayCommand]
+    private void Export() => OpenExport?.Invoke();
+
+    partial void OnStrategyTextChanged(string value)
+    {
+        CanUseStrategy = false;
+        StrategyStatus = "";
+    }
+
+    partial void OnImportTextChanged(string value) => Used = false;
 
     [RelayCommand]
     private async Task OpenAsync()
@@ -113,6 +161,7 @@ public sealed partial class ExpertViewModel : PageViewModel
             return;
         SessionState.I.Last = new PipelineResult([], null, _imported);
         Status = L["expert.used"];
+        Used = true;
     }
 
     [RelayCommand]
@@ -123,11 +172,59 @@ public sealed partial class ExpertViewModel : PageViewModel
             var s = Strategy.Parse(StrategyText);
             var v = Validator(null).ValidateStrategy(s);
             StrategyResult = v.Issues.Count == 0 ? L["expert.valid"] : string.Join("\n", v.Issues.Select(i => (i.Severity == Severity.Error ? "✖ " : "⚠ ") + i.Message(!L.English)));
+            CanUseStrategy = v.Ok && s.Calls.Any();
         }
         catch (FormatException e)
         {
             StrategyResult = "✖ " + e.Message;
+            CanUseStrategy = false;
         }
+    }
+
+    /// <summary>The sites of <see cref="StrategySites"/>, as hostnames (a pasted URL keeps its host).</summary>
+    internal static List<string> ParseSites(string text) =>
+        [.. text.Split([' ', ',', ';', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => Uri.TryCreate(t.Contains("://", StringComparison.Ordinal) ? t : "https://" + t, UriKind.Absolute, out var u) ? u.IdnHost : "")
+            .Where(h => h.Contains('.', StringComparison.Ordinal))
+            .Select(h => h.TrimEnd('.').ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// The single strategy as the current solution: one profile for TCP 80 and 443 limited to the given sites (never
+    /// to every site: a strategy meant for one service must not touch the rest). It passes the Validator first (rule 4).
+    /// </summary>
+    [RelayCommand]
+    private void UseStrategy()
+    {
+        CheckStrategy();
+        if (!CanUseStrategy)
+        {
+            StrategyStatus = L["expert.strategy_invalid"];
+            return;
+        }
+        var sites = ParseSites(StrategySites);
+        if (sites.Count == 0)
+        {
+            StrategyStatus = L["expert.strategy_need_sites"];
+            return;
+        }
+        var solution = new Solution
+        {
+            Profiles =
+            [
+                new Profile
+                {
+                    Name = "expert",
+                    TcpPorts = "80,443",
+                    HostlistDomains = sites,
+                    Strategy = Strategy.Parse(StrategyText),
+                },
+            ],
+            Meta = new SolutionMeta { Targets = sites, Title = "expert" },
+        };
+        SessionState.I.Last = new PipelineResult([], null, solution);
+        StrategyStatus = L.F("expert.strategy_used", string.Join(", ", sites));
+        Used = true;
     }
 
     private StrategyValidator Validator(Solution? s)

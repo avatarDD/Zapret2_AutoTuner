@@ -297,6 +297,16 @@ public sealed class AppSettings
         set => kb.SetSetting("ui.large_font", value ? "1" : "0");
     }
 
+    /// <summary>
+    /// The interface scale in percent (100…150). Not set yet: 115 for those who had "Крупный шрифт" on, which it
+    /// replaces (the font switch grew only the base size, the fixed small sizes stayed).
+    /// </summary>
+    public int UiScale
+    {
+        get => int.TryParse(kb.GetSetting("ui.scale"), out var s) && s is >= 100 and <= 200 ? s : LargeFont ? 115 : 100;
+        set => kb.SetSetting("ui.scale", value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     /// <summary>The MCP server; off by default, and the Stop button turns it off again.</summary>
     public bool McpEnabled
     {

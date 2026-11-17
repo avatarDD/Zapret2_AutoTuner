@@ -4,18 +4,35 @@
              xmlns:l="using:ZapretAutoTuner.App.Loc"
              x:Class="ZapretAutoTuner.App.Views.ExpertView"
              x:DataType="vm:ExpertViewModel">
-  <TabControl>
+  <DockPanel>
+  <StackPanel DockPanel.Dock="Top" Spacing="2">
+    <TextBlock Classes="h1" Text="{l:T nav.expert}" />
+    <TextBlock Classes="muted" Text="{l:T expert.subtitle}" />
+  </StackPanel>
+  <TabControl Classes="compact" Margin="0,8,0,0">
     <TabItem Header="{l:T expert.import}">
       <Grid RowDefinitions="Auto,*,Auto,Auto,*" Margin="0,8,0,0">
         <TextBlock Classes="muted" Text="{l:T expert.import_hint}" />
-        <TextBox Grid.Row="1" Text="{Binding ImportText}" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" FontSize="12" Margin="0,6" />
+        <TextBox Grid.Row="1" Text="{Binding ImportText}" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" FontSize="12" Margin="0,6"
+                 AutomationProperties.Name="{l:T expert.import}" />
         <WrapPanel Grid.Row="2">
           <Button Content="{l:T expert.open}" Command="{Binding OpenCommand}" Margin="0,0,8,8" />
           <Button Classes="accent" Content="{l:T expert.parse}" Command="{Binding ImportCommand}" Margin="0,0,8,8" />
           <Button Content="{l:T expert.use}" Command="{Binding UseCommand}" IsEnabled="{Binding CanUse}" Margin="0,0,8,8" />
-          <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Classes="muted" />
         </WrapPanel>
-        <TextBlock Grid.Row="3" Text="{Binding ImportKind}" FontWeight="SemiBold" />
+        <!-- what next, right where "Использовать" was pressed -->
+        <StackPanel Grid.Row="3" Spacing="6">
+          <Border Classes="card" IsVisible="{Binding HasStatus}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+              <WrapPanel IsVisible="{Binding Used}">
+                <Button Classes="accent" Content="{l:T export.protect_here}" Command="{Binding ProtectCommand}" Margin="0,0,8,0" />
+                <Button Content="{l:T expert.export}" Command="{Binding ExportCommand}" />
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+          <TextBlock Text="{Binding ImportKind}" FontWeight="SemiBold" />
+        </StackPanel>
         <ScrollViewer Grid.Row="4">
           <StackPanel Spacing="4">
             <ItemsControl ItemsSource="{Binding Profiles}">
@@ -37,13 +54,34 @@
       </Grid>
     </TabItem>
     <TabItem Header="{l:T expert.strategy}">
-      <StackPanel Spacing="8" Margin="0,8,0,0">
-        <TextBlock Classes="muted" Text="{l:T expert.strategy_hint}" />
-        <TextBox Text="{Binding StrategyText}" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" Height="100"
-                 Watermark="--lua-desync=fake:blob=fake_default_tls:tcp_md5 --lua-desync=multisplit:pos=1,midsld" />
-        <Button Classes="accent" Content="{l:T expert.check}" Command="{Binding CheckStrategyCommand}" />
-        <SelectableTextBlock Text="{Binding StrategyResult}" TextWrapping="Wrap" />
-      </StackPanel>
+      <ScrollViewer>
+        <StackPanel Spacing="8" Margin="0,8,12,12">
+          <TextBlock Classes="muted" Text="{l:T expert.strategy_hint}" TextWrapping="Wrap" />
+          <TextBlock Classes="caption" Text="{l:T expert.strategy_label}" />
+          <TextBox Text="{Binding StrategyText}" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" Height="100"
+                   Watermark="--lua-desync=fake:blob=fake_default_tls:tcp_md5 --lua-desync=multisplit:pos=1,midsld"
+                   AutomationProperties.Name="{l:T expert.strategy_label}" />
+          <TextBlock Classes="caption" Text="{l:T expert.strategy_sites}" />
+          <TextBox Text="{Binding StrategySites}" AcceptsReturn="True" TextWrapping="Wrap" Height="60" Watermark="youtube.com googlevideo.com"
+                   AutomationProperties.Name="{l:T expert.strategy_sites}" />
+          <WrapPanel>
+            <Button Content="{l:T expert.check}" Command="{Binding CheckStrategyCommand}" Margin="0,0,8,8" />
+            <Button Classes="accent" Content="{l:T expert.use}" Command="{Binding UseStrategyCommand}" Margin="0,0,8,8" ToolTip.Tip="{l:T expert.use_strategy_tip}" />
+          </WrapPanel>
+          <SelectableTextBlock Text="{Binding StrategyResult}" TextWrapping="Wrap" />
+          <Border Classes="card" IsVisible="{Binding HasStrategyStatus}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding StrategyStatus}" TextWrapping="Wrap" />
+              <WrapPanel IsVisible="{Binding Used}">
+                <Button Classes="accent" Content="{l:T export.protect_here}" Command="{Binding ProtectCommand}" Margin="0,0,8,0" />
+                <Button Content="{l:T expert.export}" Command="{Binding ExportCommand}" />
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+          <TextBlock Classes="muted" Text="{l:T expert.check_on_site}" TextWrapping="Wrap" />
+        </StackPanel>
+      </ScrollViewer>
     </TabItem>
   </TabControl>
+  </DockPanel>
 </UserControl>

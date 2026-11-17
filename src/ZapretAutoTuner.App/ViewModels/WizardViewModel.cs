@@ -71,6 +71,8 @@ public sealed partial class WizardViewModel : PageViewModel
         _guiUrl = host.Settings.GuiUrl;
         _guiToken = host.Settings.GuiToken;
         _routerHost = host.Settings.RouterHost;
+        _routerPassword = RouterCredentials.RouterPassword;
+        _guiPassword = RouterCredentials.GuiPassword;
         RefreshPending();
     }
 
@@ -280,10 +282,44 @@ public sealed partial class WizardViewModel : PageViewModel
     [RelayCommand]
     private void GoExport() => Step = 5;
 
+    /// <summary>"Готово" on the last step: back to where the result is seen (set by the window's view model).</summary>
+    public Action? Finish { get; set; }
+
+    [RelayCommand]
+    private void Done()
+    {
+        Step = 1;
+        Finish?.Invoke();
+    }
+
+    /// <summary>
+    /// The one destination step 5 recommends (UX audit P0: three accent buttons at once pointed nowhere): zapret-gui
+    /// when its address is set, Keenetic over SSH when a router is, this PC otherwise.
+    /// </summary>
+    public string Recommended => _host.Settings.GuiUrl.Length > 0 || GuiUrl.Trim().Length > 0 ? "gui"
+        : _host.Settings.RouterHost.Length > 0 || RouterHost.Trim().Length > 0 ? "keenetic"
+        : "pc";
+
+    public bool RecommendPc => Recommended == "pc";
+
+    public bool RecommendKeenetic => Recommended == "keenetic";
+
+    public bool RecommendGui => Recommended == "gui";
+
+    private void RefreshRecommended()
+    {
+        OnPropertyChanged(nameof(Recommended));
+        OnPropertyChanged(nameof(RecommendPc));
+        OnPropertyChanged(nameof(RecommendKeenetic));
+        OnPropertyChanged(nameof(RecommendGui));
+    }
+
     partial void OnStepChanged(int value)
     {
         OnPropertyChanged(nameof(HasSolution));
         OnPropertyChanged(nameof(SolutionInfo));
+        if (value == 5)
+            RefreshRecommended();
     }
 
     [ObservableProperty]
@@ -329,13 +365,25 @@ public sealed partial class WizardViewModel : PageViewModel
 
     partial void OnGuiUrlChanged(string value) => _host.Settings.GuiUrl = value.Trim();
 
-    /// <summary>The zapret-gui address and token may have been entered in Settings meanwhile: the settings are the source.</summary>
+    // the passwords are typed once per run, wherever (Settings, the wizard, Resources): one in-memory store for all
+    partial void OnRouterPasswordChanged(string value) => RouterCredentials.RouterPassword = value;
+
+    partial void OnGuiPasswordChanged(string value) => RouterCredentials.GuiPassword = value;
+
+    /// <summary>The router's addresses and passwords may have been entered in Settings meanwhile: the settings are the source.</summary>
     public override void OnShown()
     {
         if (GuiUrl.Trim() != _host.Settings.GuiUrl)
             GuiUrl = _host.Settings.GuiUrl;
         if (GuiToken.Trim() != _host.Settings.GuiToken.Trim())
             GuiToken = _host.Settings.GuiToken;
+        if (RouterHost.Trim() != _host.Settings.RouterHost && _host.Settings.RouterHost.Length > 0)
+            RouterHost = _host.Settings.RouterHost;
+        if (RouterPassword != RouterCredentials.RouterPassword)
+            RouterPassword = RouterCredentials.RouterPassword;
+        if (GuiPassword != RouterCredentials.GuiPassword)
+            GuiPassword = RouterCredentials.GuiPassword;
+        RefreshRecommended();
     }
 
     [RelayCommand]

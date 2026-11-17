@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZapretAutoTuner.App.ViewModels"
+             xmlns:l="using:ZapretAutoTuner.App.Loc"
+             x:Class="ZapretAutoTuner.App.Views.EnvironmentView"
+             x:DataType="vm:EnvironmentViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="10" Margin="0,0,12,12" MaxWidth="900" HorizontalAlignment="Left">
+      <TextBlock Classes="h1" Text="{l:T env.title}" />
+      <TextBlock Classes="muted" Text="{l:T env.subtitle}" />
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="{l:T env.recheck}" Command="{Binding RecheckCommand}" />
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding CheckedAt}" Classes="muted small" />
+        </StackPanel>
+      </DockPanel>
+      <ItemsControl ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:EnvRow">
+            <Border Classes="card" Margin="0,0,0,6">
+              <Grid ColumnDefinitions="Auto,*,Auto">
+                <Border Width="24" Height="24" CornerRadius="12" Background="{Binding Brush}" VerticalAlignment="Top" Margin="0,0,12,0"
+                        ToolTip.Tip="{Binding LevelText}">
+                  <TextBlock Text="{Binding Mark}" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="1" Spacing="2">
+                  <TextBlock FontWeight="SemiBold" TextWrapping="Wrap">
+                    <Run Text="{Binding Title}" /><Run Text=" · " /><Run Text="{Binding LevelText}" FontWeight="Normal" />
+                  </TextBlock>
+                  <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="2" Content="{Binding Action}" IsVisible="{Binding HasAction}" VerticalAlignment="Top" Margin="12,0,0,0"
+                        Command="{Binding $parent[ItemsControl].((vm:EnvironmentViewModel)DataContext).ActCommand}" CommandParameter="{Binding}" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <TextBlock Classes="muted" Text="{l:T env.privacy}" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

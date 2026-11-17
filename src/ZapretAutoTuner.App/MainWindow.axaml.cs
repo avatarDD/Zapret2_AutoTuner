@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using Avalonia.Platform.Storage;
 using ZapretAutoTuner.App.ViewModels;
 using ZapretAutoTuner.App.Views;
@@ -11,6 +13,15 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         DataContextChanged += (_, _) => Wire();
+        ApplyScale(App.Scale);
+        App.ScaleChanged += ApplyScale;
+        Closed += (_, _) => App.ScaleChanged -= ApplyScale;
+    }
+
+    private void ApplyScale(int percent)
+    {
+        var f = percent / 100.0;
+        Scaled.LayoutTransform = Math.Abs(f - 1) < 0.001 ? null : new Avalonia.Media.ScaleTransform(f, f);
     }
 
     /// <summary>Gives the view models the few things only a window can do: files, clipboard, the yes/no dialog.</summary>
@@ -28,6 +39,17 @@ public sealed partial class MainWindow : Window
         m.Mcp.Ask = (title, text, ct) => ConfirmDialog.AskAsync(this, title, text, ct);
         m.Resources.Confirm = (title, text) => ConfirmDialog.AskAsync(this, title, text);
         m.Resources.ApproveDialog = r => LuaApprovalDialog.AskAsync(this, r);
+        m.Confirm = (title, text) => ConfirmDialog.AskAsync(this, title, text);
+        m.EnvironmentPage.OpenFolder = m.Settings.OpenFolder = OpenFolderAsync;
+        m.EnvironmentPage.OpenUrl = async url => await Launcher.LaunchUriAsync(url);
+        m.Resources.OpenFiles = OpenFilesAsync;
+        m.Resources.SaveFile = SaveFileAsync;
+        // a new page: the keyboard focus goes into it (it stayed in the menu), so Tab and a screen reader start there
+        m.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.Current))
+                Avalonia.Threading.Dispatcher.UIThread.Post(FocusPage, Avalonia.Threading.DispatcherPriority.Loaded);
+        };
         m.Reports.ReportProblem = m.Wizard.ReportProblem = m.Monitor.ReportProblem = m.Resources.ReportProblem = input => ReportProblemAsync(m, input);
     }
 
@@ -61,6 +83,35 @@ public sealed partial class MainWindow : Window
         using var ms = new MemoryStream();
         await s.CopyToAsync(ms);
         return (files[0].Name, ms.ToArray());
+    }
+
+    /// <summary>The first control of the new page takes the focus (no focus ring: it is not a Tab press).</summary>
+    private void FocusPage()
+    {
+        if (Page.GetVisualDescendants().OfType<InputElement>().FirstOrDefault(c => c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled) is { } first
+            && FocusManager?.GetFocusedElement() is not TextBox)
+            first.Focus(NavigationMethod.Unspecified);
+    }
+
+    private async Task OpenFolderAsync(string path)
+    {
+        if (await StorageProvider.TryGetFolderFromPathAsync(path) is { } folder)
+            await Launcher.LaunchFileAsync(folder);
+    }
+
+    /// <summary>Several files at once (the resources' import).</summary>
+    private async Task<IReadOnlyList<(string Name, byte[] Bytes)>> OpenFilesAsync()
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions { AllowMultiple = true });
+        var result = new List<(string, byte[])>();
+        foreach (var f in files)
+        {
+            await using var s = await f.OpenReadAsync();
+            using var ms = new MemoryStream();
+            await s.CopyToAsync(ms);
+            result.Add((f.Name, ms.ToArray()));
+        }
+        return result;
     }
 
     private async Task CopyAsync(string text)

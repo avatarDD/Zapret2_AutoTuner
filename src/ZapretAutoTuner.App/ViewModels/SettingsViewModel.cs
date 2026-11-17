@@ -36,7 +36,8 @@ public sealed partial class SettingsViewModel : PageViewModel
         _guiUrl = host.Settings.GuiUrl;
         _guiToken = host.Settings.GuiToken;
         _routerHost = host.Settings.RouterHost;
-        _largeFont = host.Settings.LargeFont;
+        _scaleIndex = Math.Max(0, Array.IndexOf(Scales, host.Settings.UiScale));
+        L.PropertyChanged += (_, _) => OnPropertyChanged(nameof(ModeHint));
         _minimizeToTray = host.Settings.MinimizeToTray;
         _closeToTray = host.Settings.CloseToTray;
         _advisorEnabled = host.Settings.AdvisorEnabled;
@@ -47,6 +48,114 @@ public sealed partial class SettingsViewModel : PageViewModel
     }
 
     public override string TitleKey => "nav.settings";
+
+    // ---- the tabs (UX audit P1: one column of 40+ controls): Interface, Search, Router, MCP and bridge, Advisor, Data
+
+    public const int InterfaceTab = 0;
+    public const int SearchTab = 1;
+    public const int RouterTab = 2;
+    public const int McpTab = 3;
+    public const int AdvisorTab = 4;
+    public const int DataTab = 5;
+
+    [ObservableProperty]
+    private int _tabIndex;
+
+    /// <summary>The language as a list ("Русский" / "English") instead of an English-only check box.</summary>
+    public int LanguageIndex
+    {
+        get => English ? 1 : 0;
+        set
+        {
+            if (value is 0 or 1)
+                English = value == 1;
+        }
+    }
+
+    /// <summary>The interface scale in percent: everything grows, the small texts of logs and hints too.</summary>
+    public static int[] Scales { get; } = [100, 115, 130, 150];
+
+    public IReadOnlyList<string> ScaleTitles => [.. Scales.Select(s => s + " %")];
+
+    [ObservableProperty]
+    private int _scaleIndex;
+
+    partial void OnScaleIndexChanged(int value)
+    {
+        var scale = Scales[Math.Clamp(value, 0, Scales.Length - 1)];
+        _host.Settings.UiScale = scale;
+        App.ApplyScale(scale);
+    }
+
+    /// <summary>What each search depth changes, under the list (the three words alone said nothing).</summary>
+    public string ModeHint => L["settings.mode_hint_" + Modes[Math.Clamp(ModeIndex, 0, Modes.Length - 1)].ToLowerInvariant()];
+
+    // ---- the router: one place for its addresses, token and passwords (UX audit P1)
+
+    /// <summary>zapret-gui's web password: in memory for this run only, shared with the wizard and Resources.</summary>
+    public string GuiPassword
+    {
+        get => RouterCredentials.GuiPassword;
+        set
+        {
+            if (value == RouterCredentials.GuiPassword)
+                return;
+            RouterCredentials.GuiPassword = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>The router's SSH password: in memory for this run only, shared with the wizard and Resources.</summary>
+    public string RouterPassword
+    {
+        get => RouterCredentials.RouterPassword;
+        set
+        {
+            if (value == RouterCredentials.RouterPassword)
+                return;
+            RouterCredentials.RouterPassword = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public System.Collections.ObjectModel.ObservableCollection<string> RouterCheckLines { get; } = [];
+
+    [ObservableProperty]
+    private bool _routerChecking;
+
+    [RelayCommand]
+    private async Task CheckRouterAsync()
+    {
+        if (RouterChecking)
+            return;
+        RouterChecking = true;
+        RouterCheckLines.Clear();
+        RouterCheckLines.Add(L["router.checking"]);
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            var lines = await RouterCheck.RunAsync(_host.Settings, cts.Token);
+            RouterCheckLines.Clear();
+            foreach (var l in lines)
+                RouterCheckLines.Add(l);
+        }
+        finally
+        {
+            RouterChecking = false;
+        }
+    }
+
+    // ---- data
+
+    /// <summary>Opens a folder in the file manager; set by the window.</summary>
+    public Func<string, Task>? OpenFolder { get; set; }
+
+    [RelayCommand]
+    private async Task OpenDataDirAsync()
+    {
+        if (OpenFolder is not null)
+            await OpenFolder(DataDir);
+    }
 
     public static string[] Modes { get; } = ["Quick", "Standard", "Full"];
 
@@ -88,9 +197,6 @@ public sealed partial class SettingsViewModel : PageViewModel
 
     [ObservableProperty]
     private string _routerHost;
-
-    [ObservableProperty]
-    private bool _largeFont;
 
     [ObservableProperty]
     private bool _mcpEnabled;
@@ -206,6 +312,7 @@ public sealed partial class SettingsViewModel : PageViewModel
 
     partial void OnEnglishChanged(bool value)
     {
+        OnPropertyChanged(nameof(LanguageIndex));
         L.English = value;
         _host.Settings.Language = value ? "en" : "ru";
     }
@@ -216,7 +323,11 @@ public sealed partial class SettingsViewModel : PageViewModel
         App.ApplyTheme(_host.Settings.Theme);
     }
 
-    partial void OnModeIndexChanged(int value) => _host.Settings.SearchMode = Modes[Math.Clamp(value, 0, Modes.Length - 1)];
+    partial void OnModeIndexChanged(int value)
+    {
+        _host.Settings.SearchMode = Modes[Math.Clamp(value, 0, Modes.Length - 1)];
+        OnPropertyChanged(nameof(ModeHint));
+    }
 
     partial void OnAutoApplyChanged(bool value) => _host.Settings.ApplyPolicy = value ? "auto" : "ask";
 
@@ -292,6 +403,8 @@ public sealed partial class SettingsViewModel : PageViewModel
             GuiToken = _host.Settings.GuiToken;
         if (RouterHost != _host.Settings.RouterHost)
             RouterHost = _host.Settings.RouterHost;
+        OnPropertyChanged(nameof(GuiPassword));
+        OnPropertyChanged(nameof(RouterPassword));
     }
 
     /// <summary>Forgets the remembered SSH host keys, after the user changed the router or its key on purpose.</summary>
@@ -345,10 +458,4 @@ public sealed partial class SettingsViewModel : PageViewModel
     partial void OnAdvisorEndpointChanged(string value) => _host.Settings.AdvisorEndpoint = value;
 
     partial void OnAdvisorKeyChanged(string value) => _host.Settings.AdvisorKey = value;
-
-    partial void OnLargeFontChanged(bool value)
-    {
-        _host.Settings.LargeFont = value;
-        App.ApplyFont(value);
-    }
 }

@@ -4,36 +4,95 @@
         xmlns:l="using:ZapretAutoTuner.App.Loc"
         x:Class="ZapretAutoTuner.App.MainWindow"
         x:DataType="vm:MainViewModel"
-        Title="Zapret2 AutoTuner" Icon="/Assets/icon.ico" Width="1100" Height="740" MinWidth="760" MinHeight="520">
-  <DockPanel>
-    <Border DockPanel.Dock="Top" Background="#D9A21B" Padding="12,6" IsVisible="{Binding Mcp.BannerVisible}">
-      <DockPanel>
-        <Button DockPanel.Dock="Right" Content="{l:T mcp.stop}" Command="{Binding Mcp.StopCommand}" />
-        <TextBlock Text="{Binding Mcp.BannerText}" Foreground="Black" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
-      </DockPanel>
-    </Border>
-    <Border DockPanel.Dock="Left" Width="200" Padding="8" Background="{DynamicResource LayerFillColorDefaultBrush}">
-      <DockPanel>
-        <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="4,8">
-          <TextBlock Text="{Binding AgentStatus}" Classes="error" FontSize="12" IsVisible="{Binding AgentStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-          <TextBlock Text="{Binding Version}" Classes="muted" FontSize="11" />
-        </StackPanel>
-        <TextBlock DockPanel.Dock="Top" Text="AutoTuner" FontSize="20" FontWeight="SemiBold" Margin="8,4,8,12" />
-        <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding Current}" Background="Transparent">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:PageViewModel">
-              <StackPanel>
-                <TextBlock Text="{Binding Section}" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,6,0,2"
-                           IsVisible="{Binding Section, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                <TextBlock Text="{Binding Title}" />
-                <TextBlock Text="{Binding Hint}" Classes="muted" FontSize="11" TextWrapping="Wrap"
-                           IsVisible="{Binding Hint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-              </StackPanel>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
-    </Border>
-    <ContentControl Content="{Binding Current}" Margin="20,16" />
-  </DockPanel>
+        Title="{Binding WindowTitle}" Icon="/Assets/icon.ico" Width="1100" Height="740" MinWidth="820" MinHeight="520">
+  <!-- Ctrl+1…9: the pages of the menu in order (keyboard access, UX audit P2) -->
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Ctrl+D1" Command="{Binding GoToCommand}" CommandParameter="1" />
+    <KeyBinding Gesture="Ctrl+D2" Command="{Binding GoToCommand}" CommandParameter="2" />
+    <KeyBinding Gesture="Ctrl+D3" Command="{Binding GoToCommand}" CommandParameter="3" />
+    <KeyBinding Gesture="Ctrl+D4" Command="{Binding GoToCommand}" CommandParameter="4" />
+    <KeyBinding Gesture="Ctrl+D5" Command="{Binding GoToCommand}" CommandParameter="5" />
+    <KeyBinding Gesture="Ctrl+D6" Command="{Binding GoToCommand}" CommandParameter="6" />
+    <KeyBinding Gesture="Ctrl+D7" Command="{Binding GoToCommand}" CommandParameter="7" />
+    <KeyBinding Gesture="Ctrl+D8" Command="{Binding GoToCommand}" CommandParameter="8" />
+    <KeyBinding Gesture="Ctrl+D9" Command="{Binding GoToCommand}" CommandParameter="9" />
+  </Window.KeyBindings>
+  <!-- the whole window scales with "Масштаб интерфейса" (the small fixed font sizes too) -->
+  <LayoutTransformControl x:Name="Scaled">
+    <DockPanel>
+      <Border DockPanel.Dock="Top" Background="#D9A21B" Padding="12,6" IsVisible="{Binding Mcp.BannerVisible}">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="{l:T mcp.stop}" Command="{Binding Mcp.StopCommand}" />
+          <TextBlock Text="{Binding Mcp.BannerText}" Foreground="Black" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
+        </DockPanel>
+      </Border>
+
+      <!-- the status bar (UX audit P0): what runs now, whatever page is open, and one button that stops it all -->
+      <Border DockPanel.Dock="Bottom" Padding="12,6" Background="{DynamicResource LayerFillColorDefaultBrush}"
+              BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Classes="danger" Content="{l:T status.stop_all}" Command="{Binding StopAllCommand}"
+                  IsVisible="{Binding AnythingRunning}" IsEnabled="{Binding !Stopping}" Margin="8,0,0,0"
+                  ToolTip.Tip="{l:T status.stop_all_tip}" AutomationProperties.Name="{l:T status.stop_all}" />
+          <TextBlock DockPanel.Dock="Right" Text="{Binding AgentText}" Classes="muted small" VerticalAlignment="Center" Margin="12,0,0,0" />
+          <WrapPanel VerticalAlignment="Center">
+            <Button Classes="link error" Content="{Binding EnvironmentProblem}" Command="{Binding OpenEnvironmentCommand}" Margin="0,0,12,0"
+                    IsVisible="{Binding EnvironmentProblem, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Text="{l:T status.idle}" Classes="muted small" VerticalAlignment="Center" IsVisible="{Binding !AnythingRunning}" />
+            <ItemsControl ItemsSource="{Binding Running}">
+              <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:StatusItem">
+                  <Button Classes="link status" Margin="0,0,12,0" Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).OpenStatusCommand}"
+                          CommandParameter="{Binding}" AutomationProperties.Name="{Binding Text}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <Ellipse Width="8" Height="8" Fill="#2E9E5B" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Text}" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding StopResult}" Classes="muted small" VerticalAlignment="Center" IsVisible="{Binding !AnythingRunning}" Margin="12,0,0,0" />
+          </WrapPanel>
+        </DockPanel>
+      </Border>
+
+      <Border DockPanel.Dock="Left" Width="216" Padding="8" Background="{DynamicResource LayerFillColorDefaultBrush}">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="4,8">
+            <TextBlock Text="{Binding AgentStatus}" Classes="error small" IsVisible="{Binding AgentStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Text="{Binding Version}" Classes="muted" FontSize="11" />
+          </StackPanel>
+          <TextBlock DockPanel.Dock="Top" Text="AutoTuner" FontSize="20" FontWeight="SemiBold" Margin="8,4,8,12" />
+          <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding Current}" Background="Transparent" AutomationProperties.Name="{l:T nav.menu}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:PageViewModel">
+                <StackPanel>
+                  <TextBlock Text="{Binding Section}" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,6,0,2"
+                             IsVisible="{Binding Section, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                  <DockPanel>
+                    <!-- runs now: a dot (the status bar says what) -->
+                    <Ellipse DockPanel.Dock="Right" Width="8" Height="8" Fill="#2E9E5B" VerticalAlignment="Center" Margin="6,0,0,0"
+                             IsVisible="{Binding Busy}" ToolTip.Tip="{l:T nav.busy}" />
+                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+                  </DockPanel>
+                  <DockPanel>
+                    <!-- which engine the page works with: on the hint's line, so the name keeps the whole width -->
+                    <Border DockPanel.Dock="Right" Classes="badge" Classes.geneva="{Binding Engine, Converter={x:Static vm:Converters.IsGeneva}}"
+                            IsVisible="{Binding HasEngine}" VerticalAlignment="Top" Margin="6,1,0,0">
+                      <TextBlock Text="{Binding Engine}" />
+                    </Border>
+                    <TextBlock Text="{Binding Hint}" Classes="muted" FontSize="11" TextWrapping="Wrap"
+                               IsVisible="{Binding Hint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                  </DockPanel>
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+      <ContentControl x:Name="Page" Content="{Binding Current}" Margin="20,16" AutomationProperties.Name="{Binding Current.Title}" />
+    </DockPanel>
+  </LayoutTransformControl>
 </Window>

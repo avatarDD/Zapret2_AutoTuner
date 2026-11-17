@@ -158,9 +158,12 @@ public sealed partial class ResourcesViewModel : PageViewModel
         New();
     }
 
+    /// <summary>The list was read again and the same resource is selected anew: the editor keeps what is typed.</summary>
+    private bool _reselecting;
+
     partial void OnSelectedChanged(ResourceRowViewModel? value)
     {
-        if (value is not null)
+        if (value is not null && !_reselecting)
             Load(value.Info);
     }
 
@@ -187,8 +190,22 @@ public sealed partial class ResourcesViewModel : PageViewModel
         OnPropertyChanged(nameof(NothingFound));
         OnPropertyChanged(nameof(RouterText));
         OnPropertyChanged(nameof(RouterPassword));
+        // the same resource stays selected without loading it again: unsaved edits in the editor are kept (a search
+        // in the list reloads on every key)
         if (keep is not null && Items.FirstOrDefault(r => r.Info.Kind == keep.Kind && r.Name == keep.Name) is { } row)
-            Selected = row;
+        {
+            _reselecting = true;
+            try
+            {
+                Selected = row;
+            }
+            finally
+            {
+                _reselecting = false;
+            }
+            if (keep.Kind == ResourceKind.LuaScript)
+                Approval = ApprovalText(row.Info);
+        }
     }
 
     private void Load(ResourceInfo info)

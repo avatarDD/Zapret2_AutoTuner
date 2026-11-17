@@ -195,26 +195,35 @@ public sealed partial class MainViewModel : ObservableObject
         var genevaRun = _host.Geneva.RunRunning;
         var genevaSearch = _host.Geneva.SearchRunning;
         if (auto)
-            items.Add(new StatusItem(L["status.auto"], Auto));
+            items.Add(new StatusItem("auto", L["status.auto"], Auto));
         if (genevaRun)
-            items.Add(new StatusItem(L["status.geneva_run"], Engine));
+            items.Add(new StatusItem("geneva_run", L["status.geneva_run"], Engine));
         if (genevaSearch)
-            items.Add(new StatusItem(L["status.geneva_search"], Engine));
+            items.Add(new StatusItem("geneva_search", L["status.geneva_search"], Engine));
         if (Monitor.Active)
-            items.Add(new StatusItem(L["status.protection"], Monitor));
+            items.Add(new StatusItem("protection", L["status.protection"], Monitor));
         if (Wizard.Running)
-            items.Add(new StatusItem(Wizard.Paused ? L["status.wizard_paused"] : L.F("status.wizard", Wizard.Percent.ToString("0")), Wizard));
+            items.Add(new StatusItem("wizard", Wizard.Paused ? L["status.wizard_paused"] : L.F("status.wizard", Wizard.Percent.ToString("0")), Wizard));
         if (Home.Running)
-            items.Add(new StatusItem(L["status.checker"], Home));
+            items.Add(new StatusItem("checker", L["status.checker"], Home));
         if (Mcp.Session.Busy)
-            items.Add(new StatusItem(L["status.mcp"], Settings));
-        if (!items.Select(i => i.Text).SequenceEqual(Running.Select(i => i.Text)))
+            items.Add(new StatusItem("mcp", L["status.mcp"], Settings));
+        // the same things run: only their texts change (the percent), the bar's buttons stay and keep the focus
+        if (items.Select(i => i.Id).SequenceEqual(Running.Select(i => i.Id)))
+        {
+            for (int n = 0; n < items.Count; n++)
+                Running[n].Text = items[n].Text;
+        }
+        else
         {
             Running.Clear();
             foreach (var i in items)
                 Running.Add(i);
         }
         AnythingRunning = items.Count > 0;
+        // the answer of the last "Остановить всё" is about that moment: it goes once something runs again
+        if (AnythingRunning && !Stopping)
+            StopResult = "";
         Auto.Busy = auto;
         Engine.Busy = genevaRun || genevaSearch;
         Monitor.Busy = Monitor.Active;
@@ -255,6 +264,9 @@ public sealed partial class MainViewModel : ObservableObject
         await StopEverythingAsync();
     }
 
+    /// <summary>How long "Остановить всё" waits for a search to wind down before it goes on.</summary>
+    private static readonly TimeSpan SearchStopWait = TimeSpan.FromSeconds(20);
+
     /// <summary>Stops everything without asking (the tray's and tests' entry); each step's failure does not stop the next.</summary>
     public async Task StopEverythingAsync()
     {
@@ -276,11 +288,16 @@ public sealed partial class MainViewModel : ObservableObject
         }
         try
         {
-            // the searches first: a search may hold the bypass paused
+            // the searches first, and they are waited for: a search runs its own engine and rules, and may hold the
+            // bypass paused
             if (Wizard.Running)
                 Wizard.StopCommand.Execute(null);
             if (Home.Running)
                 Home.CheckCommand.Execute(null);
+            for (var waited = TimeSpan.Zero; (Wizard.Running || Home.Running) && waited < SearchStopWait; waited += TimeSpan.FromMilliseconds(100))
+                await Task.Delay(100);
+            if (Wizard.Running || Home.Running)
+                failures.Add(L["status.search_still_stopping"]);
             await Step(Mcp.Session.Busy, Mcp.StopAsync);
             await Step(_host.Geneva.SearchRunning, () => _host.Geneva.StopSearchAsync());
             await Step(_host.GenevaAuto.Running, () => _host.GenevaAuto.DisableAsync());
@@ -319,5 +336,13 @@ public sealed partial class MainViewModel : ObservableObject
     }
 }
 
-/// <summary>One thing that runs now, in the status bar; a click opens its page.</summary>
-public sealed record StatusItem(string Text, PageViewModel Page);
+/// <summary>One thing that runs now, in the status bar; a click opens its page. Its text changes in place (the percent).</summary>
+public sealed partial class StatusItem(string id, string text, PageViewModel page) : ObservableObject
+{
+    public string Id { get; } = id;
+
+    public PageViewModel Page { get; } = page;
+
+    [ObservableProperty]
+    private string _text = text;
+}

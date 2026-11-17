@@ -181,11 +181,12 @@ public sealed partial class ExpertViewModel : PageViewModel
         }
     }
 
-    /// <summary>The sites of <see cref="StrategySites"/>, as hostnames (a pasted URL keeps its host).</summary>
+    /// <summary>The sites of <see cref="StrategySites"/>, as hostnames (a pasted URL keeps its host; IP addresses are left out).</summary>
     internal static List<string> ParseSites(string text) =>
         [.. text.Split([' ', ',', ';', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(t => Uri.TryCreate(t.Contains("://", StringComparison.Ordinal) ? t : "https://" + t, UriKind.Absolute, out var u) ? u.IdnHost : "")
-            .Where(h => h.Contains('.', StringComparison.Ordinal))
+            // a hostlist matches names only: an address would never match (addresses go to an ipset in "Ресурсы")
+            .Where(h => h.Contains('.', StringComparison.Ordinal) && !System.Net.IPAddress.TryParse(h.Trim('[', ']'), out _))
             .Select(h => h.TrimEnd('.').ToLowerInvariant())
             .Distinct(StringComparer.Ordinal)];
 

@@ -36,7 +36,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         _guiUrl = host.Settings.GuiUrl;
         _guiToken = host.Settings.GuiToken;
         _routerHost = host.Settings.RouterHost;
-        _scaleIndex = Math.Max(0, Array.IndexOf(Scales, host.Settings.UiScale));
+        _scaleIndex = Math.Max(0, Scales.ToList().IndexOf(host.Settings.UiScale));
         L.PropertyChanged += (_, _) => OnPropertyChanged(nameof(ModeHint));
         _minimizeToTray = host.Settings.MinimizeToTray;
         _closeToTray = host.Settings.CloseToTray;
@@ -73,7 +73,7 @@ public sealed partial class SettingsViewModel : PageViewModel
     }
 
     /// <summary>The interface scale in percent: everything grows, the small texts of logs and hints too.</summary>
-    public static int[] Scales { get; } = [100, 115, 130, 150];
+    public static IReadOnlyList<int> Scales => AppSettings.Scales;
 
     public IReadOnlyList<string> ScaleTitles => [.. Scales.Select(s => s + " %")];
 
@@ -82,7 +82,7 @@ public sealed partial class SettingsViewModel : PageViewModel
 
     partial void OnScaleIndexChanged(int value)
     {
-        var scale = Scales[Math.Clamp(value, 0, Scales.Length - 1)];
+        var scale = Scales[Math.Clamp(value, 0, Scales.Count - 1)];
         _host.Settings.UiScale = scale;
         App.ApplyScale(scale);
     }

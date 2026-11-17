@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
@@ -18,10 +19,16 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) => App.ScaleChanged -= ApplyScale;
     }
 
+    private const double BaseMinWidth = 820;
+    private const double BaseMinHeight = 520;
+
     private void ApplyScale(int percent)
     {
         var f = percent / 100.0;
         Scaled.LayoutTransform = Math.Abs(f - 1) < 0.001 ? null : new Avalonia.Media.ScaleTransform(f, f);
+        // the content keeps its minimum size at any scale
+        MinWidth = BaseMinWidth * f;
+        MinHeight = BaseMinHeight * f;
     }
 
     /// <summary>Gives the view models the few things only a window can do: files, clipboard, the yes/no dialog.</summary>
@@ -88,8 +95,10 @@ public sealed partial class MainWindow : Window
     /// <summary>The first control of the new page takes the focus (no focus ring: it is not a Tab press).</summary>
     private void FocusPage()
     {
-        if (Page.GetVisualDescendants().OfType<InputElement>().FirstOrDefault(c => c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled) is { } first
-            && FocusManager?.GetFocusedElement() is not TextBox)
+        // browsing the menu with the arrow keys keeps the focus in the menu; a shortcut, a link or a click elsewhere moves it
+        if (FocusManager?.GetFocusedElement() is Visual focused && (focused is TextBox || Menu.IsVisualAncestorOf(focused) || ReferenceEquals(focused, Menu)))
+            return;
+        if (Page.GetVisualDescendants().OfType<InputElement>().FirstOrDefault(c => c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled) is { } first)
             first.Focus(NavigationMethod.Unspecified);
     }
 

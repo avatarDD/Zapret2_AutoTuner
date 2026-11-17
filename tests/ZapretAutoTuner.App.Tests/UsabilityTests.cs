@@ -251,6 +251,15 @@ public sealed class UsabilityTests : IAsyncLifetime
         var blob = ResourcesViewModel.ImportInput(ResourceKind.Blob, "hello", [1, 2, 3, 255]);
         Assert.Equal([1, 2, 3, 255], blob.Bytes);
 
+        // searching keeps unsaved edits of the selected resource
+        vm.Selected = vm.Items.First(i => i.Name == "youtube");
+        vm.Content += "\nytimg.com";
+        vm.Filter = "y";
+        vm.Filter = "yo";
+        Assert.Contains("ytimg.com", vm.Content, StringComparison.Ordinal);
+        Assert.Equal("youtube", vm.Selected?.Name);
+        vm.Filter = "";
+
         // a copy is a new unsaved resource under a free name
         vm.Selected = vm.Items.First(i => i.Name == "youtube");
         vm.DuplicateCommand.Execute(null);
@@ -291,6 +300,24 @@ public sealed class UsabilityTests : IAsyncLifetime
         Assert.Equal(115, Host.Settings.UiScale);
         Host.Settings.UiScale = 150;
         Assert.Equal(150, Host.Settings.UiScale);
+        // a scale the settings do not offer is not trusted
+        Host.Kb.SetSetting("ui.scale", "120");
+        Assert.Equal(115, Host.Settings.UiScale);
+    }
+
+    [Fact]
+    public void SitesAreHostnamesOnly() =>
+        Assert.Equal(["example.org", "xn--e1afmkfd.xn--p1ai"], ExpertViewModel.ParseSites("1.2.3.4 https://Example.org/x [2001:db8::1] пример.рф https://10.0.0.1/"));
+
+    [AvaloniaFact]
+    public void TheStatusBarKeepsItsItemsWhileOnlyTheTextChanges()
+    {
+        var main = new MainViewModel(Host);
+        var item = new StatusItem("wizard", "1 %", main.Wizard);
+        main.Running.Add(item);
+        main.RefreshStatus();
+        // nothing really runs: the fake item goes, and the old answer of "Остановить всё" stays while idle
+        Assert.Empty(main.Running);
     }
 
     [AvaloniaFact]

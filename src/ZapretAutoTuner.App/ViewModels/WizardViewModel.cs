@@ -377,7 +377,8 @@ public sealed partial class WizardViewModel : PageViewModel
             GuiUrl = _host.Settings.GuiUrl;
         if (GuiToken.Trim() != _host.Settings.GuiToken.Trim())
             GuiToken = _host.Settings.GuiToken;
-        if (RouterHost.Trim() != _host.Settings.RouterHost && _host.Settings.RouterHost.Length > 0)
+        // an address typed here and not used yet is kept; an empty field takes the one from Settings
+        if (RouterHost.Trim().Length == 0 && _host.Settings.RouterHost.Length > 0)
             RouterHost = _host.Settings.RouterHost;
         if (RouterPassword != RouterCredentials.RouterPassword)
             RouterPassword = RouterCredentials.RouterPassword;

@@ -65,7 +65,7 @@
             <TextBlock Text="{Binding Version}" Classes="muted" FontSize="11" />
           </StackPanel>
           <TextBlock DockPanel.Dock="Top" Text="AutoTuner" FontSize="20" FontWeight="SemiBold" Margin="8,4,8,12" />
-          <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding Current}" Background="Transparent" AutomationProperties.Name="{l:T nav.menu}">
+          <ListBox x:Name="Menu" ItemsSource="{Binding Pages}" SelectedItem="{Binding Current}" Background="Transparent" AutomationProperties.Name="{l:T nav.menu}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:PageViewModel">
                 <StackPanel>

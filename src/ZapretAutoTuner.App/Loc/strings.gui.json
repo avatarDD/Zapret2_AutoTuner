@@ -87,6 +87,10 @@
   "Всё остановлено.",
   "Everything is stopped."
  ],
+ "status.search_still_stopping": [
+  "подбор ещё завершается",
+  "a search is still winding down"
+ ],
  "status.stop_failed": [
   "Остановлено не всё: {0}",
   "Not everything stopped: {0}"

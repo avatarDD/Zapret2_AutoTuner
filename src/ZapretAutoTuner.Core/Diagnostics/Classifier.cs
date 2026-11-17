@@ -305,6 +305,7 @@ public static class Classifier
             Add(BlockLabel.Tls13Block, ["TLS 1.2 проходит, TLS 1.3 нет", .. Evidence(t13)]);
 
         ClassifyHellos(a, baseline.Any(b => b.TlsOk), Add);
+        ExplainBySize(a, main, r);
 
         // 2.6
         if (a.Http is { ConnectOk: true } http && IsHttpBlock(t.Host, http, out var why))
@@ -367,6 +368,31 @@ public static class Classifier
             add(BlockLabel.Unknown, [Describe(b)]);
         else if (b.Error is ProbeError.TlsFailed)
             add(BlockLabel.Unknown, [$"TLS не согласован: {b.ErrorDetail}"]);
+    }
+
+    /// <summary>
+    /// The platform's own ClientHello can carry a post-quantum share too (OpenSSL 3.5+, recent Windows): then the
+    /// baseline, the cross-SNI test and the TLS 1.3 probe are cut for their size, like the kyber hello, and say nothing
+    /// about SNI, the IP range or the TLS version. When kyber is confirmed and those probes sent a hello larger than
+    /// every hello that passed, their labels are dropped and the size is named in the kyber finding.
+    /// </summary>
+    private static void ExplainBySize(AddressObservation a, ProbeResult? main, List<LabelFinding> r)
+    {
+        int k = r.FindIndex(x => x.Label == BlockLabel.KyberMultiPkt);
+        long maxPassed = a.Hellos.Where(h => h.PassedDpi).Select(h => (long)h.HelloBytes).DefaultIfEmpty(0).Max();
+        if (k < 0 || maxPassed == 0)
+            return;
+        static bool HelloCut(ProbeResult? p) => p is { TlsOk: false, Error: ProbeError.TlsReset or ProbeError.TlsTimeout or ProbeError.TlsClosed };
+        var notes = new List<string>();
+        if (HelloCut(main) && main!.BytesOut > maxPassed
+            && r.RemoveAll(x => x.Label is BlockLabel.SniBlock or BlockLabel.PartialIp) > 0)
+            notes.Add($"ClientHello системы тоже большой ({main.BytesOut} B): SNI и диапазон IP по нему не проверить");
+        if (HelloCut(a.Tls13) && a.Tls13!.BytesOut > maxPassed && r.RemoveAll(x => x.Label == BlockLabel.Tls13Block) > 0)
+            notes.Add($"TLS 1.3 не прошёл из-за размера ClientHello ({a.Tls13.BytesOut} B), а не версии");
+        if (notes.Count == 0)
+            return;
+        k = r.FindIndex(x => x.Label == BlockLabel.KyberMultiPkt);
+        r[k] = r[k] with { Evidence = [.. r[k].Evidence, .. notes] };
     }
 
     private static void ClassifyHellos(AddressObservation a, bool nativeTlsOk, Action<BlockLabel, string[]> add)

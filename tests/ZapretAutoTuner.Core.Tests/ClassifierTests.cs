@@ -196,6 +196,28 @@ public sealed class ClassifierTests
         Assert.Equal(NextStep.SearchStrategy, v.Next);
     }
 
+    [Theory]
+    [InlineData(1600, true)]   // OpenSSL 3.5+: the system hello carries kyber too (the stand's kyber.test on CI)
+    [InlineData(520, false)]   // a small system hello failing too is a real IP-range block
+    public void A_large_system_hello_is_explained_by_kyber(long systemHello, bool explained)
+    {
+        var big = Fail(ProbeError.TlsTimeout) with { BytesOut = systemHello };
+        var v = Run(Addr() with
+        {
+            Baseline = [big, big],
+            NeutralSni = big with { Sni = "iana.org" },
+            NeutralControl = Ok("192.0.2.10") with { Host = "iana.org" },
+            Tls12 = Ok() with { TlsVersion = "1.2" },
+            Tls13 = big,
+            Hellos = [Hello("chrome141", false, kyber: true), Hello("chrome141", true, kyber: false)],
+        });
+        Assert.Equal(explained ? BlockLabel.KyberMultiPkt : BlockLabel.PartialIp, v.Primary);
+        Assert.Equal(explained, !v.Labels.Contains(BlockLabel.PartialIp) && !v.Labels.Contains(BlockLabel.Tls13Block));
+        Assert.Contains(BlockLabel.KyberMultiPkt, v.Labels);
+        if (explained)
+            Assert.Contains(v.Findings.Single().Evidence, e => e.Contains("1600 B", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Ech_hello_failing_alone_is_the_ech_block()
     {

@@ -99,7 +99,7 @@ public sealed class Zapret2v107TuningTests
         var s = StrategySiteCheck.SolutionFor(Split, "youtube.com");
         var p = Assert.Single(s.Profiles);
         Assert.Equal(["youtube.com"], p.HostlistDomains);
-        Assert.Equal("80,443", p.TcpPorts);
+        Assert.Equal("443", p.TcpPorts);   // what the HTTPS probe checked
         Assert.Equal(["youtube.com"], Protection.Domains(s));
         var v = new StrategyValidator(new ValidationContext { Platform = EnginePlatform.Linux }).ValidateProfile(p, p.Name);
         Assert.True(v.Ok, v.ToString());

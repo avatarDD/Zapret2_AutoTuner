@@ -49,6 +49,23 @@ public sealed class Zapret2v107Tests
         Assert.Equal(match, HostlistEntry.Matches(list, host));
 
     [Fact]
+    public void Merged_lists_match_what_the_lists_match_together()
+    {
+        IReadOnlyList<string>[] lists =
+        [
+            ["ru", "!bank.ru", "^shop.ru"],
+            ["bank.ru", "shop.ru", "!mail.ru"],
+            ["com", "!^x.com"],
+            ["com", "!x.com", "!y.com"],
+        ];
+        var merged = HostlistEntry.Merge(lists);
+        foreach (var host in new[] { "ru", "bank.ru", "m.bank.ru", "shop.ru", "a.shop.ru", "mail.ru", "m.mail.ru", "x.com", "m.x.com", "y.com", "m.y.com", "z.com", "org" })
+            Assert.True(lists.Any(l => HostlistEntry.Matches(l, host)) == HostlistEntry.Matches(merged, host), host);
+        // no exemptions: a plain ordered union
+        Assert.Equal(["a.com", "b.com", "c.com"], HostlistEntry.Merge([["a.com", "b.com"], ["b.com", "c.com"]]));
+    }
+
+    [Fact]
     public void Exemptions_survive_normalisation_and_conflicts_are_reported()
     {
         var (domains, problems) = ResourceRules.NormalizeDomains(["com", "^!VK.com", "!https://m.example.org/x", "vk.com", "^!vk.com"]);

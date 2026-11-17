@@ -28,6 +28,12 @@ public sealed record SiteCheckResult(SiteCheckVerdict Verdict, IReadOnlyList<Tri
     /// <summary>The most frequent failure with the strategy, for the message.</summary>
     public TrialFailure MainFailure =>
         Outcomes.Where(o => !o.Ok).GroupBy(o => o.Failure).OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault();
+
+    /// <summary>
+    /// The detail of a failure of that kind, e.g. why the Agent refused to start the engine (the executor turns a
+    /// refusal into one failed attempt with the reason).
+    /// </summary>
+    public string? MainDetail => Outcomes.FirstOrDefault(o => !o.Ok && o.Failure == MainFailure && !string.IsNullOrEmpty(o.Detail))?.Detail;
 }
 
 /// <summary>
@@ -62,8 +68,9 @@ public static class StrategySiteCheck
     }
 
     /// <summary>
-    /// The strategy as a solution of its own for the site: one TCP 80,443 profile limited to the site by hostlist
-    /// (and its subdomains), so "Использовать" and the export carry exactly what was checked.
+    /// The strategy as a solution of its own for the site: one TCP 443 profile limited to the site by hostlist
+    /// (and its subdomains), so "Использовать" and the export carry exactly what was checked (the probe loads the
+    /// site over HTTPS on 443).
     /// </summary>
     public static Solution SolutionFor(Strategy strategy, string site) => new()
     {
@@ -72,7 +79,7 @@ public static class StrategySiteCheck
             new Profile
             {
                 Name = "expert",
-                TcpPorts = "80,443",
+                TcpPorts = "443",
                 HostlistDomains = [site],
                 Strategy = strategy,
             },

@@ -129,6 +129,15 @@ public sealed class AppHost : IAsyncDisposable
 
     public bool AgentRunning => _agent is not null;
 
+    private int _expertChecks;
+
+    /// <summary>«Эксперт» checks a strategy on a site with its own engine instance (geneva, the wizard and the model wait).</summary>
+    public bool ExpertCheckRunning => Volatile.Read(ref _expertChecks) > 0;
+
+    public void ExpertCheckStarted() => Interlocked.Increment(ref _expertChecks);
+
+    public void ExpertCheckFinished() => Interlocked.Decrement(ref _expertChecks);
+
     /// <summary>zapret-gui on the router: the experiments link and the feedback after a commit (PLAN 7.6).</summary>
     public RouterService Router => _router ??= new RouterService(this);
 

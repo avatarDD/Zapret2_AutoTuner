@@ -255,6 +255,10 @@
   "Идёт подбор мастером: дождитесь его окончания.",
   "The wizard is tuning: wait for it to finish."
  ],
+ "engine.busy_expert": [
+  "В «Эксперте» идёт проверка стратегии на сайте: дождитесь её окончания или остановите.",
+  "Expert is checking a strategy on a site: wait for it to finish or stop it."
+ ],
  "engine.chart_fitness": [
   "Фитнес по поколениям: зелёный — лучший, серый — средний",
   "Fitness by generation: green is the best, grey the average"
@@ -620,8 +624,8 @@
   "Site"
  ],
  "expert.site_hint": [
-  "Заблокированный сайт, например youtube.com. Проверка: сначала без обхода (сайт должен не открываться), затем 5 полных загрузок со стратегией, TCP 80 и 443.",
-  "A blocked site such as youtube.com. The check loads it without a bypass first (it must fail), then 5 full loads with the strategy, TCP 80 and 443."
+  "Заблокированный сайт, например youtube.com. Проверка: сначала без обхода (сайт должен не открываться), затем 5 полных загрузок по HTTPS (TCP 443) со стратегией.",
+  "A blocked site such as youtube.com. The check loads it without a bypass first (it must fail), then 5 full HTTPS loads (TCP 443) with the strategy."
  ],
  "expert.check_site": [
   "Проверить на сайте",
@@ -642,6 +646,10 @@
  "expert.busy_geneva": [
   "Сейчас работает geneva (обход или подбор): остановите её, затем проверяйте стратегию zapret2 — два движка на одном порту мешают друг другу.",
   "geneva is running (bypass or search): stop it, then check the zapret2 strategy — two engines on one port get in each other's way."
+ ],
+ "expert.busy_protection": [
+  "Работает защита zapret2: без обхода сайт проверить нельзя. Остановите защиту на странице «Защита zapret2», затем проверяйте.",
+  "The zapret2 protection is on: the site cannot be checked without a bypass. Stop the protection on its page, then check."
  ],
  "expert.site_bad": [
   "Впишите домен сайта, например youtube.com.",

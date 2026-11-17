@@ -133,7 +133,7 @@ geneva не идёт. Если обход перестал работать, с�
    На вкладке «Стратегия» одну строку `--lua-desync=…` можно проверить на
    своём сайте: «Проверить на сайте» сначала открывает сайт без обхода
    (он должен не открываться, иначе проверять не на чем), затем 5 раз
-   полностью загружает его со стратегией (TCP 80 и 443) и пишет итог:
+   полностью загружает его по HTTPS (TCP 443) со стратегией и пишет итог:
    работает, нестабильно или не работает. «Использовать для сайта»
    делает стратегию текущей только для этого сайта (и его поддоменов).
 7. **Ресурсы.** Свои хостлисты, ipset'ы, блобы и Lua-скрипты. Имя можно
@@ -361,8 +361,8 @@ geneva_c 1.1 or newer.
    Export and Turn on on this computer appear next to it. On the Strategy tab
    a single `--lua-desync=…` line can be checked on your site: Check on the
    site first loads the site without a bypass (it must fail, or there is
-   nothing to check), then loads it fully 5 times with the strategy (TCP 80
-   and 443) and says whether it works, is unstable or does not work. Use for
+   nothing to check), then loads it fully 5 times over HTTPS (TCP 443) with the
+   strategy and says whether it works, is unstable or does not work. Use for
    the site makes the strategy current for that site (and its subdomains) only.
 7. **Resources** keeps your hostlists, ipsets, blobs and Lua scripts. A name may
    have an extension: "youtube.txt" is saved as "youtube". In a hostlist

@@ -255,10 +255,13 @@ public sealed partial class StrategyValidator
 
     /// <summary>
     /// winws2 1.0.7: <c>--wf-priority</c> is −30000..30000 (otherwise exit 1), and the WinDivert filter buffer is
-    /// 16384 bytes (was 64K), so a longer inline <c>--wf-raw</c>/<c>--wf-raw-filter</c> cannot load.
+    /// 16384 bytes (was 64K). <c>--wf-raw</c> is the whole filter; <c>--wf-raw-filter</c> and <c>--wf-raw-part</c>
+    /// go inside the one winws2 builds (ports, loopback and the long LAN exclusion), so together they get half of it,
+    /// like our own target filter. Files (<c>@file</c>) are read by the engine and not checked here.
     /// </summary>
     private static void CheckWinDivertOptions(IReadOnlyList<string> argv, ValidationResult r)
     {
+        int parts = 0;
         foreach (var tok in argv)
         {
             if (!tok.StartsWith("--wf-", StringComparison.Ordinal))
@@ -267,9 +270,15 @@ public sealed partial class StrategyValidator
             if (name == "--wf-priority"
                 && (value is null || !int.TryParse(value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var prio) || prio is < WinDivertMinPriority or > WinDivertMaxPriority))
                 r.Error("wf.priority", $"--wf-priority должен быть целым от {WinDivertMinPriority} до {WinDivertMaxPriority}", $"--wf-priority must be an integer {WinDivertMinPriority}..{WinDivertMaxPriority}", tok);
-            if (name is "--wf-raw" or "--wf-raw-filter" && value is { Length: > 0 } && value[0] != '@' && value.Length >= Engine.EngineArgsBuilder.WinDivertMaxFilter)
-                r.Error("wf.filter_size", $"фильтр {name} длиннее {Engine.EngineArgsBuilder.WinDivertMaxFilter} символов: winws2 1.0.7 его не загрузит", $"{name} filter exceeds {Engine.EngineArgsBuilder.WinDivertMaxFilter} characters, winws2 1.0.7 cannot load it", name);
+            if (value is not { Length: > 0 } || value[0] == '@')
+                continue;
+            if (name == "--wf-raw" && value.Length >= Engine.EngineArgsBuilder.WinDivertMaxFilter)
+                r.Error("wf.filter_size", $"фильтр --wf-raw длиннее {Engine.EngineArgsBuilder.WinDivertMaxFilter - 1} символов: winws2 1.0.7 его не загрузит", $"--wf-raw exceeds {Engine.EngineArgsBuilder.WinDivertMaxFilter - 1} characters, winws2 1.0.7 cannot load it", name);
+            else if (name is "--wf-raw-filter" or "--wf-raw-part")
+                parts += value.Length;
         }
+        if (parts > Engine.EngineArgsBuilder.WinDivertMaxFilter / 2)
+            r.Error("wf.filter_size", $"--wf-raw-filter и --wf-raw-part вместе длиннее {Engine.EngineArgsBuilder.WinDivertMaxFilter / 2} символов: с портами и исключением LAN фильтр winws2 1.0.7 не поместится в 16 KB", $"--wf-raw-filter and --wf-raw-part exceed {Engine.EngineArgsBuilder.WinDivertMaxFilter / 2} characters together: with the ports and the LAN exclusion the winws2 1.0.7 filter does not fit 16 KB", "--wf-raw-filter");
     }
 
     public const int WinDivertMinPriority = -30000;

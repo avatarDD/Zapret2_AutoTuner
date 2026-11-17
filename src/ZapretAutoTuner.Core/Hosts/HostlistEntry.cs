@@ -27,30 +27,81 @@ public readonly record struct HostlistEntry(string Domain, bool Strict, bool Exe
     /// <summary>
     /// Does one list match <paramref name="host"/>? The engine's <c>SearchHostList</c>: walk from the full name to
     /// the top-level domain; the first entry for a suffix wins (a duplicate later in the list is ignored), a strict
-    /// entry counts only for the full name, an exemption ends the search with no match.
+    /// entry counts only for the full name, an exemption ends the search with no match. One pass over the list and
+    /// no copy of it: only entries for the host's own suffixes are looked at.
     /// </summary>
     public static bool Matches(IEnumerable<string> list, string host)
     {
-        var map = new Dictionary<string, HostlistEntry>(StringComparer.Ordinal);
+        var name = host.Trim().TrimEnd('.').ToLowerInvariant();
+        if (name.Length == 0)
+            return false;
+        // the host's suffixes, full name first: www.youtube.com, youtube.com, com
+        var suffixes = new List<string> { name };
+        for (int dot = name.IndexOf('.', StringComparison.Ordinal); dot >= 0; dot = name.IndexOf('.', dot + 1))
+            suffixes.Add(name[(dot + 1)..]);
+        var found = new HostlistEntry?[suffixes.Count];
         foreach (var line in list)
         {
-            var e = Parse(line.Trim());
-            if (e.Domain.Length > 0)
-                map.TryAdd(e.Domain, e);
+            var t = line.AsSpan().Trim();
+            int i = 0;
+            while (i < t.Length && t[i] is '^' or '!')
+                i++;
+            var domain = t[i..];
+            for (int k = 0; k < suffixes.Count; k++)
+            {
+                if (found[k] is null && domain.Equals(suffixes[k], StringComparison.OrdinalIgnoreCase))
+                {
+                    found[k] = Parse(t.ToString());
+                    break;
+                }
+            }
         }
-        var p = host.Trim().TrimEnd('.').ToLowerInvariant();
-        bool full = true;
-        while (p.Length > 0)
+        for (int k = 0; k < suffixes.Count; k++)
         {
-            if (map.TryGetValue(p, out var e) && !(e.Strict && !full))
+            if (found[k] is { } e && !(e.Strict && k > 0))
                 return !e.Exempt;
-            int dot = p.IndexOf('.', StringComparison.Ordinal);
-            if (dot < 0)
-                break;
-            p = p[(dot + 1)..];
-            full = false;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Several lists of one profile as one static list (<c>--hostlist-domains</c>) that matches what the lists match
+    /// together. A list matches by itself (an exemption is local to it), so an exemption that another list would
+    /// cover — the name, or for a non-strict one anything under it — is dropped; of two includes for one name the
+    /// one without <c>^</c> stays, since it matches more. Without exemptions this is a plain ordered union.
+    /// </summary>
+    public static List<string> Merge(IReadOnlyList<IReadOnlyList<string>> lists)
+    {
+        var order = new List<string>();
+        var merged = new Dictionary<string, HostlistEntry>(StringComparer.Ordinal);
+        for (int i = 0; i < lists.Count; i++)
+        {
+            var own = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var line in lists[i])
+            {
+                var e = Parse(line.Trim());
+                // the engine keeps the first entry of a name within one list
+                if (e.Domain.Length == 0 || !own.Add(e.Domain))
+                    continue;
+                if (e.Exempt)
+                {
+                    int self = i;
+                    bool covered = lists.Where((_, j) => j != self).Any(l => Matches(l, e.Domain) || (!e.Strict && Matches(l, "*." + e.Domain)));
+                    if (covered)
+                        continue;
+                }
+                if (!merged.TryGetValue(e.Domain, out var cur))
+                {
+                    merged[e.Domain] = e;
+                    order.Add(e.Domain);
+                }
+                else if (!e.Exempt && !cur.Exempt && cur.Strict && !e.Strict)
+                    merged[e.Domain] = e;
+                else if (e.Exempt && cur.Exempt && cur.Strict && !e.Strict)
+                    merged[e.Domain] = e;
+            }
+        }
+        return [.. order.Select(d => merged[d].ToString())];
     }
 
     /// <summary>Domains the list includes (exemptions and prefixes dropped), for display and target lists.</summary>

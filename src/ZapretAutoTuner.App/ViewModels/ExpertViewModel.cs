@@ -5,6 +5,8 @@ using ZapretAutoTuner.App.Services;
 using ZapretAutoTuner.Core.Export;
 using ZapretAutoTuner.Core.Model;
 using ZapretAutoTuner.Core.Resources;
+using ZapretAutoTuner.Core.Search;
+using ZapretAutoTuner.Storage;
 using ZapretAutoTuner.Core.Validation;
 using ZapretAutoTuner.Protocol;
 using ZapretAutoTuner.Tuning;
@@ -79,11 +81,24 @@ public sealed partial class ExpertViewModel : PageViewModel
     [ObservableProperty]
     private string _siteResult = "";
 
-    /// <summary>A solution was made current here: show «Экспортировать» and «Включить на этом компьютере».</summary>
+    /// <summary>The import was made current: «Экспортировать» and «Включить на этом компьютере» next to «Использовать».</summary>
     [ObservableProperty]
-    private bool _hasNextStep;
+    private bool _importNextStep;
 
-    partial void OnStrategyTextChanged(string value) => UseStrategyCommand.NotifyCanExecuteChanged();
+    /// <summary>The single strategy was made current for the site: the same two buttons on the «Стратегия» tab.</summary>
+    [ObservableProperty]
+    private bool _strategyNextStep;
+
+    // the buttons act on what was made current: once the text changes they would act on something else than is shown
+    partial void OnImportTextChanged(string value) => ImportNextStep = false;
+
+    partial void OnStrategyTextChanged(string value)
+    {
+        StrategyNextStep = false;
+        UseStrategyCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSiteTextChanged(string value) => StrategyNextStep = false;
 
     [RelayCommand]
     private async Task OpenAsync()
@@ -141,6 +156,7 @@ public sealed partial class ExpertViewModel : PageViewModel
         }
         _imported = r.Solution;
         CanUse = ok;
+        ImportNextStep = false;
     }
 
     /// <summary>Makes the import the current solution: the wizard's export and the monitor work on it.</summary>
@@ -151,7 +167,7 @@ public sealed partial class ExpertViewModel : PageViewModel
             return;
         SessionState.I.Last = new PipelineResult([], null, _imported);
         Status = L["expert.used"];
-        HasNextStep = true;
+        ImportNextStep = true;
     }
 
     [RelayCommand]
@@ -164,7 +180,7 @@ public sealed partial class ExpertViewModel : PageViewModel
             await ProtectHere();
     }
 
-    /// <summary>The site as typed («https://site/path» is fine), or null when it is not a domain.</summary>
+    /// <summary>The site as typed («https://site/path» is fine), or null when it is not a plain domain.</summary>
     private string? Site()
     {
         var (domains, problems) = ResourceRules.NormalizeDomains([SiteText]);
@@ -188,6 +204,35 @@ public sealed partial class ExpertViewModel : PageViewModel
         }
     }
 
+    /// <summary>
+    /// The site, the validated strategy and its one-profile solution with the user's blobs and approved Lua attached;
+    /// null with the reason in <see cref="SiteResult"/>.
+    /// </summary>
+    private (string Site, Strategy Strategy, Solution Solution)? Prepare(ResourceStore? store)
+    {
+        if (Site() is not { } site)
+        {
+            SiteResult = "✖ " + L["expert.site_bad"];
+            return null;
+        }
+        if (ValidStrategy() is not { } strategy)
+        {
+            SiteResult = "✖ " + L["expert.site_invalid"];
+            return null;
+        }
+        var solution = StrategySiteCheck.SolutionFor(strategy, site);
+        try
+        {
+            store?.AttachTo(solution);
+        }
+        catch (ResourceException e)
+        {
+            SiteResult = "✖ " + L.Pick(e.Ru, e.En);
+            return null;
+        }
+        return (site, strategy, solution);
+    }
+
     private bool CanCheckOnSite() => !Checking && Host is not null && SiteText.Trim().Length > 0;
 
     /// <summary>
@@ -197,34 +242,15 @@ public sealed partial class ExpertViewModel : PageViewModel
     [RelayCommand(CanExecute = nameof(CanCheckOnSite))]
     private async Task CheckOnSiteAsync()
     {
-        if (Host is not { } host)
+        if (Host is not { } host || Prepare(host.Resources) is not var (site, strategy, solution))
             return;
-        if (Site() is not { } site)
-        {
-            SiteResult = "✖ " + L["expert.site_bad"];
-            return;
-        }
-        if (ValidStrategy() is not { } strategy)
-        {
-            SiteResult = "✖ " + L["expert.site_invalid"];
-            return;
-        }
         if (Busy?.Invoke() is { } busy)
         {
             SiteResult = busy;
             return;
         }
-        var solution = StrategySiteCheck.SolutionFor(strategy, site);
-        try
-        {
-            host.Resources.AttachTo(solution);
-        }
-        catch (ResourceException e)
-        {
-            SiteResult = "✖ " + L.Pick(e.Ru, e.En);
-            return;
-        }
         Checking = true;
+        host.ExpertCheckStarted();
         _checkCts = new CancellationTokenSource();
         var ct = _checkCts.Token;
         try
@@ -253,12 +279,14 @@ public sealed partial class ExpertViewModel : PageViewModel
         {
             SiteResult = L["common.stopped"];
         }
-        catch (Exception e) when (e is EngineRefusedException or AgentStartException or InvalidOperationException or Grpc.Core.RpcException or System.Net.Sockets.SocketException)
+        catch (Exception e) when (e is EngineRefusedException or AgentStartException or InvalidOperationException or ArgumentException
+            or Grpc.Core.RpcException or System.Net.Sockets.SocketException or IOException)
         {
             SiteResult = "✖ " + e.Message;
         }
         finally
         {
+            host.ExpertCheckFinished();
             Checking = false;
             _checkCts?.Dispose();
             _checkCts = null;
@@ -270,46 +298,35 @@ public sealed partial class ExpertViewModel : PageViewModel
     [RelayCommand(CanExecute = nameof(CanStopCheck))]
     private void StopCheck() => _checkCts?.Cancel();
 
-    private string Describe(SiteCheckResult r, string site) => r.Verdict switch
+    private string Describe(SiteCheckResult r, string site)
     {
-        SiteCheckVerdict.NotBlocked => "ℹ " + L.F("expert.site_not_blocked", site),
-        SiteCheckVerdict.Works => "✓ " + L.F("expert.site_works", site, r.Ok, r.Outcomes.Count),
-        SiteCheckVerdict.Unstable => "⚠ " + L.F("expert.site_unstable", site, r.Ok, r.Outcomes.Count, L["expert.failure." + r.MainFailure.ToString().ToLowerInvariant()]),
-        _ => "✖ " + L.F("expert.site_fails", site, L["expert.failure." + r.MainFailure.ToString().ToLowerInvariant()]),
-    };
+        var text = r.Verdict switch
+        {
+            SiteCheckVerdict.NotBlocked => "ℹ " + L.F("expert.site_not_blocked", site),
+            SiteCheckVerdict.Works => "✓ " + L.F("expert.site_works", site, r.Ok, r.Outcomes.Count),
+            SiteCheckVerdict.Unstable => "⚠ " + L.F("expert.site_unstable", site, r.Ok, r.Outcomes.Count, Failure(r.MainFailure)),
+            _ => "✖ " + L.F("expert.site_fails", site, Failure(r.MainFailure)),
+        };
+        // the engine's own words when it refused to start or broke (the Agent's refusal comes as one failed attempt)
+        return r.MainDetail is { Length: > 0 } detail && r.Verdict is SiteCheckVerdict.Fails or SiteCheckVerdict.Unstable ? text + "\n" + detail : text;
+    }
+
+    private string Failure(TrialFailure f) => L["expert.failure." + f.ToString().ToLowerInvariant()];
 
     private bool CanUseStrategy() => !Checking && StrategyText.Trim().Length > 0 && SiteText.Trim().Length > 0;
 
     /// <summary>
-    /// «Использовать»: the strategy for the site as the current solution (one TCP 80,443 profile limited to the site),
-    /// which «Экспортировать» and «Включить на этом компьютере» then take.
+    /// «Использовать для сайта»: the strategy for the site as the current solution (one TCP 80,443 profile limited
+    /// to the site), which «Экспортировать» and «Включить на этом компьютере» then take.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanUseStrategy))]
     private void UseStrategy()
     {
-        if (Site() is not { } site)
-        {
-            SiteResult = "✖ " + L["expert.site_bad"];
+        if (Prepare(Resources) is not var (site, _, solution))
             return;
-        }
-        if (ValidStrategy() is not { } strategy)
-        {
-            SiteResult = "✖ " + L["expert.site_invalid"];
-            return;
-        }
-        var solution = StrategySiteCheck.SolutionFor(strategy, site);
-        try
-        {
-            Resources?.AttachTo(solution);
-        }
-        catch (ResourceException e)
-        {
-            SiteResult = "✖ " + L.Pick(e.Ru, e.En);
-            return;
-        }
         SessionState.I.Last = new PipelineResult([], null, solution);
         SiteResult = L.F("expert.strategy_used", site);
-        HasNextStep = true;
+        StrategyNextStep = true;
     }
 
     [RelayCommand]

@@ -13,8 +13,8 @@
           <Button Content="{l:T expert.open}" Command="{Binding OpenCommand}" Margin="0,0,8,8" />
           <Button Classes="accent" Content="{l:T expert.parse}" Command="{Binding ImportCommand}" Margin="0,0,8,8" />
           <Button Content="{l:T expert.use}" Command="{Binding UseCommand}" IsEnabled="{Binding CanUse}" Margin="0,0,8,8" />
-          <Button Content="{l:T expert.export}" Command="{Binding ExportCommand}" IsVisible="{Binding HasNextStep}" Margin="0,0,8,8" />
-          <Button Content="{l:T expert.protect}" Command="{Binding ProtectCommand}" IsVisible="{Binding HasNextStep}" Margin="0,0,8,8" />
+          <Button Content="{l:T expert.export}" Command="{Binding ExportCommand}" IsVisible="{Binding ImportNextStep}" Margin="0,0,8,8" />
+          <Button Content="{l:T expert.protect}" Command="{Binding ProtectCommand}" IsVisible="{Binding ImportNextStep}" Margin="0,0,8,8" />
           <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" />
         </WrapPanel>
         <TextBlock Grid.Row="3" Text="{Binding ImportKind}" FontWeight="SemiBold" />
@@ -52,8 +52,8 @@
           <Button Classes="accent" Content="{l:T expert.check_site}" Command="{Binding CheckOnSiteCommand}" Margin="0,0,8,8" />
           <Button Content="{l:T common.stop}" Command="{Binding StopCheckCommand}" IsVisible="{Binding Checking}" Margin="0,0,8,8" />
           <Button Content="{l:T expert.use_site}" Command="{Binding UseStrategyCommand}" Margin="0,0,8,8" />
-          <Button Content="{l:T expert.export}" Command="{Binding ExportCommand}" IsVisible="{Binding HasNextStep}" Margin="0,0,8,8" />
-          <Button Content="{l:T expert.protect}" Command="{Binding ProtectCommand}" IsVisible="{Binding HasNextStep}" Margin="0,0,8,8" />
+          <Button Content="{l:T expert.export}" Command="{Binding ExportCommand}" IsVisible="{Binding StrategyNextStep}" Margin="0,0,8,8" />
+          <Button Content="{l:T expert.protect}" Command="{Binding ProtectCommand}" IsVisible="{Binding StrategyNextStep}" Margin="0,0,8,8" />
         </WrapPanel>
         <ProgressBar IsIndeterminate="True" IsVisible="{Binding Checking}" />
         <SelectableTextBlock Text="{Binding SiteResult}" TextWrapping="Wrap" />

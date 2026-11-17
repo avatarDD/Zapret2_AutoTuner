@@ -162,12 +162,14 @@ public static class ArgvExporter
             Profiles = s.Profiles.Select(p =>
             {
                 var c = p.Clone();
-                c.HostlistDomains.AddRange(p.Hostlists.SelectMany(l => s.Hostlists[l.Name]));
+                // one static list per profile: "!" exemptions stay local to their list (HostlistEntry.Merge)
+                if (p.Hostlists.Count > 0)
+                    c.HostlistDomains = Hosts.HostlistEntry.Merge([p.HostlistDomains, .. p.Hostlists.Select(l => (IReadOnlyList<string>)s.Hostlists[l.Name])]);
                 c.Hostlists = [];
                 c.IpsetIps.AddRange(p.Ipsets.SelectMany(l => s.Ipsets[l.Name]));
                 c.Ipsets = [];
                 if (p.HostlistExcludes.Count > 0)
-                    c.ExtraOptions.Insert(0, "--hostlist-exclude-domains=" + string.Join(',', p.HostlistExcludes.SelectMany(l => s.Hostlists[l.Name])));
+                    c.ExtraOptions.Insert(0, "--hostlist-exclude-domains=" + string.Join(',', Hosts.HostlistEntry.Merge([.. p.HostlistExcludes.Select(l => (IReadOnlyList<string>)s.Hostlists[l.Name])])));
                 if (p.IpsetExcludes.Count > 0)
                     c.ExtraOptions.Insert(0, "--ipset-exclude-ip=" + string.Join(',', p.IpsetExcludes.SelectMany(l => s.Ipsets[l.Name])));
                 c.HostlistExcludes = [];

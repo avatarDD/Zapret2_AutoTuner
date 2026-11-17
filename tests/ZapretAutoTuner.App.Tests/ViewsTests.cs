@@ -220,9 +220,12 @@ public sealed class ViewsTests : IAsyncLifetime
         var s = SessionState.I.Last?.Solution;
         Assert.NotNull(s);
         Assert.Equal(["www.youtube.com"], Assert.Single(s.Profiles).HostlistDomains);
-        Assert.True(e.HasNextStep);
+        Assert.True(e.StrategyNextStep);
         e.ExportCommand.Execute(null);
         Assert.True(exported);
+        // the buttons act on what was made current: editing hides them until «Использовать» again
+        e.SiteText = "youtube.com";
+        Assert.False(e.StrategyNextStep);
 
         // an invalid strategy or a non-domain is refused and the current solution stays
         e.SiteText = "1.2.3.4";

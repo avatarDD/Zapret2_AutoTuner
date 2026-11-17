@@ -156,6 +156,12 @@ TLS 1.2 обходится труднее 1.3: в ServerHello сертифика
 
 Тест-раннер выдаёт для каждой попытки структуру `ProbeResult`:
 `{connect_ok, tls_ok, http_status, bytes_in, ttfb, duration, stalled_at, rst_seen, rst_origin_guess, alpn, tls_version, error}`.
+`stalled_at` — расшифрованные байты ответа, `wire_bytes_in` — байты от сервера на проводе
+(с handshake и TLS-записями), их и считает объёмный DPI. Расшифровка отстаёт на целую запись
+(до 16 KB): обрыв внутри первой записи ответа даёт `stalled_at` ≈ 0. Поэтому обрыв 16 KB —
+это `stalled_at` в 8–32 KB **или** `stalled_at` < 8 KB при `wire_bytes_in` в 14–32 KB
+(`Classifier.IsVolumeStop`); ответ, начавшийся на проводе (≥ 1 KB после запроса), но не
+расшифрованный, — это stall, а не «нет ответа».
 
 Уровни проверки:
 

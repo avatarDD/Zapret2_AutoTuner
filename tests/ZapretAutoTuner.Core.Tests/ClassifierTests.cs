@@ -148,6 +148,18 @@ public sealed class ClassifierTests
     }
 
     [Fact]
+    public void Cutoff_inside_a_tls_record_is_the_cutoff()
+    {
+        // only the headers decrypted, the wire stopped at ~16 KB (the stand's cut.test on CI)
+        var v = Run(Addr() with { Baseline = [Fail(ProbeError.Stalled, tls: true, bytes: 176) with { WireBytesIn = 16_074 }] });
+        Assert.Equal(BlockLabel.Cutoff16K, v.Primary);
+        Assert.Contains(v.Findings.Single().Evidence, e => e.Contains("16074 B на проводе", StringComparison.Ordinal));
+        // a slow server: a few KB decrypted, the handshake makes up the rest of the wire count
+        var slow = Run(Addr() with { Baseline = [Fail(ProbeError.Stalled, tls: true, bytes: 3000) with { WireBytesIn = 9000 }] });
+        Assert.DoesNotContain(BlockLabel.Cutoff16K, slow.Labels);
+    }
+
+    [Fact]
     public void Stall_far_from_16k_is_not_the_cutoff()
     {
         var v = Run(Addr() with { Baseline = [Fail(ProbeError.Stalled, tls: true, bytes: 900_000)] });

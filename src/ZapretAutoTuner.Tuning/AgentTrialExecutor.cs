@@ -29,6 +29,15 @@ public sealed record TrialTarget
 
     /// <summary>Padding for a small resource behind a volume cut-off.</summary>
     public int PadBytes { get; init; }
+
+    /// <summary>The speed a bypass of a shaper must reach, B/s (dpi-diagnostics §2.16); 0: not judged.</summary>
+    public double MinRate { get; init; }
+
+    /// <summary>Body read to measure that speed.</summary>
+    public long RateBytes { get; init; }
+
+    /// <summary>The target with the classifier's success criterion (<see cref="ClassifierVerdict.Criteria"/>).</summary>
+    public TrialTarget With(ProbeCriteria c) => this with { MinBytes = c.MinBytes, PadBytes = c.PadBytes, MinRate = c.MinRate, RateBytes = c.RateBytes };
 }
 
 public sealed record AgentTrialOptions
@@ -167,6 +176,8 @@ public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target
             Path = target.Path,
             MinBytes = target.MinBytes,
             PadBytes = target.PadBytes,
+            MinRate = target.MinRate,
+            RateBytes = target.RateBytes,
             QuietRttFactor = options.QuietRttFactor,
         };
         return options.TweakHttp?.Invoke(o) ?? o;
@@ -221,7 +232,7 @@ public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target
             ProbeError.ConnectTimeout or ProbeError.ConnectRefused or ProbeError.Unreachable => TrialFailure.NoConnect,
             ProbeError.TlsReset or ProbeError.HttpReset => TrialFailure.Reset,
             ProbeError.TlsTimeout or ProbeError.HttpTimeout => TrialFailure.Timeout,
-            ProbeError.Stalled or ProbeError.Truncated or ProbeError.TimeLimit => TrialFailure.Stalled,
+            ProbeError.Stalled or ProbeError.Truncated or ProbeError.TimeLimit or ProbeError.Throttled => TrialFailure.Stalled,
             _ when r.TlsOk && !r.CertValid => TrialFailure.BadCertificate,
             _ => TrialFailure.Other,
         };

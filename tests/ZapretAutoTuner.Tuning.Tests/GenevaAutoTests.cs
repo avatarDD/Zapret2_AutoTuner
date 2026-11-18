@@ -48,7 +48,7 @@ public sealed class GenevaAutoTests
             Udp(Me, 50003, "8.8.8.8", 53, DnsQuery("example.com"))), new Dictionary<int, ObservedSocket[]>());
         var agent = new FakeGenevaAgent();
         var store = new MemoryGenevaStore { Json = saved?.Serialize() };
-        var controller = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, (h, p, t, l, ct) => Task.FromResult(new ProbeResult { Host = h, Address = "" }));
+        var controller = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, (h, p, t, l, _, ct) => Task.FromResult(new ProbeResult { Host = h, Address = "" }));
         before?.Invoke(controller, agent);
         var probes = new FakeProbes(agent, works ?? AutoCandidates.Dns[1]);
         var auto = new GenevaAuto(controller, _ => Task.FromResult<IGenevaAgent>(agent), monitor, probes,

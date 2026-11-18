@@ -3,6 +3,7 @@ using System.Net;
 using ZapretAutoTuner.Core.Diagnostics;
 using ZapretAutoTuner.Core.Geneva;
 using ZapretAutoTuner.Core.Geneva.Auto;
+using ZapretAutoTuner.Probes.Http;
 using ZapretAutoTuner.Protocol;
 
 namespace ZapretAutoTuner.Tuning.Geneva;
@@ -117,7 +118,7 @@ public sealed class GenevaController : IAsyncDisposable
 
     private readonly Func<CancellationToken, Task<IGenevaAgent>> _agent;
     private readonly IGenevaStore _store;
-    private readonly Func<string, int, bool, int, CancellationToken, Task<ProbeResult>> _probe;
+    private readonly Func<string, int, bool, int, ProbeCriteria, CancellationToken, Task<ProbeResult>> _probe;
     private readonly Lock _lock = new();
     private readonly List<GenevaTrial> _trials = [];
     private readonly List<string> _log = [];
@@ -130,6 +131,7 @@ public sealed class GenevaController : IAsyncDisposable
     private CancellationTokenSource? _probeCts;
     private string? _stopRequested;
     private GenevaJudge? _judge;
+    private ProbeCriteria _criteria = ProbeCriteria.Default;
     private (string Ru, string En)? _portsUnavailable;
     private string? _runId;
     private Task? _searchWatch;
@@ -137,8 +139,8 @@ public sealed class GenevaController : IAsyncDisposable
     private int _probeSeq;
 
     /// <param name="agent">The Agent (started on first use: one UAC / pkexec prompt).</param>
-    /// <param name="probe">(host, port, tls, local port) → the full-download probe from that local port.</param>
-    public GenevaController(Func<CancellationToken, Task<IGenevaAgent>> agent, IGenevaStore store, Func<string, int, bool, int, CancellationToken, Task<ProbeResult>> probe)
+    /// <param name="probe">(host, port, tls, local port, criterion) → the full-download probe from that local port.</param>
+    public GenevaController(Func<CancellationToken, Task<IGenevaAgent>> agent, IGenevaStore store, Func<string, int, bool, int, ProbeCriteria, CancellationToken, Task<ProbeResult>> probe)
     {
         _agent = agent;
         _store = store;
@@ -286,6 +288,7 @@ public sealed class GenevaController : IAsyncDisposable
             {
                 _searchId = reply.Id;
                 _judge = judge;
+                _criteria = settings.Criteria;
                 _probeCts?.Dispose();
                 _probeCts = probeCts;
                 _portsUnavailable = null;
@@ -538,7 +541,7 @@ public sealed class GenevaController : IAsyncDisposable
         {
             GenevaJudge judge;
             lock (_lock)
-                judge = _judge ?? ((port, c) => PageJudgeAsync(settings, port, c));
+                judge = _judge ?? ((port, c) => PageJudgeAsync(settings, port, e.Str("strategy") ?? "", c));
             GenevaJudgement? j = null;
             for (int attempt = 0; attempt < MaxPortAttempts; attempt++)
             {
@@ -583,13 +586,30 @@ public sealed class GenevaController : IAsyncDisposable
         }
     }
 
-    /// <summary>The default judge: the page's full download (L2) from the local port.</summary>
-    private async Task<GenevaJudgement> PageJudgeAsync(GenevaSearchSettings settings, int port, CancellationToken ct)
+    /// <summary>
+    /// The default judge: the page's full download (L2) from the local port under the target's criterion. The baseline
+    /// (geneva's first request, without a strategy) also checks for a shaper and for the 16 KB cut-off behind a small
+    /// page (<see cref="PageCheck"/>): a page that only seems to open is blocked, and every strategy after it must pass
+    /// the tighter criterion (the speed, the padded 128 KB). geneva repeats the baseline when a search continues.
+    /// </summary>
+    private async Task<GenevaJudgement> PageJudgeAsync(GenevaSearchSettings settings, int port, string strategy, CancellationToken ct)
     {
-        var r = await _probe(settings.Host, settings.Port, settings.Tls, port, ct).ConfigureAwait(false);
+        ProbeCriteria c;
+        lock (_lock)
+            c = _criteria;
+        bool baseline = GenevaStrategyText.IsEmpty(strategy);
+        var check = await PageCheck.RunAsync(c, baseline, LinkCapacity.Shared,
+            (k, t) => _probe(settings.Host, settings.Port, settings.Tls, port, k, t), ct).ConfigureAwait(false);
+        var r = check.Probe;
         if (LocalPortUnavailable(r))
             return new GenevaJudgement(0, r.ErrorDetail ?? "", PortUnavailable: true);
-        var (fitness, outcome) = GenevaFitness.FromProbe(r);
+        if (check.Finding is { } found)
+        {
+            lock (_lock)
+                _criteria = check.Criteria;
+            AddLog($"Без обхода страница открывается, но: {found}. Стратегия должна дать {check.Criteria}");
+        }
+        var (fitness, outcome) = GenevaFitness.FromProbe(r, ProbeLevel.L2Body, check.Criteria.MinBytes);
         return new GenevaJudgement(fitness, outcome + ": " + r);
     }
 

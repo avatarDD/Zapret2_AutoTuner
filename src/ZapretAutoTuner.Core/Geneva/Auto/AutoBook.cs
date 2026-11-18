@@ -35,6 +35,12 @@ public sealed class AutoService
     /// <summary>The client's first packets (base64, comma-separated) for a replay probe; empty when it cannot judge.</summary>
     public string Replay { get; set; } = "";
 
+    /// <summary>
+    /// A site's success criterion learned without a bypass (<c>PageCheck</c>): the speed behind a shaper, 128 KB with
+    /// padding behind the 16 KB cut-off. Null: the plain full download.
+    /// </summary>
+    public Diagnostics.ProbeCriteria? Criteria { get; set; }
+
     public AutoStatus Status { get; set; }
 
     public DateTime Since { get; set; }

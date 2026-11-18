@@ -56,10 +56,14 @@ public sealed class AutoProbes : IAutoProbes
             return AutoConfirm.Unknown;
         if (s.Kind == AutoKind.Web)
         {
-            var r = await HttpProbe.RunAsync(PageOptions(s, address, 0), ct).ConfigureAwait(false);
-            if (r.Passes(ProbeLevel.L2Body))
+            // also a shaper and the 16 KB cut-off behind a small page (dpi-diagnostics §2.16, §2.8): what is found
+            // stays with the service, and the search and the trials judge by it
+            var check = await PageCheck.RunAsync(PageOptions(s, address, 0), s.Criteria ?? ProbeCriteria.Default, learn: true, ct).ConfigureAwait(false);
+            if (check.Finding is not null)
+                s.Criteria = check.Criteria;
+            if (check.Passes)
                 return AutoConfirm.NotBlocked;
-            return r.Error is ProbeError.ConnectTimeout or ProbeError.Unreachable ? AutoConfirm.IpBlocked : AutoConfirm.Blocked;
+            return check.Probe.Error is ProbeError.ConnectTimeout or ProbeError.Unreachable ? AutoConfirm.IpBlocked : AutoConfirm.Blocked;
         }
         if (!s.CanReplay)
             return AutoConfirm.Unknown;

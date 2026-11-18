@@ -277,4 +277,31 @@ public class HttpProbeTests
         Assert.True((ok with { BodyBytes = 70_000, Complete = false }).Passes(ProbeLevel.L2Body));
         Assert.False((ok with { BodyBytes = 70_000, Complete = false }).Passes(ProbeLevel.L2Body, 128 * 1024));
     }
+
+    [Fact]
+    public async Task A_shaper_is_measured_and_fails_the_min_rate()
+    {
+        // 40 KB/s evenly: a shelf of a policer
+        await using var s = new TestServer(ServerMode.Ok, TestCerts.Leaf(Host), bodyBytes: 2_000_000) { RatePerSecond = 40_000 };
+        var r = await HttpProbe.RunAsync(Opts(s, o => o with
+        {
+            MinBytes = 16 * 1024, RateBytes = 1_000_000, RateTime = TimeSpan.FromSeconds(2.5), RateWindow = TimeSpan.FromMilliseconds(250),
+            MinRate = 120_000, StallTimeout = TimeSpan.FromSeconds(2),
+        }));
+        Assert.NotNull(r.Rate);
+        Assert.InRange(r.Rate!.Rate, 25_000, 60_000);
+        Assert.Equal(ProbeError.Throttled, r.Error);
+        Assert.False(r.Passes(ProbeLevel.L2Body, 16 * 1024));
+        Assert.True(RateShelf.IsShelf(r.Rate, 0));
+    }
+
+    [Fact]
+    public async Task A_fast_download_has_no_shelf_and_passes_the_min_rate()
+    {
+        await using var s = new TestServer(ServerMode.Ok, TestCerts.Leaf(Host), bodyBytes: 300_000);
+        var r = await HttpProbe.RunAsync(Opts(s, o => o with { RateBytes = 300_000, MinRate = 120_000 }));
+        Assert.Equal(ProbeError.None, r.Error);
+        Assert.True(r.Passes(ProbeLevel.L2Body));
+        Assert.False(RateShelf.IsShelf(r.Rate, 0));
+    }
 }

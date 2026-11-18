@@ -49,12 +49,7 @@ internal sealed class TrialRunner(McpSession session)
             return McpErrors.Budget(why!, retry);
 
         var addresses = verdict!.LiveAddresses.Select(IPAddress.Parse).ToList();
-        var trialTarget = new TrialTarget
-        {
-            Host = target,
-            Addresses = addresses,
-            MinBytes = verdict.Labels.Contains(BlockLabel.Cutoff16K) ? 128 * 1024 : 64 * 1024,
-        };
+        var trialTarget = new TrialTarget { Host = target, Addresses = addresses }.With(verdict.Criteria);
         var probeLevel = level == "L1" ? ProbeLevel.L1Handshake : ProbeLevel.L2Body;
         var candidate = new StrategyCandidate(strategy, "llm", 0, ["llm"], checkedStrategy.L4);
         var strategyId = session.Remember(strategy, checkedStrategy.L4);

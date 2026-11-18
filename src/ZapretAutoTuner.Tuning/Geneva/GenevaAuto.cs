@@ -621,8 +621,19 @@ public sealed class GenevaAuto : IAsyncDisposable
         if (s.Status == AutoStatus.Degraded && result == AutoConfirm.NotBlocked && !await _probes.HandshakesAsync(s, ct).ConfigureAwait(false))
             result = AutoConfirm.Blocked;
         string line;
+        string? tightened = null;
         lock (_lock)
+        {
+            // the probe learned what the page must show (a shaper, the 16 KB cut-off): the search judges by it
+            if (s.Criteria is { } learned && _book.Find(s.Key) is { } kept && kept.Criteria != learned)
+            {
+                kept.Criteria = learned;
+                tightened = $"{s.Name}: страница открывается не вся или медленно (шейпер, обрыв 16 КБ) — успех теперь: {learned}";
+            }
             line = _book.Confirmed(s.Key, result, _now());
+        }
+        if (tightened is not null)
+            AddLog(tightened);
         AddLog(line);
         if (s.Status == AutoStatus.Degraded && result != AutoConfirm.NotBlocked)
             await ApplyAsync(ct, force: true).ConfigureAwait(false);
@@ -848,6 +859,7 @@ public sealed class GenevaAuto : IAsyncDisposable
                 Resume = saved is not null,
                 Seeds = saved is null ? [.. seeds.Take(GenevaArgv.MaxSeeds)] : [],
                 Workers = _controller.Workers,
+                Criteria = s.Criteria ?? Core.Diagnostics.ProbeCriteria.Default,
             };
         if (settings.Problems() is { Count: > 0 } bad)
         {

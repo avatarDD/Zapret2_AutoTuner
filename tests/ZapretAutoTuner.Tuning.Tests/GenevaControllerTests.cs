@@ -36,7 +36,7 @@ public sealed class GenevaControllerTests
         public GenevaController Make()
         {
             int calls = 0;
-            return new GenevaController(_ => Task.FromResult<IGenevaAgent>(Agent), Store, (host, port, tls, local, ct) =>
+            return new GenevaController(_ => Task.FromResult<IGenevaAgent>(Agent), Store, (host, port, tls, local, _, ct) =>
             {
                 lock (LocalPorts)
                     LocalPorts.Add(local);
@@ -96,7 +96,7 @@ public sealed class GenevaControllerTests
         var store = new MemoryGenevaStore();
         var ports = new List<int>();
         int calls = 0, inFlight = 0, maxInFlight = 0;
-        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, async (host, port, tls, local, ct) =>
+        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, async (host, port, tls, local, _, ct) =>
         {
             int n = Interlocked.Increment(ref calls) - 1;
             lock (ports)
@@ -163,7 +163,7 @@ public sealed class GenevaControllerTests
     public void Workers_and_imports_are_kept_and_imports_never_replace()
     {
         var store = new MemoryGenevaStore();
-        var g = new GenevaController(_ => throw new InvalidOperationException(), store, (h, p, t, l, ct) => Task.FromResult(Reset(h)));
+        var g = new GenevaController(_ => throw new InvalidOperationException(), store, (h, p, t, l, _, ct) => Task.FromResult(Reset(h)));
         Assert.Equal(1, g.Workers);
         g.Workers = 4;
         g.Workers = 99;
@@ -214,7 +214,7 @@ public sealed class GenevaControllerTests
         var rig = new Rig();
         // the probe never answers until the search is stopped
         var gate = new TaskCompletionSource();
-        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(rig.Agent), rig.Store, async (host, port, tls, local, ct) =>
+        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(rig.Agent), rig.Store, async (host, port, tls, local, _, ct) =>
         {
             await gate.Task.WaitAsync(ct);
             return Reset(host);

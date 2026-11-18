@@ -105,6 +105,9 @@ internal sealed class TestServer : IAsyncDisposable
 
     public int CutAt { get; init; } = 16 * 1024;
 
+    /// <summary>When above zero the body goes out at this many bytes per second, evenly: a shaper.</summary>
+    public int RatePerSecond { get; init; }
+
     /// <summary>When true the body is sent without Content-Length and the connection is closed after it.</summary>
     public bool CloseDelimited { get; init; }
 
@@ -285,6 +288,11 @@ internal sealed class TestServer : IAsyncDisposable
                 if (Chunked)
                     await stream.WriteAsync("\r\n"u8.ToArray(), _cts.Token);
                 sent += n;
+                if (RatePerSecond > 0)
+                {
+                    await stream.FlushAsync(_cts.Token);
+                    await Task.Delay(TimeSpan.FromSeconds((double)n / RatePerSecond), _cts.Token);
+                }
             }
             if (Chunked)
                 await stream.WriteAsync("0\r\n\r\n"u8.ToArray(), _cts.Token);

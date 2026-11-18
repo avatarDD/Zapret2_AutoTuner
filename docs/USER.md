@@ -110,7 +110,12 @@ geneva не идёт. Если обход перестал работать, с�
   принимает такой же файл или простой текст — одна стратегия на строку.
   Импортированные стратегии добавляются рядом с вашими: рабочие не
   затираются, а новые проверяются (`geneva check`) и пробуются на вашем
-  трафике так же, как стартовый набор.
+  трафике так же, как стартовый набор. Стратегии с методами zapret2
+  (`xfake`, `xsplit`… geneva_c 2.0) называют фейки zapret2 одинаково в обеих
+  программах — `z2_<имя файла>` из `files/fake`, — поэтому найденное на ПК
+  работает и в zapret-gui с geneva_c 2.0, и наоборот. Стратегия, которой
+  нужен фейк, отсутствующий в вашей версии zapret2, сохраняется, но не
+  пробуется.
 
 Режим остаётся включённым после перезапуска. Окно можно свернуть в трей
 (значок у часов): обход работает, пока программа запущена, а «Выход» в меню
@@ -394,7 +399,11 @@ helps there.
   zapret-gui on the router opens the file too. "Import from a file…" takes such
   a file or plain text, one strategy per line. Imported strategies are added
   next to yours: working ones are never replaced, and new ones are checked
-  (`geneva check`) and tried on your traffic like the starting set.
+  (`geneva check`) and tried on your traffic like the starting set. Strategies
+  with zapret2's methods (`xfake`, `xsplit`… of geneva_c 2.0) name zapret2's
+  fakes the same way in both programs, `z2_<file name>` from `files/fake`, so
+  what you find on the PC works in zapret-gui with geneva_c 2.0 and back. A
+  strategy that needs a fake your zapret2 lacks is kept but not tried.
 
 The mode stays on across restarts. The window can be minimized to the tray: the
 bypass works while the program runs, and Exit in the tray menu closes the

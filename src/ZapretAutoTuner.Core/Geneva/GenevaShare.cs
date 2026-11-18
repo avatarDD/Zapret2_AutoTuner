@@ -18,9 +18,15 @@ public sealed record GenevaSharedStrategy
 /// <summary>
 /// The exchange file of found geneva strategies, the same as zapret-gui's (<c>core/geneva_share.py</c>):
 /// <code>
-/// {"format": "zapret-gui/geneva-strategies", "version": 1, "exported_at": "2026-11-04T09:40:00Z",
-///  "items": [{"strategy": "...", "transport": "tcp", "services": ["youtube.com", ...], "fitness": 396.0}]}
+/// {"format": "zapret-gui/geneva-strategies", "version": 2, "exported_at": "2026-11-04T09:40:00Z",
+///  "items": [{"strategy": "...", "transport": "tcp", "services": ["youtube.com", ...], "fitness": 396.0},
+///            {"strategy": "[TCP:flags:PA]-xfake{blob=z2_tls_clienthello_vk_com;ttl=3}-| \/", "transport": "tcp",
+///             "services": ["vk.com"], "ext": true, "blobs": ["z2_tls_clienthello_vk_com"]}]}
 /// </code>
+/// Version 2 (agreed with zapret-gui, which runs geneva_c 2.0 too) marks an x-strategy: <c>ext</c> (it needs
+/// <c>--ext</c>) and <c>blobs</c> (the fakes of zapret2 it names, <see cref="GenevaBlobs.NameOf"/>). Both are for people
+/// and older programs only: a reader works them out from the strategy again. Version 1 files and plain text are read as
+/// before, and version 1 readers skip the new fields.
 /// Only strategies, their transport and service names go into the file: no device addresses, keys or logs. An import
 /// takes the same file or plain text with one strategy per line (<c>#</c> starts a comment). Imported strategies are
 /// candidates: the "Авто" mode tries each on the service's own traffic before it applies one (AGENTS.md rules 4, 5).
@@ -28,7 +34,7 @@ public sealed record GenevaSharedStrategy
 public static class GenevaShare
 {
     public const string Format = "zapret-gui/geneva-strategies";
-    public const int Version = 1;
+    public const int Version = 2;
     public const int MaxItems = 200;
     public const int MaxBytes = 512 * 1024;
     public const int MaxServices = 20;
@@ -86,6 +92,12 @@ public static class GenevaShare
             };
             if (fitness is { } f)
                 o["fitness"] = f;
+            if (GenevaStrategyText.NeedsExt(s))
+            {
+                o["ext"] = true;
+                if (GenevaBlobs.Refs(s) is { Count: > 0 } blobs)
+                    o["blobs"] = new JsonArray([.. blobs.Select(x => (JsonNode)x)]);
+            }
             list.Add((JsonNode)o);
         }
         var doc = new JsonObject

@@ -149,8 +149,21 @@ Hyper-V), TcpConnector отдаёт `ProbeDetail.LocalPortPrefix` с кодом
 ### Обмен стратегиями (`Core/Geneva/GenevaShare.cs`)
 
 Формат zapret-gui (`core/geneva_share.py`), один на оба проекта:
-`{"format":"zapret-gui/geneva-strategies","version":1,"exported_at",
-"items":[{"strategy","transport","services","fitness"}]}`. Лимиты: 200
+`{"format":"zapret-gui/geneva-strategies","version":2,"exported_at",
+"items":[{"strategy","transport","services","fitness","ext","blobs"}]}`.
+Версия 2 (zapret-gui тоже на geneva_c 2.0): у x-стратегии `"ext": true` и
+`"blobs": ["z2_…"]` — фейки zapret2, которые она называет
+(`GenevaBlobs.Refs`). Поля — подсказка; читатель считает их заново по
+строке. Версия 1 и простой текст читаются как раньше. Имена фейков —
+общий договор (`GenevaBlobs.NameOf` = `core/geneva_ext.blob_name`
+zapret-gui: `z2_` + имя файла без расширения, только ASCII A–Z → a–z,
+прочее вне `[a-z0-9_]` → `_`, ≤ 63), проверяется одним файлом в обоих
+репозиториях (`tests/testdata/geneva-share/z2-blob-names.json`). Golden
+обоих направлений: `zapret-gui-export-v2.json` (записан zapret-gui) и
+`autotuner-export-v2.json` (записан `Build`, его читает zapret-gui).
+Кандидаты «Авто» (`AutoCandidates.For`) пропускают общие и найденные
+x-стратегии, чьих фейков нет среди загруженных Agent (`blobs` ответа
+`AutoApply`): geneva с неизвестным блобом не стартует. Лимиты: 200
 стратегий, 20 сервисов на стратегию, 512 КБ. Импорт принимает и простой
 текст (одна стратегия на строку, `#` — комментарий); каждая строка
 проходит `geneva check`. Экспорт объединяет сервисы по стратегии и

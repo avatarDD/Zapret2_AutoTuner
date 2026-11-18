@@ -8,6 +8,9 @@ namespace ZapretAutoTuner.Core.Geneva;
 /// (<c>xfake{blob=z2_tls_clienthello_vk_com}</c>), and the "Авто" mode tries them all. geneva's own blobs
 /// (<c>fake_default_tls</c>, <c>fake_default_http</c>, <c>fake_default_quic</c>, <c>fake_quic_initial</c>) need nothing.
 /// </summary>
+/// <para>The names are a contract with zapret-gui (<c>core/geneva_ext.py</c>): a strategy found here runs on a router and
+/// back. Both sides check <see cref="NameOf"/> against the same file, <c>tests/testdata/geneva-share/z2-blob-names.json</c>.
+/// The prefix <c>z2_</c> is only for zapret2's fakes.</para>
 public static class GenevaBlobs
 {
     public const string Prefix = "z2_";
@@ -18,25 +21,60 @@ public static class GenevaBlobs
     /// <summary>geneva_c's longest blob name (BLOB_NAME_MAX 64 with the terminator): a longer one fails the whole start.</summary>
     public const int MaxNameLength = 63;
 
-    /// <summary>The blob name of a fake file: <c>z2_</c> and its name without <c>.bin</c>, other than [a-z0-9_] as <c>_</c>.</summary>
+    /// <summary>
+    /// The blob name of a fake file: <c>z2_</c> and its name without the extension, A–Z as a–z, anything else outside
+    /// [a-z0-9_] as <c>_</c> (only ASCII is lowered, so zapret-gui's Python gives the same name).
+    /// </summary>
+    /// <para>A character is a Unicode code point (<see cref="System.Text.Rune"/>, as Python's <c>str</c>): an emoji is one
+    /// <c>_</c>, not two.</para>
     public static string NameOf(string file)
     {
-        var stem = Path.GetFileNameWithoutExtension(file).ToLowerInvariant();
+        var stem = Path.GetFileNameWithoutExtension(file);
         var b = new StringBuilder(Prefix, Prefix.Length + stem.Length);
-        foreach (var c in stem)
-            b.Append(c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' ? c : '_');
+        foreach (var r in stem.EnumerateRunes())
+        {
+            var c = r.Value;
+            var l = c is >= 'A' and <= 'Z' ? c + ('a' - 'A') : c;
+            b.Append(l is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' ? (char)l : '_');
+        }
         return b.ToString();
     }
 
-    /// <summary>The fake files of <paramref name="dir"/> (sorted, at most <see cref="MaxFileSize"/>); empty when it is missing.</summary>
+    private static readonly System.Text.RegularExpressions.Regex Ref = new(
+        @"(?<![A-Za-z0-9_])z2_[a-z0-9_]+", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>The fakes of zapret2 a strategy names (<c>z2_*</c>), in order, without repeats.</summary>
+    public static List<string> Refs(string? strategy) =>
+        string.IsNullOrEmpty(strategy) ? [] : [.. Ref.Matches(strategy).Select(m => m.Value).Distinct(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// Whether every fake the strategy names is among <paramref name="blobs"/>: geneva_c looks a blob up by name on each
+    /// packet, and one it never loaded is silently not sent, so the strategy would be judged without its fake.
+    /// </summary>
+    public static bool Available(string strategy, IEnumerable<string>? blobs)
+    {
+        var refs = Refs(strategy);
+        if (refs.Count == 0)
+            return true;
+        var have = blobs as IReadOnlyCollection<string> ?? [.. blobs ?? []];
+        return refs.All(have.Contains);
+    }
+
+    /// <summary>
+    /// The fake files of <paramref name="dir"/> (sorted, at most <see cref="MaxFileSize"/>); empty when it is missing. The
+    /// same choice as zapret-gui's <c>blob_files</c>: only <c>*.bin</c> in that case (Windows matches <c>.BIN</c> too), no
+    /// links, no empty name (a file <c>.bin</c>).
+    /// </summary>
     public static List<(string Name, string Path)> Files(string? dir)
     {
         if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
             return [];
         return [.. Directory.EnumerateFiles(dir, "*.bin")
-            .Where(f => new FileInfo(f).Length is > 0 and <= MaxFileSize)
-            .Select(f => (Name: NameOf(f), Path: f))
-            .Where(x => x.Name.Length <= MaxNameLength)
+            .Where(f => f.EndsWith(".bin", StringComparison.Ordinal))
+            .Select(f => new FileInfo(f))
+            .Where(f => f.LinkTarget is null && f.Length is > 0 and <= MaxFileSize)
+            .Select(f => (Name: NameOf(f.FullName), Path: f.FullName))
+            .Where(x => x.Name.Length is > 3 and <= MaxNameLength)
             .GroupBy(x => x.Name, StringComparer.Ordinal)
             .Select(g => g.OrderBy(x => x.Path, StringComparer.Ordinal).First())
             .OrderBy(x => x.Name, StringComparer.Ordinal)];

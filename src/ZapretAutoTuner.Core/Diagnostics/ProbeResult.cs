@@ -46,6 +46,12 @@ public enum ProbeError
 
     /// <summary>Any other local failure (see <see cref="ProbeResult.ErrorDetail"/>).</summary>
     Other,
+
+    /// <summary>
+    /// The data came, but slower than the probe's <c>MinRate</c> on a flat shelf: a shaper (dpi-diagnostics §2.16).
+    /// Not a pass at L2.
+    /// </summary>
+    Throttled,
 }
 
 /// <summary>Texts of <see cref="ProbeResult.ErrorDetail"/> that callers match on: fixed English, never the system's localized message.</summary>
@@ -121,6 +127,9 @@ public sealed record ProbeResult
 
     public TimeSpan Duration { get; init; }
 
+    /// <summary>The steady speed of the response (<see cref="RateShelf"/>); null when it came too fast or too short to measure.</summary>
+    public RateReading? Rate { get; init; }
+
     /// <summary>Response bytes received when the flow stalled; null if it did not.</summary>
     public long? StalledAt { get; init; }
 
@@ -163,7 +172,7 @@ public sealed record ProbeResult
         return level switch
         {
             ProbeLevel.L1Handshake => l1,
-            ProbeLevel.L2Body => l1 && StalledAt is null && (BodyBytes >= minBytes || Complete),
+            ProbeLevel.L2Body => l1 && StalledAt is null && Error != ProbeError.Throttled && (BodyBytes >= minBytes || Complete),
             _ => false,
         };
     }
@@ -171,6 +180,6 @@ public sealed record ProbeResult
     public override string ToString()
     {
         var what = Error == ProbeError.None ? $"HTTP {HttpStatus} {BodyBytes} B" : $"{Error}{(StalledAt is { } s ? $" at {s} B" : "")}";
-        return $"{Host} @ {Address}:{Port} {what} in {Duration.TotalMilliseconds:F0} ms";
+        return $"{Host} @ {Address}:{Port} {what} in {Duration.TotalMilliseconds:F0} ms{(Rate is { } r ? $", {RateShelf.Human(r.Rate)}" : "")}";
     }
 }

@@ -20,6 +20,9 @@ public enum BlockLabel
     Ech,            // 2.13
     Tls13Block,     // 2.14
 
+    /// <summary>2.16: the resource opens, but its download runs on a flat shelf well below the link: a shaper.</summary>
+    Throttle,
+
     /// <summary>The tests did not agree on anything (network trouble, server down).</summary>
     Unknown,
 }
@@ -87,6 +90,9 @@ public sealed record AddressObservation
     public IReadOnlyList<HelloProbeResult> Hellos { get; init; } = [];
 
     public QuicProbeResult? Quic { get; init; }
+
+    /// <summary>The download whose speed was measured (§2.16): a large resource read for seconds, or the baseline.</summary>
+    public ProbeResult? Speed { get; init; }
 }
 
 public sealed record TargetObservation
@@ -101,6 +107,9 @@ public sealed record TargetObservation
     public bool? SupportsHttp3 { get; init; }
 
     public IReadOnlyList<AddressObservation> Addresses { get; init; } = [];
+
+    /// <summary>The link's capacity in B/s (<see cref="LinkCapacity"/>); 0 when unknown (the shaper check then uses <see cref="RateShelf.FloorRate"/>).</summary>
+    public double Capacity { get; init; }
 }
 
 /// <summary>A label with the facts behind it (§0 rule 6: every conclusion is backed by an artifact).</summary>
@@ -125,6 +134,9 @@ public sealed record ClassifierVerdict
 
     public NextStep Next { get; init; }
 
+    /// <summary>What a strategy's probe must show on this target (§3): volume for the 16 KB cut-off, speed for a shaper.</summary>
+    public ProbeCriteria Criteria { get; init; } = ProbeCriteria.Default;
+
     /// <summary>The label the user sees first (traffic light of §4b).</summary>
     public BlockLabel Primary { get; init; }
 
@@ -133,6 +145,33 @@ public sealed record ClassifierVerdict
     public string SummaryEn => Texts.En(Primary);
 
     public override string ToString() => $"{Host}: {Primary} → {Next} [{string.Join(", ", Labels)}]";
+}
+
+/// <summary>
+/// The success criterion of L2 for one target (dpi-diagnostics §3): <see cref="MinBytes"/> of body (128 KB behind the
+/// 16 KB cut-off), <see cref="PadBytes"/> of padding when the page itself is too small to reach the cut-off, and for a
+/// shaper (§2.16) <see cref="MinRate"/> B/s measured over up to <see cref="RateBytes"/> of the body.
+/// </summary>
+public sealed record ProbeCriteria
+{
+    public static ProbeCriteria Default { get; } = new();
+
+    public long MinBytes { get; init; } = 64 * 1024;
+
+    public int PadBytes { get; init; }
+
+    public double MinRate { get; init; }
+
+    public long RateBytes { get; init; }
+
+    /// <summary>The padding of the 16 KB check for a small page (the classifier's padded probe).</summary>
+    public const int VolumePad = 24_000;
+
+    /// <summary>How much body a probe reads to measure a bypass's speed.</summary>
+    public const long TrialRateBytes = 1024 * 1024;
+
+    public override string ToString() =>
+        $"≥{MinBytes / 1024} KB{(PadBytes > 0 ? $", pad {PadBytes} B" : "")}{(MinRate > 0 ? $", ≥{RateShelf.Human(MinRate)}" : "")}";
 }
 
 /// <summary>Plain-words names of the labels for the traffic light (§4b).</summary>
@@ -155,6 +194,7 @@ public static class Texts
         BlockLabel.KyberMultiPkt => "Блок большого ClientHello (kyber)",
         BlockLabel.Ech => "Блок ECH",
         BlockLabel.Tls13Block => "Блок TLS 1.3",
+        BlockLabel.Throttle => "Замедление (шейпер) — обходится",
         _ => "Не удалось определить",
     };
 
@@ -175,6 +215,7 @@ public static class Texts
         BlockLabel.KyberMultiPkt => "Large (kyber) ClientHello blocked",
         BlockLabel.Ech => "ECH blocked",
         BlockLabel.Tls13Block => "TLS 1.3 blocked",
+        BlockLabel.Throttle => "Throttled (shaper) — can be bypassed",
         _ => "Could not tell",
     };
 }
@@ -230,6 +271,7 @@ public static class Classifier
         {
             Host = t.Host,
             Findings = findings,
+            Criteria = CriteriaOf(t, labels),
             LiveAddresses = live,
             DeadAddresses = dead,
             Next = next,
@@ -237,10 +279,29 @@ public static class Classifier
         };
     }
 
+    private static ProbeCriteria CriteriaOf(TargetObservation t, HashSet<BlockLabel> labels)
+    {
+        var c = ProbeCriteria.Default;
+        if (labels.Contains(BlockLabel.Cutoff16K))
+        {
+            // the cut showed only on the padded request: the page is too small to reach it on its own
+            bool small = t.Addresses.Any(a => a.Padded is { } pad && IsPaddedCutoff(pad));
+            c = c with { MinBytes = 128 * 1024, PadBytes = small ? ProbeCriteria.VolumePad : 0 };
+        }
+        if (labels.Contains(BlockLabel.Throttle))
+        {
+            double shelf = t.Addresses.Select(a => a.Speed?.Rate).OfType<RateReading>().Where(r => RateShelf.IsShelf(r, t.Capacity))
+                .Select(r => r.Rate).DefaultIfEmpty(0).Max();
+            if (shelf > 0)
+                c = c with { MinRate = RateShelf.Threshold(shelf, t.Capacity), RateBytes = ProbeCriteria.TrialRateBytes };
+        }
+        return c;
+    }
+
     private static readonly BlockLabel[] Priority =
     [
         BlockLabel.IpBlock, BlockLabel.PortBlock, BlockLabel.Punish, BlockLabel.SniBlock, BlockLabel.PartialIp, BlockLabel.Cutoff16K,
-        BlockLabel.Tls13Block, BlockLabel.KyberMultiPkt, BlockLabel.Ech, BlockLabel.Fingerprint, BlockLabel.HttpBlock,
+        BlockLabel.Throttle, BlockLabel.Tls13Block, BlockLabel.KyberMultiPkt, BlockLabel.Ech, BlockLabel.Fingerprint, BlockLabel.HttpBlock,
         BlockLabel.QuicBlock, BlockLabel.Unstable, BlockLabel.DnsPoison, BlockLabel.Unknown, BlockLabel.Open,
     ];
 
@@ -299,6 +360,14 @@ public static class Classifier
         // volume of the flow, so the cut shows as the padded exchange dying while the plain one completes.
         if (a.Padded is { } pad && baselineOk && IsPaddedCutoff(pad) && !r.Any(x => x.Label == BlockLabel.Cutoff16K))
             Add(BlockLabel.Cutoff16K, [$"обычный запрос проходит, раздутый ({pad.BytesOut} B отправлено, {pad.BytesIn} B принято) обрывается", .. Evidence(pad)]);
+
+        // 2.16: the page opens, but on a flat shelf well below the link
+        if (baselineOk && a.Speed is { Rate: { } rate } speed && RateShelf.IsShelf(rate, t.Capacity))
+        {
+            Add(BlockLabel.Throttle, [$"загрузка идёт ровно на {RateShelf.Human(rate.Rate)} (разброс {rate.Cv:0.00}, {rate.Windows} окон, {rate.Bytes} B)",
+                t.Capacity > 0 ? $"канал — до {RateShelf.Human(t.Capacity)}: полка ниже четверти" : $"скорость канала не измерена: полка ниже {RateShelf.Human(RateShelf.FloorRate)}",
+                .. Evidence(speed)]);
+        }
 
         // 2.14
         if (a.Tls12 is { } t12 && a.Tls13 is { } t13 && t12.TlsOk && !t13.TlsOk && t13.ConnectOk)
@@ -449,7 +518,7 @@ public static class Classifier
     }
 
     /// <summary>The padded probe died after the flow passed the cut-off size (sent and received together).</summary>
-    internal static bool IsPaddedCutoff(ProbeResult p) =>
+    public static bool IsPaddedCutoff(ProbeResult p) =>
         p.TlsOk && !p.Complete && p.Error is ProbeError.Stalled or ProbeError.HttpReset or ProbeError.HttpTimeout or ProbeError.Truncated
         && p.BytesOut + Math.Max(p.BytesIn, p.WireBytesIn) >= CutoffMin;
 

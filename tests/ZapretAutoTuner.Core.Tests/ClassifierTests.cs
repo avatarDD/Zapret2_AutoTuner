@@ -289,4 +289,32 @@ public sealed class ClassifierTests
     [InlineData("news.bbc.co.uk", "bbc.co.uk")]
     [InlineData("example.com", "example.com")]
     public void Registrable_domain(string host, string expected) => Assert.Equal(expected, Classifier.Registrable(host));
+
+    [Fact]
+    public void A_flat_shelf_below_the_link_is_a_shaper_with_a_speed_criterion()
+    {
+        var shelf = new RateReading(20_000, 0.03, 21_000, 5, 300_000);
+        var obs = Addr() with { Baseline = [Ok(), Ok(), Ok()], Speed = Ok() with { Complete = false, Rate = shelf } };
+        var v = Classifier.Classify(new TargetObservation { Host = Host, Addresses = [obs], Capacity = 2_000_000 });
+        Assert.Equal(BlockLabel.Throttle, v.Primary);
+        Assert.Equal(NextStep.SearchStrategy, v.Next);
+        Assert.Equal(60_000, v.Criteria.MinRate);
+        Assert.Equal(ProbeCriteria.TrialRateBytes, v.Criteria.RateBytes);
+        // the same speed on a slow link is the link
+        var slow = Classifier.Classify(new TargetObservation { Host = Host, Addresses = [obs], Capacity = 50_000 });
+        Assert.Equal(BlockLabel.Open, slow.Primary);
+        Assert.Equal(0, slow.Criteria.MinRate);
+    }
+
+    [Fact]
+    public void A_cutoff_behind_a_small_page_pads_the_criterion()
+    {
+        var v = Run(Addr() with { Baseline = [Ok(body: 3000)], Padded = Fail(ProbeError.HttpTimeout, tls: true, bytes: 4_500) with { BytesOut = 26_000 } });
+        Assert.Equal(128 * 1024, v.Criteria.MinBytes);
+        Assert.Equal(ProbeCriteria.VolumePad, v.Criteria.PadBytes);
+        var big = Run(Addr() with { Baseline = [Fail(ProbeError.Stalled, tls: true, bytes: 16_000)] });
+        Assert.Contains(BlockLabel.Cutoff16K, big.Labels);
+        Assert.Equal(128 * 1024, big.Criteria.MinBytes);
+        Assert.Equal(0, big.Criteria.PadBytes);
+    }
 }

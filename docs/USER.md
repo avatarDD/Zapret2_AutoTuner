@@ -75,6 +75,14 @@ geneva не идёт. Если обход перестал работать, с�
 Если заблокирован сам адрес (соединение не устанавливается вовсе),
 программа так и пишет: здесь поможет только туннель.
 
+Блокировкой считается и замедление: если страница грузится, но ровно и
+медленно (шейпер, например видео YouTube на 50–100 КБ/с), или загрузка
+обрывается на 16 КБ, стратегия засчитывается, только если с ней загрузка
+идёт быстрее полки (в 3 раза, но не больше половины скорости канала) и
+доходит до конца. С geneva_c 2.0 рядом с обходом работает её детектор: он
+видит весь трафик и замечает такую полку и замирание раньше, а скорость
+канала, которую он меряет, нужна для этой проверки.
+
 - **«Работающие стратегии».** Одна стратегия часто подходит многим сайтам,
   поэтому они объединяются в группы: одна строка — одна стратегия и все её
   сервисы. Новые сервисы сначала пробуют стратегии этих групп.
@@ -378,6 +386,13 @@ sites, so the first sites usually open within a minute or two). Only if none
 helps does it run geneva's genetic search. After two empty searches the next one
 goes wider: more strategies from the library, a population twice as big, and
 IP headers tampered as well as TCP.
+
+Throttling counts as a block too: when a page loads, but evenly and slowly (a
+shaper, such as YouTube video at 50–100 KB/s), or the download stops at 16 KB, a
+strategy counts only if the download with it is faster than the shelf (three
+times, but no more than half the link speed) and complete. With geneva_c 2.0
+its detector runs beside the bypass: it sees all traffic, notices such a shelf
+or a freeze sooner, and measures the link speed this check needs.
 
 A strategy it finds applies to that service's traffic only (its addresses and
 ports, or a torrent's local port); the rest of the traffic never goes through

@@ -43,6 +43,7 @@ public static class Observation
             ProbeError.Stalled => "stalled",
             ProbeError.Truncated => "truncated",
             ProbeError.TimeLimit => "too_slow",
+            ProbeError.Throttled => "throttled (a shaper: even speed below the threshold)",
             ProbeError.HttpTimeout => "no_http_response",
             _ when r.TlsOk && !r.CertValid => "wrong_certificate (a stub or interception)",
             _ when r.HttpStatus is >= 300 and < 400 => "redirect (a stub page?)",

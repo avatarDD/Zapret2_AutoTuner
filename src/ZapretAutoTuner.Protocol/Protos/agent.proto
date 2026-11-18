@@ -342,6 +342,7 @@ message GenevaAutoApplyRequest {
   repeated GenevaAutoHost hosts = 2;          // empty: nothing by name
   repeated string exclude_subnets = 3;        // never touched by the name-based process (VPN, proxy)
   repeated string exclude_domains = 4;
+  bool observe = 5;                           // run geneva's detector (--ext-auto observe) beside the groups
 }
 
 message GenevaAutoGroupState {
@@ -360,4 +361,5 @@ message GenevaAutoApplyReply {
   GenevaAutoGroupState host = 5; // the name-based process when it runs; requested: its strategies
   bool ext = 6;                  // geneva_c knows x-actions (ext_xact): zapret2's methods may be tried
   repeated string blobs = 7;     // zapret2's fakes every geneva with --ext gets (z2_ names): strategies may name them
+  GenevaAutoGroupState observer = 8; // geneva's detector when it runs (ext_auto): ext_status through GenevaControl
 }

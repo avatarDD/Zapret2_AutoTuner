@@ -93,12 +93,7 @@ public sealed class SearchController(McpSession session)
                     _state = "idle";
             return busyNow;
         }
-        var trialTarget = new TrialTarget
-        {
-            Host = target,
-            Addresses = [.. verdict!.LiveAddresses.Select(IPAddress.Parse)],
-            MinBytes = verdict.Labels.Contains(Core.Diagnostics.BlockLabel.Cutoff16K) ? 128 * 1024 : 64 * 1024,
-        };
+        var trialTarget = new TrialTarget { Host = target, Addresses = [.. verdict!.LiveAddresses.Select(IPAddress.Parse)] }.With(verdict.Criteria);
         var kb = session.Host.Kb;
         var searchMode = mode switch { "quick" => SearchMode.Quick, "full" => SearchMode.Full, _ => SearchMode.Standard };
         long sessionId = kb.StartSession(target, searchMode.ToString(), blockLabel: verdict.Primary.ToString());

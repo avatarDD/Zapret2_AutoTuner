@@ -18,7 +18,7 @@ public sealed class GenevaToolTests
         var agent = new FakeGenevaAgent();
         int calls = 0;
         rig.Host.Geneva = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), new MemoryGenevaStore(),
-            (host, port, tls, local, ct) => Task.FromResult(Result(host, Interlocked.Increment(ref calls) == 3)));
+            (host, port, tls, local, _, ct) => Task.FromResult(Result(host, Interlocked.Increment(ref calls) == 3)));
         return (rig, agent);
     }
 

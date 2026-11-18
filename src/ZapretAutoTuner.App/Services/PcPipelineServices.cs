@@ -16,16 +16,23 @@ public sealed class PcPipelineServices(AppHost host, IEngineControl engine, bool
     IReadOnlyDictionary<string, long>? resume = null, Action<string, long>? sessionStarted = null) : IPipelineServices
 {
     private readonly Dictionary<string, (long Session, TrialTarget Target)> _sessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ProbeCriteria> _criteria = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<ClassifierVerdict> ClassifyAsync(string domain, IProgress<(string Ru, string En)> progress, CancellationToken ct)
     {
         var run = await ClassifierRunner.RunAsync(domain, new ClassifierOptions(), new Progress<ClassifierStep>(s => progress.Report((s.MessageRu, s.MessageEn))), ct).ConfigureAwait(false);
+        // a strategy passes only what the block demands: 128 KB behind the 16 KB cut-off, the speed behind a shaper
+        lock (_criteria)
+            _criteria[domain] = run.Verdict.Criteria;
         return run.Verdict;
     }
 
     public ITrialExecutor ExecutorFor(string domain, IReadOnlyList<IPAddress> addresses)
     {
-        var target = new TrialTarget { Host = domain, Addresses = addresses };
+        ProbeCriteria? criteria;
+        lock (_criteria)
+            _criteria.TryGetValue(domain, out criteria);
+        var target = new TrialTarget { Host = domain, Addresses = addresses }.With(criteria ?? ProbeCriteria.Default);
         _sessions[domain] = (0, target);
         return new AgentTrialExecutor(engine, target, new AgentTrialOptions { LuaDir = host.Bundle.LuaDir, UserLua = host.Resources.ApprovedLuaPaths() });
     }

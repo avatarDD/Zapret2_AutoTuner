@@ -39,6 +39,9 @@ public static class GenevaStrategyText
         return null;
     }
 
+    /// <summary>geneva's baseline request: <c>eval_request</c> with no strategy at all (<c>src/evaluator.c</c>, <c>external_run</c>).</summary>
+    public static bool IsEmpty(string? s) => string.IsNullOrWhiteSpace(s);
+
     private static readonly System.Text.RegularExpressions.Regex XAction = new(
         @"(?:^|[-(,])x[a-z0-9]+(?=[{(,)-]|$)|\[(?:L7|FLOW|META):", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
@@ -140,6 +143,13 @@ public sealed record GenevaSearchSettings
 
     /// <summary>The search being continued was started with <c>--ext</c> (its checkpoint may hold x-actions).</summary>
     public bool ResumeExt { get; init; }
+
+    /// <summary>
+    /// What the page must show for a strategy to count (dpi-diagnostics §3): 128 KB with padding behind the 16 KB
+    /// cut-off, the speed behind a shaper. The search's baseline can tighten it (<c>PageCheck</c>). Not sent to the Agent.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ProbeCriteria Criteria { get; init; } = ProbeCriteria.Default;
 }
 
 /// <summary>The strategy that bypasses on this PC: one strategy for every connection to the ports (geneva has no hostlist).</summary>
@@ -302,9 +312,9 @@ public static class GenevaArgv
 /// </summary>
 public static class GenevaFitness
 {
-    public static (int Fitness, string Outcome) FromProbe(ProbeResult r, ProbeLevel level = ProbeLevel.L2Body)
+    public static (int Fitness, string Outcome) FromProbe(ProbeResult r, ProbeLevel level = ProbeLevel.L2Body, long minBytes = 64 * 1024)
     {
-        if (r.Passes(level))
+        if (r.Passes(level, minBytes))
             return (400, "ok");
         return r.Error switch
         {
@@ -312,6 +322,8 @@ public static class GenevaFitness
             ProbeError.ConnectRefused or ProbeError.TlsReset or ProbeError.HttpReset => (-360, "reset"),
             ProbeError.TlsTimeout or ProbeError.HttpTimeout or ProbeError.Stalled => (-480, "timeout"),
             ProbeError.Truncated or ProbeError.BadResponse or ProbeError.TlsClosed or ProbeError.TimeLimit => (-480, "broken"),
+            // a shaper: the page came, but on the shelf (dpi-diagnostics §2.16)
+            ProbeError.Throttled => (-480, "throttled"),
             // a certificate for another name is a block page or a forged answer
             ProbeError.None when r.Tls && r.TlsOk && !r.CertValid => (-360, "injected"),
             ProbeError.None => (-480, "broken"),

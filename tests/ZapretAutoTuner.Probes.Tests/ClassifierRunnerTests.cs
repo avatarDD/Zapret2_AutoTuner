@@ -27,7 +27,7 @@ public class ClassifierRunnerTests
         var steps = new List<ClassifierStep>();
         var run = await ClassifierRunner.RunAsync("blocked.test", Options(s.Port), new Sync(steps));
         Assert.Equal(BlockLabel.Open, run.Verdict.Primary);
-        Assert.Equal(["port", "baseline", "baseline", "tls", "fingerprint", "fingerprint", "fingerprint", "verdict"], steps.Select(x => x.Stage));
+        Assert.Equal(["port", "baseline", "baseline", "speed", "tls", "fingerprint", "fingerprint", "fingerprint", "verdict"], steps.Select(x => x.Stage));
         Assert.All(steps, x => Assert.False(string.IsNullOrEmpty(x.MessageRu)));
         Assert.Equal(3, run.Observation.Addresses[0].Hellos.Count); // as sent, without kyber, without ECH
     }

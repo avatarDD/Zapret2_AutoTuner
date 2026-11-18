@@ -55,6 +55,9 @@ public sealed record ClassifierOptions
     public TimeSpan HelloTimeout { get; init; } = TimeSpan.FromSeconds(4);
 
     public TimeSpan QuicTimeout { get; init; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>The link capacity for the shaper check; null: <see cref="LinkCapacity.Shared"/>.</summary>
+    public LinkCapacity? Capacity { get; init; }
 }
 
 /// <summary>One step of the diagnosis, for the "what is happening now" line of the UI.</summary>
@@ -102,10 +105,13 @@ public static class ClassifierRunner
         IPAddress? neutralIp = o.NeutralAddress;
         var observations = new List<AddressObservation>();
         bool extrasDone = false;
+        bool speedDone = false;
         foreach (var ip in list)
         {
             ct.ThrowIfCancellationRequested();
-            var obs = await ProbeAddressAsync(host, ip, o, profiles, Step, ct).ConfigureAwait(false);
+            // one address's speed download tells the shaper: the others are judged by their baseline
+            var obs = await ProbeAddressAsync(host, ip, o, profiles, Step, measure: !speedDone, ct).ConfigureAwait(false);
+            speedDone |= obs.Speed?.Rate is not null;
 
             if (obs.NeutralSni is { } n && !n.TlsOk && n.Error != ProbeError.TlsFailed && obs.NeutralControl is null)
             {
@@ -139,9 +145,19 @@ public static class ClassifierRunner
             observations.Add(obs);
         }
 
+        // the link's capacity for the shaper check: the fastest download seen lately, this run's included
+        var capacity = o.Capacity ?? LinkCapacity.Shared;
+        double cap = capacity.Current();
+        foreach (var a in observations)
+        {
+            foreach (var r in a.Baseline.Append(a.Speed))
+                capacity.Judge(r?.Rate);
+        }
+        cap = capacity.Current();
         var target = new TargetObservation
         {
             Host = host,
+            Capacity = cap,
             Port = o.Port,
             SupportsHttp3 = dns?.Https?.SupportsHttp3,
             Dns = dns is null ? null : new DnsObservation
@@ -158,7 +174,7 @@ public static class ClassifierRunner
     }
 
     private static async Task<AddressObservation> ProbeAddressAsync(string host, IPAddress ip, ClassifierOptions o, List<ClientProfile> profiles,
-        Action<string, string?, string, string> step, CancellationToken ct)
+        Action<string, string?, string, string> step, bool measure, CancellationToken ct)
     {
         string a = ip.ToString();
         step("port", a, $"Порт-тест: TCP {o.Port}", $"Port test: TCP {o.Port}");
@@ -195,6 +211,8 @@ public static class ClassifierRunner
             await Task.Delay(o.Pause, ct).ConfigureAwait(false);
             obs = obs with { Padded = await HttpAsync(o, host, ip, o.Port, ProbeLevel.L2Body, null, ct, padBytes: 24_000, minBytes: 128 * 1024).ConfigureAwait(false) };
         }
+        if (baseline.Count > 0 && baseline.All(b => b.Passes(ProbeLevel.L2Body)))
+            obs = obs with { Speed = await SpeedAsync(host, ip, o, baseline, step, measure, ct).ConfigureAwait(false) };
 
         step("tls", a, "TLS 1.2 и TLS 1.3 по отдельности", "TLS 1.2 and TLS 1.3 separately");
         obs = obs with
@@ -219,6 +237,24 @@ public static class ClassifierRunner
         }
         return obs with { Hellos = hellos };
     }
+
+    /// <summary>
+    /// The shaper check (§2.16): the page opens, so measure how fast it comes. A small page that arrived whole is
+    /// judged by the baseline itself (a shelf shows on it too: 64 KB at 16 KB/s takes four seconds); a large one is
+    /// read for up to <see cref="SpeedBytes"/> or six seconds.
+    /// </summary>
+    private static async Task<ProbeResult?> SpeedAsync(string host, IPAddress ip, ClassifierOptions o, List<ProbeResult> baseline,
+        Action<string, string?, string, string> step, bool measure, CancellationToken ct)
+    {
+        if (!measure || baseline.All(b => b.Complete))
+            return baseline.FirstOrDefault(b => b.Rate is not null) ?? baseline[0];
+        step("speed", ip.ToString(), "Страница открывается: проверяю скорость загрузки (шейпер)", "The page opens: checking the download speed (shaper)");
+        await Task.Delay(o.Pause, ct).ConfigureAwait(false);
+        return await HttpAsync(o, host, ip, o.Port, ProbeLevel.L2Body, null, ct, rateBytes: SpeedBytes).ConfigureAwait(false);
+    }
+
+    /// <summary>How much of a large resource the speed check reads.</summary>
+    public const long SpeedBytes = 4L * 1024 * 1024;
 
     /// <summary>
     /// Hello shapes to try: each profile's spec as the client sends it, plus the same spec without kyber and without
@@ -263,7 +299,7 @@ public static class ClassifierRunner
     }
 
     private static Task<ProbeResult> HttpAsync(ClassifierOptions o, string host, IPAddress ip, int port, ProbeLevel level, string? sni, CancellationToken ct,
-        bool tls = true, TlsVersionLimit version = TlsVersionLimit.Any, int padBytes = 0, long minBytes = 64 * 1024)
+        bool tls = true, TlsVersionLimit version = TlsVersionLimit.Any, int padBytes = 0, long minBytes = 64 * 1024, long rateBytes = 0)
     {
         var p = new HttpProbeOptions
         {
@@ -277,6 +313,7 @@ public static class ClassifierRunner
             TlsVersion = version,
             PadBytes = padBytes,
             MinBytes = minBytes,
+            RateBytes = rateBytes,
         };
         return HttpProbe.RunAsync(o.TweakHttp?.Invoke(p) ?? p, ct);
     }

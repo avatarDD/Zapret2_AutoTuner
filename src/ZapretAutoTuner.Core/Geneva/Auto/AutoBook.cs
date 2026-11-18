@@ -35,6 +35,12 @@ public sealed class AutoService
     /// <summary>The client's first packets (base64, comma-separated) for a replay probe; empty when it cannot judge.</summary>
     public string Replay { get; set; } = "";
 
+    /// <summary>
+    /// A site's success criterion learned without a bypass (<c>PageCheck</c>): the speed behind a shaper, 128 KB with
+    /// padding behind the 16 KB cut-off. Null: the plain full download.
+    /// </summary>
+    public Diagnostics.ProbeCriteria? Criteria { get; set; }
+
     public AutoStatus Status { get; set; }
 
     public DateTime Since { get; set; }
@@ -57,6 +63,15 @@ public sealed class AutoService
     public List<DateTime> Oks { get; set; } = [];
 
     public List<DateTime> NoConnections { get; set; } = [];
+
+    /// <summary>
+    /// When geneva's detector (<c>--ext-auto observe</c>) held the service's name or address impaired with a class the
+    /// slices cannot see (a shaper, a freeze): enough to suspect it even though its flows look fine.
+    /// </summary>
+    public List<DateTime> Detected { get; set; } = [];
+
+    /// <summary>The detector's class of the last <see cref="Detected"/>, in words.</summary>
+    public string DetectedWhy { get; set; } = "";
 
     /// <summary>When a paused service is looked at again (not blocked, address block, nothing found).</summary>
     public DateTime? NextCheck { get; set; }
@@ -126,6 +141,7 @@ public sealed class AutoService
         c.Fails = [.. Fails];
         c.Oks = [.. Oks];
         c.NoConnections = [.. NoConnections];
+        c.Detected = [.. Detected];
         return c;
     }
 }
@@ -148,6 +164,7 @@ public enum AutoConfirm
 public sealed class AutoBook
 {
     private readonly Dictionary<string, AutoService> _services = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTime> _dnsPoisoned = new(StringComparer.Ordinal);
     private AutoLists _lists = new();
     private AutoNameList _important = AutoNameList.Empty;
     private AutoNameList _unimportant = AutoNameList.Empty;
@@ -329,7 +346,7 @@ public sealed class AutoBook
     private static void Trim(AutoService s, DateTime now)
     {
         var from = now - AutoRules.Window;
-        foreach (var list in new[] { s.Fails, s.Oks, s.NoConnections })
+        foreach (var list in new[] { s.Fails, s.Oks, s.NoConnections, s.Detected })
         {
             list.RemoveAll(t => t < from);
             if (list.Count > 200)
@@ -449,6 +466,12 @@ public sealed class AutoBook
     public static bool Suspicious(AutoService s, out string why)
     {
         why = s.Why;
+        // geneva's detector saw a shaper or a freeze: its flows look fine to the slices, the probe decides
+        if (s.Detected.Count > 0)
+        {
+            why = s.DetectedWhy;
+            return true;
+        }
         if (s.Oks.Count > 0)
             return false;
         int fails = s.Fails.Count + s.NoConnections.Count;
@@ -477,6 +500,57 @@ public sealed class AutoBook
         }
         if (why.Length > 0)
             s.Why = why;
+    }
+
+    /// <summary>
+    /// geneva's detector saw a forged DNS answer for a name (<c>DNS_POISON</c>: a stub address, or an injected answer
+    /// that came before the resolver's). No packet strategy helps here (geneva_c docs/EXT.md): the user is told to use
+    /// DoH. True when the name is new or was last reported more than an hour ago.
+    /// </summary>
+    public bool DnsPoisoned(string name, DateTime now)
+    {
+        name = name.TrimEnd('.').ToLowerInvariant();
+        if (name.Length == 0 || _dnsPoisoned.TryGetValue(name, out var at) && now - at < TimeSpan.FromHours(1))
+            return false;
+        if (_dnsPoisoned.Count > 256)
+            _dnsPoisoned.Clear();
+        _dnsPoisoned[name] = now;
+        return true;
+    }
+
+    /// <summary>
+    /// A key geneva's detector holds impaired (<c>ext_status</c>, <c>impaired</c>): a name (<paramref name="level"/>
+    /// <c>host</c>) or an address (<c>ip</c>) with a class of <see cref="AutoRules.DetectorClasses"/>. The services it
+    /// names — a site by its name or a subdomain of it, any service by an address it was seen at — are suspected unless
+    /// they are already handled (applied, searched, paused after a probe). Returns the names of the newly suspected.
+    /// </summary>
+    public List<string> Detect(string level, string key, string cls, DateTime now)
+    {
+        var hit = new List<string>();
+        if (!AutoRules.DetectorClasses.Contains(cls) || key.Length == 0)
+            return hit;
+        key = key.TrimEnd('.').ToLowerInvariant();
+        foreach (var s in _services.Values)
+        {
+            bool match = level switch
+            {
+                // the detector's classes are TCP ones: a site's QUIC or a UDP service at the address is not judged by them
+                "host" => s.Kind == AutoKind.Web && (key == s.Host.ToLowerInvariant() || AutoFamilies.SiteOf(s) is var site && (key == site || key.EndsWith("." + site, StringComparison.Ordinal))),
+                "ip" => s.Transport == L4Kind.Tcp && s.Addresses.Any(a => string.Equals(a.Ip, key, StringComparison.OrdinalIgnoreCase)),
+                _ => false,
+            };
+            if (!match || s.Status is not (AutoStatus.Watching or AutoStatus.Fallback or AutoStatus.Suspected)
+                && !(s.Status is AutoStatus.NotBlocked && (s.NextCheck is null || now >= s.NextCheck)))
+                continue;
+            // one mark a minute keeps the suspicion alive; only a new one is reported
+            bool fresh = s.Detected.Count == 0;
+            if (fresh || now - s.Detected[^1] >= TimeSpan.FromMinutes(1))
+                s.Detected.Add(now);
+            s.DetectedWhy = cls == "THROTTLE" ? "детектор geneva: замедление (шейпер)" : "детектор geneva: заморозка на 8–64 КБ";
+            if (fresh)
+                hit.Add(s.Name);
+        }
+        return hit;
     }
 
     /// <summary>
@@ -593,6 +667,7 @@ public sealed class AutoBook
                 // the strategy still works: the failures were something else
                 s.Fails.Clear();
                 s.NoConnections.Clear();
+                s.Detected.Clear();
                 s.AppliedAt = now;
                 Move(s, AutoStatus.Applied, now, "проверка с обходом прошла");
                 return $"{s.Name}: с обходом открывается, оставляю стратегию";
@@ -611,6 +686,7 @@ public sealed class AutoBook
                 s.AppliedAt = now;
                 s.Fails.Clear();
                 s.NoConnections.Clear();
+                s.Detected.Clear();
                 Move(s, AutoStatus.Applied, now, "закреплена; проверка с обходом не прошла");
                 return $"{s.Name}: проверка с обходом не прошла, но стратегия закреплена — оставляю";
             default:
@@ -637,6 +713,7 @@ public sealed class AutoBook
         s.NextCheck = null;
         s.Fails.Clear();
         s.NoConnections.Clear();
+        s.Detected.Clear();
         Move(s, AutoStatus.Applied, now, "обход работает");
     }
 
@@ -663,6 +740,7 @@ public sealed class AutoBook
         s.Pinned = false;
         s.Fails.Clear();
         s.NoConnections.Clear();
+        s.Detected.Clear();
         Move(s, AutoStatus.Watching, now, "");
     }
 

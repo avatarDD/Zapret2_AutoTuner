@@ -64,7 +64,7 @@ public sealed class AppHost : IAsyncDisposable
     public Tuning.Geneva.GenevaController Geneva { get; }
 
     /// <summary>One strategy of geneva's search: the page downloaded (L2) from the local port the strategy applies to.</summary>
-    private static async Task<Core.Diagnostics.ProbeResult> GenevaProbeAsync(string host, int port, bool tls, int localPort, CancellationToken ct)
+    private static async Task<Core.Diagnostics.ProbeResult> GenevaProbeAsync(string host, int port, bool tls, int localPort, Core.Diagnostics.ProbeCriteria criteria, CancellationToken ct)
     {
         System.Net.IPAddress address;
         try
@@ -75,7 +75,7 @@ public sealed class AppHost : IAsyncDisposable
         {
             return new Core.Diagnostics.ProbeResult { Host = host, Address = "", Port = port, Tls = tls, Error = Core.Diagnostics.ProbeError.Other, ErrorDetail = "DNS: " + e.Message };
         }
-        return await Probes.Http.HttpProbe.RunAsync(new Probes.Http.HttpProbeOptions
+        return await Probes.Http.HttpProbe.RunAsync(Probes.Http.PageCheck.Apply(new Probes.Http.HttpProbeOptions
         {
             Host = host,
             Address = address,
@@ -84,7 +84,7 @@ public sealed class AppHost : IAsyncDisposable
             LocalPort = localPort,
             Level = Core.Diagnostics.ProbeLevel.L2Body,
             MaxTime = TimeSpan.FromSeconds(12),
-        }, ct).ConfigureAwait(false);
+        }, criteria), ct).ConfigureAwait(false);
     }
 
     public static AppHost? Current { get; set; }

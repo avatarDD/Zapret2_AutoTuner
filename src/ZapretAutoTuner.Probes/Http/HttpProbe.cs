@@ -50,6 +50,25 @@ public sealed record HttpProbeOptions
     /// </summary>
     public int PadBytes { get; init; }
 
+    /// <summary>
+    /// Keep reading after <see cref="MinBytes"/> up to this much body (or <see cref="RateTime"/>) so the speed can be
+    /// measured (<see cref="ProbeResult.Rate"/>, the shaper check of dpi-diagnostics §2.16). 0: stop at MinBytes.
+    /// </summary>
+    public long RateBytes { get; init; }
+
+    /// <summary>The longest the speed is measured, from the first response byte.</summary>
+    public TimeSpan RateTime { get; init; } = TimeSpan.FromSeconds(6);
+
+    /// <summary>
+    /// Bytes per second the response must reach (a bypass of a shaper, <see cref="Core.Diagnostics.RateShelf.Threshold"/>):
+    /// slower is <see cref="ProbeError.Throttled"/>. 0: speed is not judged. A response too fast or too short to
+    /// measure passes.
+    /// </summary>
+    public double MinRate { get; init; }
+
+    /// <summary>Length of one speed window.</summary>
+    public TimeSpan RateWindow { get; init; } = TimeSpan.FromMilliseconds(500);
+
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
     /// <summary>
@@ -103,7 +122,7 @@ public static class HttpProbe
         string? sni = o.Tls ? o.Sni ?? o.Host : null;
         if (sni is { Length: 0 })
             sni = null;
-        var r = new Builder { Host = o.Host, Address = o.Address.ToString(), Port = o.Port, Tls = o.Tls, Sni = sni, Head = o.Level == ProbeLevel.L1Handshake };
+        var r = new Builder { Host = o.Host, Address = o.Address.ToString(), Port = o.Port, Tls = o.Tls, Sni = sni, Head = o.Level == ProbeLevel.L1Handshake, Speed = new SpeedMeter(o.RateWindow) };
         using var total = CancellationTokenSource.CreateLinkedTokenSource(ct);
         total.CancelAfter(o.MaxTime);
 
@@ -187,6 +206,9 @@ public static class HttpProbe
             }
 
             await ExchangeAsync(o, stream, raw, r, sw, total.Token, ct).ConfigureAwait(false);
+            r.Rate = Core.Diagnostics.RateShelf.Read(r.Speed.Closed(), o.RateWindow) ?? Core.Diagnostics.RateShelf.Burst(r.Speed.Bytes, r.Speed.Elapsed);
+            if (o.MinRate > 0 && r.Error == ProbeError.None && r.Rate is { } rate && rate.Rate < o.MinRate)
+                r.SetError(ProbeError.Throttled, $"скорость {Core.Diagnostics.RateShelf.Human(rate.Rate)} ниже {Core.Diagnostics.RateShelf.Human(o.MinRate)}");
             return r.Build(sw, raw);
         }
         finally
@@ -297,6 +319,7 @@ public static class HttpProbe
 
             r.Ttfb ??= sw.Elapsed - sent;
             r.BytesIn += n;
+            r.Speed.Add(sw.Elapsed, raw.BytesIn);
             ReadOnlySpan<byte> chunk = buf.AsSpan(0, n);
             if (body is null)
             {
@@ -337,7 +360,8 @@ public static class HttpProbe
                 r.Complete = true;
                 return;
             }
-            if (r.BodyBytes >= o.MinBytes)
+            if (r.BodyBytes >= o.MinBytes
+                && (r.BodyBytes >= o.RateBytes || r.Speed.Since(sw.Elapsed) >= o.RateTime))
                 return;
         }
     }
@@ -516,6 +540,8 @@ public static class HttpProbe
 
         /// <summary>The body bytes as received (chunk framing included): a fingerprint, never the content.</summary>
         public readonly IncrementalHash BodyHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        public RateReading? Rate;
+        public SpeedMeter Speed = new(TimeSpan.FromMilliseconds(500));
 
         public void Certificate(HttpProbeOptions o, X509Certificate? cert, SslPolicyErrors errors)
         {
@@ -603,6 +629,7 @@ public static class HttpProbe
             Ttfb = Ttfb,
             Duration = sw.Elapsed,
             StalledAt = StalledAt,
+            Rate = Rate,
             RstSeen = RstSeen || raw?.Reset == true,
             Alpn = Alpn,
             TlsVersion = TlsVersion,
@@ -616,4 +643,47 @@ public static class HttpProbe
             ErrorDetail = ErrorDetail,
         };
     }
+}
+
+/// <summary>Wire bytes of the response per window of time, from its first byte (the speed of <see cref="HttpProbe"/>).</summary>
+internal sealed class SpeedMeter(TimeSpan window)
+{
+    private readonly List<long> _windows = [];
+    private TimeSpan? _start;
+    private long _first;
+    private long _last;
+    private TimeSpan _at;
+
+    /// <summary>Bytes since the first response byte.</summary>
+    public long Bytes => _last - _first;
+
+    /// <summary>From the first response byte to the last.</summary>
+    public TimeSpan Elapsed => _start is { } s ? _at - s : TimeSpan.Zero;
+
+    /// <summary><paramref name="wire"/>: all bytes from the server so far; the meter counts what came since the last call.</summary>
+    public void Add(TimeSpan now, long wire)
+    {
+        if (window <= TimeSpan.Zero)
+            return;
+        if (_start is null)
+        {
+            // the bytes before the first response byte are the handshake: not the download
+            _start = now;
+            _at = now;
+            _first = _last = wire;
+            return;
+        }
+        int i = (int)Math.Min(100_000, (now - _start.Value).Ticks / window.Ticks);
+        while (_windows.Count <= i)
+            _windows.Add(0);
+        _windows[i] += wire - _last;
+        _last = wire;
+        _at = now;
+    }
+
+    /// <summary>How long the response has been coming.</summary>
+    public TimeSpan Since(TimeSpan now) => _start is { } s ? now - s : TimeSpan.Zero;
+
+    /// <summary>The windows that ended: the last one was cut when the probe stopped reading.</summary>
+    public IReadOnlyList<long> Closed() => _windows.Count > 1 ? _windows.GetRange(0, _windows.Count - 1) : [];
 }

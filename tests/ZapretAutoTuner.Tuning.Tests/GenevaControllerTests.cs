@@ -36,7 +36,7 @@ public sealed class GenevaControllerTests
         public GenevaController Make()
         {
             int calls = 0;
-            return new GenevaController(_ => Task.FromResult<IGenevaAgent>(Agent), Store, (host, port, tls, local, ct) =>
+            return new GenevaController(_ => Task.FromResult<IGenevaAgent>(Agent), Store, (host, port, tls, local, _, ct) =>
             {
                 lock (LocalPorts)
                     LocalPorts.Add(local);
@@ -89,6 +89,34 @@ public sealed class GenevaControllerTests
     }
 
     [Fact]
+    public async Task A_baseline_cut_only_when_padded_makes_every_strategy_padded()
+    {
+        var agent = new FakeGenevaAgent();
+        var store = new MemoryGenevaStore();
+        var asked = new List<ProbeCriteria>();
+        int calls = 0;
+        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, (host, port, tls, local, c, ct) =>
+        {
+            int n = Interlocked.Increment(ref calls) - 1;
+            lock (asked)
+                asked.Add(c);
+            // a small page opens; padded, the flow dies at the 16 KB cut-off — until a strategy (after the baseline) works
+            if (c.PadBytes > 0 && n < 2)
+                return Task.FromResult(new ProbeResult { Host = host, Address = "192.0.2.1", ConnectOk = true, TlsOk = true, Error = ProbeError.Stalled, StalledAt = 4_000, BytesIn = 4_000, BytesOut = 26_000 });
+            return Task.FromResult(Loaded(host) with { BodyBytes = 3_000 });
+        });
+        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3 }, default);
+        await Until(() => !g.SearchRunning);
+
+        // the baseline (plain, then padded) is blocked; the strategies are judged padded
+        Assert.Equal(-480, agent.Answers[0].Fitness);
+        Assert.Equal(0, asked[0].PadBytes);
+        Assert.All(asked.Skip(1), c => Assert.Equal(ProbeCriteria.VolumePad, c.PadBytes));
+        Assert.All(asked.Skip(1), c => Assert.Equal(128 * 1024, c.MinBytes));
+        Assert.Contains(g.Log, l => l.Contains("обрыв на 16 КБ", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Several_workers_are_probed_side_by_side_each_from_its_own_ports()
     {
         var agent = new FakeGenevaAgent();
@@ -96,7 +124,7 @@ public sealed class GenevaControllerTests
         var store = new MemoryGenevaStore();
         var ports = new List<int>();
         int calls = 0, inFlight = 0, maxInFlight = 0;
-        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, async (host, port, tls, local, ct) =>
+        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, async (host, port, tls, local, _, ct) =>
         {
             int n = Interlocked.Increment(ref calls) - 1;
             lock (ports)
@@ -163,7 +191,7 @@ public sealed class GenevaControllerTests
     public void Workers_and_imports_are_kept_and_imports_never_replace()
     {
         var store = new MemoryGenevaStore();
-        var g = new GenevaController(_ => throw new InvalidOperationException(), store, (h, p, t, l, ct) => Task.FromResult(Reset(h)));
+        var g = new GenevaController(_ => throw new InvalidOperationException(), store, (h, p, t, l, _, ct) => Task.FromResult(Reset(h)));
         Assert.Equal(1, g.Workers);
         g.Workers = 4;
         g.Workers = 99;
@@ -214,7 +242,7 @@ public sealed class GenevaControllerTests
         var rig = new Rig();
         // the probe never answers until the search is stopped
         var gate = new TaskCompletionSource();
-        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(rig.Agent), rig.Store, async (host, port, tls, local, ct) =>
+        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(rig.Agent), rig.Store, async (host, port, tls, local, _, ct) =>
         {
             await gate.Task.WaitAsync(ct);
             return Reset(host);

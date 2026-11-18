@@ -248,8 +248,8 @@
   "The model runs a search or an experiment over MCP: wait for it to finish."
  ],
  "engine.busy_protection": [
-  "Работает защита nfqws2 (Монитор): выключите её, чтобы geneva не мешала ей.",
-  "The nfqws2 protection runs (Monitor): turn it off so geneva does not fight it."
+  "Работает «Защита zapret2»: выключите её, чтобы geneva не мешала ей.",
+  "zapret2 protection runs: turn it off so geneva does not fight it."
  ],
  "engine.busy_wizard": [
   "Идёт подбор мастером: дождитесь его окончания.",
@@ -768,8 +768,8 @@
   "Save and, separately, apply in zapret-gui"
  ],
  "export.gui_password": [
-  "Пароль zapret-gui",
-  "zapret-gui password"
+  "Пароль веб-интерфейса zapret-gui",
+  "zapret-gui web password"
  ],
  "export.gui_saved": [
   "Сохранено в zapret-gui как {0} (не применено)",
@@ -1088,8 +1088,8 @@
   "Dismiss"
  ],
  "monitor.geneva_running": [
-  "Сейчас работает geneva: обход или подбор (страницы «Авто-обход» и «Подбор для сайта»). Остановите её там, затем включите защиту nfqws2: два движка на одном порту мешают друг другу.",
-  "geneva is running now: its bypass or its search (the Auto bypass and Search for a site pages). Stop it there, then start the nfqws2 protection: two engines on one port get in each other's way."
+  "Сейчас работает geneva: обход или подбор (страницы «Авто-обход» и «Подбор geneva для сайта»). Остановите её там или кнопкой «Остановить всё» внизу окна, затем включите защиту nfqws2: два движка на одном порту мешают друг другу.",
+  "geneva is running now: its bypass or its search (the Auto bypass and geneva search pages). Stop it there or with \"Stop everything\" at the bottom of the window, then start the nfqws2 protection: two engines on one port get in each other's way."
  ],
  "monitor.journal": [
   "Журнал изменений",
@@ -1132,8 +1132,8 @@
   "Protection keeps the final strategy running and watches its sites. If a site stops opening, the strategy is repaired."
  ],
  "monitor.title": [
-  "Монитор",
-  "Monitor"
+  "Защита zapret2",
+  "zapret2 protection"
  ],
  "monitor.window": [
   "успешно {0} из {1}, чаще всего: {2}",
@@ -1144,8 +1144,8 @@
   "Advisor"
  ],
  "nav.engine": [
-  "Подбор для сайта",
-  "Search for a site"
+  "Подбор geneva для сайта",
+  "geneva search for a site"
  ],
  "nav.expert": [
   "Эксперт",
@@ -1448,7 +1448,7 @@
   "Forget routers' SSH keys"
  ],
  "settings.gui_token": [
-  "MCP-токен zapret-gui",
+  "Токен MCP zapret-gui",
   "zapret-gui MCP token"
  ],
  "settings.large_font": [
@@ -1656,8 +1656,8 @@
   "{0}: works {1}/{2} · {3}"
  ],
  "wizard.geneva_busy": [
-  "Сейчас работает geneva: обход или подбор (страницы «Авто-обход» и «Подбор для сайта»). Остановите её там: испытания nfqws2 прошли бы через оба движка.",
-  "geneva is running now: its bypass or its search (the Auto bypass and Search for a site pages). Stop it there: nfqws2's trials would pass through both engines."
+  "Сейчас работает geneva: обход или подбор (страницы «Авто-обход» и «Подбор geneva для сайта»). Остановите её там или кнопкой «Остановить всё» внизу окна: испытания nfqws2 прошли бы через оба движка.",
+  "geneva is running now: its bypass or its search (the Auto bypass and geneva search pages). Stop it there or with \"Stop everything\" at the bottom of the window: nfqws2's trials would pass through both engines."
  ],
  "wizard.mcp_busy": [
   "Сейчас подбором управляет внешний агент (MCP). Дождитесь конца или нажмите «Стоп» на баннере.",
@@ -1768,8 +1768,8 @@
   "1 What fails · 2 Diagnostics · 3 Search · 4 Check · 5 Where to turn it on"
  ],
  "wizard.title": [
-  "Подбор стратегии",
-  "Strategy tuning"
+  "Подбор zapret2",
+  "zapret2 tuning"
  ],
  "wizard.trial_fail": [
   "{0}: неудача ({1}) {2}",
@@ -1808,8 +1808,8 @@
   "Keep the strategy on"
  ],
  "nav.engine_hint": [
-  "geneva: один сайт, своя стратегия",
-  "geneva: one site, its own strategy"
+  "Один сайт, своя стратегия",
+  "One site, its own strategy"
  ],
  "nav.reports_hint": [
   "Итоги подбора, отчёт о проблеме",
@@ -1828,8 +1828,8 @@
   "AI assistant and MCP"
  ],
  "nav.settings_hint": [
-  "Роутер, глубина подбора, язык",
-  "Router, search depth, language"
+  "Интерфейс, роутер, MCP, данные",
+  "Interface, router, MCP, data"
  ],
  "home.how_title": [
   "Как пользоваться",
@@ -1868,7 +1868,7 @@
   "You need the bypass on this PC only."
  ],
  "export.pc_how": [
-  "«Включить на этом компьютере» запускает встроенный zapret2 (winws2/nfqws2) со стратегией. Обход работает, пока открыт AutoTuner; следить и выключать — на странице «Монитор».",
+  "«Включить на этом компьютере» запускает встроенный zapret2 (winws2/nfqws2) со стратегией. Обход работает, пока открыт AutoTuner; следить и выключать — на странице «Защита zapret2».",
   "'Turn on on this PC' starts the built-in zapret2 (winws2/nfqws2) with the strategy. The bypass works while AutoTuner is open; watch it and turn it off on the zapret2 protection page."
  ],
  "export.protect_here": [
@@ -1885,7 +1885,7 @@
  ],
  "export.service_hint": [
   "Служба zt_winws2 работает и без AutoTuner, с загрузки Windows. Не включайте одновременно защиту в «Защите zapret2»: два движка будут обрабатывать одни и те же пакеты.",
-  "The zt_winws2 service runs without AutoTuner, from Windows start-up. Do not turn on protection in Monitor at the same time: two engines would handle the same packets."
+  "The zt_winws2 service runs without AutoTuner, from Windows start-up. Do not turn on zapret2 protection at the same time: two engines would handle the same packets."
  ],
  "export.service_remove": [
   "Удалить службу Windows",

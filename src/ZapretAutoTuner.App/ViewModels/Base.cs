@@ -29,6 +29,32 @@ public abstract class PageViewModel : ObservableObject
 
     protected static Loc.Loc L => Loc.Loc.I;
 
+    private string? _engine;
+    private bool _busy;
+
+    /// <summary>
+    /// Which bypass engine the page works with, shown as a badge in the menu: "geneva", "zapret2", or null for the
+    /// pages both share (reports, settings…). Set by the window's view model, which knows the menu as a whole.
+    /// </summary>
+    public string? Engine
+    {
+        get => _engine;
+        set
+        {
+            if (SetProperty(ref _engine, value))
+                OnPropertyChanged(nameof(HasEngine));
+        }
+    }
+
+    public bool HasEngine => _engine is not null;
+
+    /// <summary>Something of this page runs now (a search, a bypass, the protection): a dot next to its name in the menu.</summary>
+    public bool IsBusy
+    {
+        get => _busy;
+        set => SetProperty(ref _busy, value);
+    }
+
     /// <summary>The page became the current one: what another page may have changed is read again.</summary>
     public virtual void OnShown()
     {
@@ -53,4 +79,12 @@ public sealed class SessionState : ObservableObject
 
     /// <summary>The event log of the last run (the "журнал событий").</summary>
     public List<string> Log { get; } = [];
+}
+
+/// <summary>Small converters for the views.</summary>
+public static class Converters
+{
+    /// <summary>The engine badge is geneva's (the other colour is zapret2's).</summary>
+    public static readonly Avalonia.Data.Converters.IValueConverter IsGeneva =
+        new Avalonia.Data.Converters.FuncValueConverter<string?, bool>(e => e == "geneva");
 }

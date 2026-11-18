@@ -13,7 +13,7 @@
       </StackPanel>
       <TextBlock Classes="muted" Text="{l:T monitor.subtitle}" />
       <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,6">
-        <Button Classes="accent" Padding="20,10" Command="{Binding ToggleCommand}">
+        <Button Classes="accent" Padding="20,10" Command="{Binding ToggleCommand}" IsEnabled="{Binding !NeedsSolution}">
           <Panel>
             <TextBlock Text="{l:T monitor.start}" IsVisible="{Binding !Active}" />
             <TextBlock Text="{l:T monitor.stop}" IsVisible="{Binding Active}" />
@@ -21,6 +21,16 @@
         </Button>
         <CheckBox Content="{l:T monitor.auto_apply}" IsChecked="{Binding AutoApply}" />
       </StackPanel>
+      <!-- no strategy yet: said before the button is pressed, with the ways to get one -->
+      <Border Classes="card" IsVisible="{Binding NeedsSolution}">
+        <StackPanel Spacing="6">
+          <TextBlock Text="{l:T monitor.need_solution}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <WrapPanel>
+            <Button Classes="accent" Content="{l:T monitor.go_wizard}" Command="{Binding GoToCommand}" CommandParameter="wizard" Margin="0,0,8,0" />
+            <Button Content="{l:T monitor.go_expert}" Command="{Binding GoToCommand}" CommandParameter="expert" />
+          </WrapPanel>
+        </StackPanel>
+      </Border>
       <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
       <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" IsVisible="{Binding HasProblem}" />
     </StackPanel>
@@ -46,11 +56,11 @@
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:DomainHealthViewModel">
             <Border Classes="card" Margin="0,0,0,6">
-              <Grid ColumnDefinitions="Auto,240,160,*,Auto">
+              <Grid ColumnDefinitions="Auto,2*,1.3*,2*,Auto">
                 <Ellipse Width="12" Height="12" Fill="{Binding Brush}" Margin="0,0,10,0" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" Text="{Binding Domain}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="2" Text="{Binding State}" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="3" Text="{Binding Window}" Classes="muted" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Domain}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Domain}" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="2" Text="{Binding State}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="3" Text="{Binding Window}" Classes="muted" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <Button Grid.Column="4" Content="{l:T monitor.broken}"
                         Command="{Binding $parent[ItemsControl].((vm:MonitorViewModel)DataContext).ReportBrokenCommand}" CommandParameter="{Binding}" />
               </Grid>

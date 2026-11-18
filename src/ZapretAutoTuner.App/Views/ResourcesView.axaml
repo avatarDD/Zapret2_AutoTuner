@@ -14,21 +14,29 @@
       <StackPanel Spacing="6">
         <TextBlock Text="{Binding RouterText}" TextWrapping="Wrap" />
         <WrapPanel>
-          <TextBox Text="{Binding RouterPassword}" PasswordChar="•" Watermark="{l:T resources.router_password}" Width="220" Margin="0,0,8,8" />
+          <TextBox Text="{Binding RouterPassword}" PasswordChar="•" Watermark="{l:T resources.router_password}" Width="220" Margin="0,0,8,8"
+                   AutomationProperties.Name="{l:T resources.router_password}" />
           <Button Content="{l:T resources.push}" Command="{Binding PushCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,8" />
           <Button Content="{l:T resources.router_delete}" Command="{Binding RouterDeleteCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,8" />
         </WrapPanel>
       </StackPanel>
     </Border>
-    <Grid ColumnDefinitions="260,*" Margin="0,4,0,0">
-      <DockPanel Margin="0,0,12,0">
+    <Grid ColumnDefinitions="2*,5*" Margin="0,4,0,0">
+      <DockPanel Margin="0,0,12,0" MinWidth="180">
         <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
-          <Button Content="{l:T resources.new}" Command="{Binding NewCommand}" Margin="0,0,8,0" />
-          <Button Content="{l:T resources.reload}" Command="{Binding ReloadCommand}" />
+          <Button Content="{l:T resources.new}" Command="{Binding NewCommand}" Margin="0,0,8,8" />
+          <Button Content="{l:T resources.import}" Command="{Binding ImportCommand}" Margin="0,0,8,8" ToolTip.Tip="{l:T resources.import_tip}" />
+          <Button Content="{l:T resources.reload}" Command="{Binding ReloadCommand}" Margin="0,0,8,8" />
         </WrapPanel>
+        <TextBox DockPanel.Dock="Top" Text="{Binding Filter}" Watermark="{l:T resources.search}" Margin="0,0,0,6"
+                 AutomationProperties.Name="{l:T resources.search}" />
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Shown}" Classes="muted small" Margin="0,0,0,4"
+                   IsVisible="{Binding Shown, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
         <TextBlock DockPanel.Dock="Top" Text="{l:T resources.empty}" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,6"
-                   IsVisible="{Binding !Items.Count}" />
-        <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}">
+                   IsVisible="{Binding !Total}" />
+        <TextBlock DockPanel.Dock="Top" Text="{l:T resources.nothing_found}" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,6"
+                   IsVisible="{Binding NothingFound}" />
+        <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T nav.resources}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ResourceRowViewModel">
               <StackPanel>
@@ -41,19 +49,25 @@
       </DockPanel>
       <DockPanel Grid.Column="1">
         <StackPanel DockPanel.Dock="Top" Spacing="6">
-          <TextBlock Text="{l:T resources.name}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
-          <TextBox Text="{Binding Name}" IsEnabled="{Binding IsNew}" Watermark="youtube" />
+          <TextBlock Text="{l:T resources.name}" Classes="caption" />
+          <TextBox Text="{Binding Name}" IsEnabled="{Binding IsNew}" Watermark="youtube" AutomationProperties.Name="{l:T resources.name}" />
           <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsBlob}">
             <TextBlock Text="{l:T resources.encoding}" VerticalAlignment="Center" />
             <ComboBox ItemsSource="{Binding BlobEncodings}" SelectedIndex="{Binding BlobEncodingIndex}" />
           </StackPanel>
           <TextBlock Text="{Binding Approval}" FontWeight="SemiBold" IsVisible="{Binding IsLua}" />
-          <TextBlock Classes="muted" Text="{Binding ContentHint}" />
+          <TextBlock Classes="muted" Text="{Binding ContentHint}" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsList}">
+            <TextBlock Text="{Binding ContentStats}" Classes="small" VerticalAlignment="Center" />
+            <Button Content="{l:T resources.dedupe}" Command="{Binding RemoveDuplicatesCommand}" IsVisible="{Binding HasDuplicates}" Padding="8,2" />
+          </StackPanel>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
           <WrapPanel>
             <Button Classes="accent" Content="{l:T resources.save}" Command="{Binding SaveCommand}" Margin="0,0,8,8" />
             <Button Content="{l:T resources.approve}" Command="{Binding ApproveCommand}" IsVisible="{Binding IsLua}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,8" />
+            <Button Content="{l:T resources.export}" Command="{Binding ExportCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,8" />
+            <Button Content="{l:T resources.duplicate}" Command="{Binding DuplicateCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,8" ToolTip.Tip="{l:T resources.duplicate_tip}" />
             <Button Content="{l:T resources.delete}" Command="{Binding DeleteCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,8" />
             <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" IsVisible="{Binding HasProblem}" Margin="0,0,8,8" />
           </WrapPanel>
@@ -66,7 +80,7 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </StackPanel>
-        <TextBox Text="{Binding Content}" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="monospace" FontSize="12" />
+        <TextBox Text="{Binding Content}" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="monospace" FontSize="12" AutomationProperties.Name="{l:T resources.content}" />
       </DockPanel>
     </Grid>
   </DockPanel>

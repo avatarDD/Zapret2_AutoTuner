@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Loc\strings.json" LogicalName="ZapretAutoTuner.App.strings.json" />
+    <EmbeddedResource Include="Loc\strings.gui.json" LogicalName="ZapretAutoTuner.App.strings.gui.json" />
     <AvaloniaResource Include="Assets\icon.ico;Assets\icon.png" />
     <InternalsVisibleTo Include="ZapretAutoTuner.App.Tests" />
   </ItemGroup>

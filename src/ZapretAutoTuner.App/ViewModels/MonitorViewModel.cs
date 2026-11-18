@@ -87,6 +87,28 @@ public sealed partial class MonitorViewModel : PageViewModel
 
     public bool HasProblem => Problem is not null;
 
+    /// <summary>
+    /// There is a strategy to protect with. Without one the page says so before the button is pressed, and leads to
+    /// where one comes from (UX audit: "Включить защиту" was active and only then said "Сначала подберите стратегию").
+    /// </summary>
+    public bool HasSolution => SessionState.I.Last?.Solution is not null;
+
+    public bool NeedsSolution => !Active && !HasSolution;
+
+    /// <summary>Goes to another page ("wizard", "expert"); set by the window's view model.</summary>
+    public Action<string>? Navigate { get; set; }
+
+    [RelayCommand]
+    private void GoTo(string where) => Navigate?.Invoke(where);
+
+    partial void OnActiveChanged(bool value) => OnPropertyChanged(nameof(NeedsSolution));
+
+    public override void OnShown()
+    {
+        OnPropertyChanged(nameof(HasSolution));
+        OnPropertyChanged(nameof(NeedsSolution));
+    }
+
     [RelayCommand]
     private async Task ReportProblemAsync()
     {

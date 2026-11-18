@@ -20,7 +20,7 @@ public sealed partial class App : Application
             if (host.Settings.Language is "en" or "ru")
                 Loc.Loc.I.English = host.Settings.Language == "en";
             ApplyTheme(host.Settings.Theme);
-            ApplyFont(host.Settings.LargeFont);
+            ApplyScale(host.Settings.UiScale);
             // what the last search found is still there after a restart: export and protection work on it
             host.Solutions.Restore();
             var main = new MainViewModel(host);
@@ -101,10 +101,15 @@ public sealed partial class App : Application
             Current.RequestedThemeVariant = theme switch { "light" => ThemeVariant.Light, "dark" => ThemeVariant.Dark, _ => ThemeVariant.Default };
     }
 
-    /// <summary>"Крупный шрифт": a bigger base size for every control (accessibility).</summary>
-    public static void ApplyFont(bool large)
+    /// <summary>The interface scale in percent (accessibility): the window scales as a whole, its small texts too.</summary>
+    public static int Scale { get; private set; } = 100;
+
+    /// <summary>The scale changed: the window applies it to its content.</summary>
+    public static event Action<int>? ScaleChanged;
+
+    public static void ApplyScale(int percent)
     {
-        if (Current is not null)
-            Current.Resources["ControlContentThemeFontSize"] = large ? 17.0 : 14.0;
+        Scale = Math.Clamp(percent, 100, 200);
+        ScaleChanged?.Invoke(Scale);
     }
 }

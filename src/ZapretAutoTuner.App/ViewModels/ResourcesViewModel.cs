@@ -94,7 +94,7 @@ public sealed partial class ResourcesViewModel : PageViewModel
     public ObservableCollection<string> Problems { get; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Kind), nameof(IsLua), nameof(IsBlob), nameof(ContentHint))]
+    [NotifyPropertyChangedFor(nameof(Kind), nameof(IsLua), nameof(IsBlob), nameof(IsList), nameof(ContentHint), nameof(ContentStats), nameof(HasDuplicates))]
     private int _kindIndex;
 
     public ResourceKind Kind => KindOrder[Math.Clamp(KindIndex, 0, KindOrder.Length - 1)];
@@ -158,9 +158,12 @@ public sealed partial class ResourcesViewModel : PageViewModel
         New();
     }
 
+    /// <summary>The list was read again and the same resource is selected anew: the editor keeps what is typed.</summary>
+    private bool _reselecting;
+
     partial void OnSelectedChanged(ResourceRowViewModel? value)
     {
-        if (value is not null)
+        if (value is not null && !_reselecting)
             Load(value.Info);
     }
 
@@ -178,12 +181,31 @@ public sealed partial class ResourcesViewModel : PageViewModel
     {
         var keep = Selected?.Info;
         Items.Clear();
-        foreach (var i in _store.List(Kind))
+        var filter = Filter.Trim();
+        var all = _store.List(Kind);
+        foreach (var i in all.Where(i => filter.Length == 0 || i.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)))
             Items.Add(new ResourceRowViewModel(i));
+        Total = all.Count;
+        OnPropertyChanged(nameof(Shown));
+        OnPropertyChanged(nameof(NothingFound));
         OnPropertyChanged(nameof(RouterText));
         OnPropertyChanged(nameof(RouterPassword));
+        // the same resource stays selected without loading it again: unsaved edits in the editor are kept (a search
+        // in the list reloads on every key)
         if (keep is not null && Items.FirstOrDefault(r => r.Info.Kind == keep.Kind && r.Name == keep.Name) is { } row)
-            Selected = row;
+        {
+            _reselecting = true;
+            try
+            {
+                Selected = row;
+            }
+            finally
+            {
+                _reselecting = false;
+            }
+            if (keep.Kind == ResourceKind.LuaScript)
+                Approval = ApprovalText(row.Info);
+        }
     }
 
     private void Load(ResourceInfo info)
@@ -206,6 +228,186 @@ public sealed partial class ResourcesViewModel : PageViewModel
         ResourceKind.LuaScript => d.Source,
         _ => string.Join("\n", d.Items),
     };
+
+    // ---- the manager's tools (UX audit: only a master-detail editor before): search, import, export, copy, the content's numbers
+
+    /// <summary>Shows only the names with this text in them.</summary>
+    [ObservableProperty]
+    private string _filter = "";
+
+    partial void OnFilterChanged(string value) => Reload();
+
+    /// <summary>How many of the kind there are, whatever the filter.</summary>
+    [ObservableProperty]
+    private int _total;
+
+    public string Shown => Filter.Trim().Length == 0 ? "" : L.F("resources.shown", Items.Count, Total);
+
+    public bool NothingFound => Items.Count == 0 && Total > 0;
+
+    /// <summary>Picks files to import (several at once); set by the window.</summary>
+    public Func<Task<IReadOnlyList<(string Name, byte[] Bytes)>>>? OpenFiles { get; set; }
+
+    /// <summary>Saves a file the user picks; set by the window.</summary>
+    public Func<string, byte[], Task>? SaveFile { get; set; }
+
+    /// <summary>
+    /// Files become resources of the current kind, named by the file ("YouTube.txt" → "youtube"). A name that exists gets
+    /// a new version (the old ones are kept); a Lua script always lands as a draft that still needs "Подтвердить".
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportAsync()
+    {
+        if (OpenFiles is null)
+            return;
+        var files = await OpenFiles();
+        if (files.Count == 0)
+            return;
+        var problems = new List<string>();
+        int created = 0, updated = 0, failed = 0;
+        string? last = null;
+        foreach (var (file, bytes) in files)
+        {
+            var name = ResourceNames.Normalize(file);
+            var input = ImportInput(Kind, name, bytes);
+            try
+            {
+                var exists = _store.Get(Kind, name) is not null;
+                var r = exists ? _store.Update(input, "import") : _store.Create(input, "import");
+                if (exists)
+                    updated++;
+                else
+                    created++;
+                last = r.Info.Name;
+                foreach (var w in r.Warnings)
+                    problems.Add($"⚠ {file}: {w.Message(!L.English)}");
+            }
+            catch (ResourceException e)
+            {
+                failed++;
+                problems.Add($"✖ {file}: {L.Pick(e.Ru, e.En)}");
+                foreach (var p in e.Problems.Take(5))
+                    problems.Add("   " + p.Message(!L.English));
+            }
+        }
+        Selected = null;
+        Reload();
+        if (last is not null)
+            Selected = Items.FirstOrDefault(i => i.Name == last);
+        // after the selection: loading the selected one clears the list
+        Problems.Clear();
+        foreach (var p in problems)
+            Problems.Add(p);
+        Status = L.F("resources.imported", created, updated, failed);
+    }
+
+    /// <summary>A file's bytes as the input of a kind: text by lines for lists, the bytes themselves for a blob.</summary>
+    internal static ResourceInput ImportInput(ResourceKind kind, string name, byte[] bytes)
+    {
+        string Text() => System.Text.Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF');
+        return kind switch
+        {
+            ResourceKind.Hostlist => ResourceInput.Hostlist(name, Text().ReplaceLineEndings("\n").Split('\n')),
+            ResourceKind.Ipset => ResourceInput.Ipset(name, Text().ReplaceLineEndings("\n").Split('\n')),
+            ResourceKind.Blob => ResourceInput.Blob(name, bytes),
+            _ => ResourceInput.Lua(name, Text()),
+        };
+    }
+
+    /// <summary>The file a resource is exported as: the same name and form zapret2 uses on disk.</summary>
+    internal static (string File, byte[] Bytes) ExportFile(StoredResource r) => r.Data.Kind switch
+    {
+        ResourceKind.Blob => (r.Info.Name + ".bin", r.Data.Bytes),
+        ResourceKind.LuaScript => (r.Info.Name + ".lua", System.Text.Encoding.UTF8.GetBytes(r.Data.Source)),
+        _ => (r.Info.Name + ".txt", System.Text.Encoding.UTF8.GetBytes(string.Join("\n", r.Data.Items) + "\n")),
+    };
+
+    [RelayCommand]
+    private async Task ExportAsync()
+    {
+        if (Selected is not { } row || SaveFile is null || _store.Get(row.Info.Kind, row.Name) is not { } r)
+            return;
+        var (file, bytes) = ExportFile(r);
+        await SaveFile(file, bytes);
+    }
+
+    /// <summary>A copy under a new name, not saved yet: with "Удалить" on the old one it is a rename.</summary>
+    [RelayCommand]
+    private void Duplicate()
+    {
+        if (Selected is not { } row)
+            return;
+        var content = Content;
+        var encoding = BlobEncodingIndex;
+        var name = row.Name + "-2";
+        for (int n = 3; _store.Get(Kind, name) is not null; n++)
+            name = $"{row.Name}-{n}";
+        New();
+        Name = name;
+        Content = content;
+        BlobEncodingIndex = encoding;
+        Status = L["resources.duplicated"];
+    }
+
+    /// <summary>Lines of a list: entries, repeats, comments — counted as the user types.</summary>
+    public string ContentStats
+    {
+        get
+        {
+            if (Kind is not (ResourceKind.Hostlist or ResourceKind.Ipset))
+                return "";
+            var (entries, unique, comments) = Count(Content);
+            return L.F("resources.stats", entries, entries - unique, comments);
+        }
+    }
+
+    public bool HasDuplicates => Kind is ResourceKind.Hostlist or ResourceKind.Ipset && Count(Content) is var (e, u, _) && e > u;
+
+    internal static (int Entries, int Unique, int Comments) Count(string text)
+    {
+        int entries = 0, comments = 0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in text.ReplaceLineEndings("\n").Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0)
+                continue;
+            if (line.StartsWith('#'))
+            {
+                comments++;
+                continue;
+            }
+            entries++;
+            seen.Add(line);
+        }
+        return (entries, seen.Count, comments);
+    }
+
+    /// <summary>Removes repeated entries and empty lines, keeps the order and the comments.</summary>
+    internal static string Dedupe(string text)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var lines = new List<string>();
+        foreach (var raw in text.ReplaceLineEndings("\n").Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || (!line.StartsWith('#') && !seen.Add(line)))
+                continue;
+            lines.Add(line);
+        }
+        return string.Join("\n", lines);
+    }
+
+    [RelayCommand]
+    private void RemoveDuplicates() => Content = Dedupe(Content);
+
+    partial void OnContentChanged(string value)
+    {
+        OnPropertyChanged(nameof(ContentStats));
+        OnPropertyChanged(nameof(HasDuplicates));
+    }
+
+    public bool IsList => Kind is ResourceKind.Hostlist or ResourceKind.Ipset;
 
     [RelayCommand]
     private void New()

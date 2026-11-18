@@ -16,11 +16,17 @@
     </StackPanel>
 
     <!-- navigation -->
-    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0" HorizontalAlignment="Right">
-      <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" IsVisible="{Binding HasProblem}" />
-      <Button Content="{l:T common.back}" Command="{Binding BackCommand}" IsVisible="{Binding !IsStep1}" IsEnabled="{Binding !Running}" />
-      <Button Content="{l:T common.next}" Command="{Binding NextCommand}" IsVisible="{Binding IsStep4}" />
-    </StackPanel>
+    <!-- the last step ends with "Готово" and the last export's answer stays in sight (UX audit P0: step 5 was a dead end) -->
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+        <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" IsVisible="{Binding HasProblem}" />
+        <Button Content="{l:T common.back}" Command="{Binding BackCommand}" IsVisible="{Binding !IsStep1}" IsEnabled="{Binding !Running}" />
+        <Button Content="{l:T common.next}" Command="{Binding NextCommand}" IsVisible="{Binding IsStep4}" />
+        <Button Classes="accent" Content="{l:T wizard.done}" Command="{Binding DoneCommand}" IsVisible="{Binding IsStep5}" ToolTip.Tip="{l:T wizard.done_tip}" />
+      </StackPanel>
+      <SelectableTextBlock Text="{Binding ExportStatus}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0" MaxHeight="60"
+                           IsVisible="{Binding IsStep5}" AutomationProperties.Name="{l:T wizard.export_result}" />
+    </DockPanel>
 
     <Panel Margin="0,12,0,0">
       <!-- step 1: what does not work -->
@@ -49,7 +55,7 @@
               <TextBlock Grid.Row="1" Text="{l:T export.gui_url}" VerticalAlignment="Center" Margin="0,0,8,6" />
               <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding GuiUrl}" Watermark="http://192.168.1.1:8080" Margin="0,0,0,6" />
               <TextBlock Grid.Row="2" Text="{l:T settings.gui_token}" VerticalAlignment="Center" Margin="0,0,8,0" />
-              <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding GuiToken}" PasswordChar="•" />
+              <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding GuiToken}" PasswordChar="•" AutomationProperties.Name="{l:T settings.gui_token}" />
             </Grid>
           </Border>
           <TextBlock Classes="muted" Text="{l:T wizard.input_hint}" />
@@ -62,7 +68,12 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <TextBox Text="{Binding InputText}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="140" MaxHeight="260" Watermark="youtube.com&#10;discord.com&#10;https://example.org/page" />
+          <TextBox Text="{Binding InputText}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="140" MaxHeight="260" Watermark="youtube.com&#10;discord.com&#10;https://example.org/page"
+                   AutomationProperties.Name="{l:T wizard.input_name}">
+            <TextBox.KeyBindings>
+              <KeyBinding Gesture="Ctrl+Enter" Command="{Binding StartCommand}" />
+            </TextBox.KeyBindings>
+          </TextBox>
           <Expander Header="{l:T wizard.providers}">
             <StackPanel Spacing="6">
               <TextBlock Classes="muted" Text="{l:T wizard.providers_hint}" />
@@ -78,7 +89,10 @@
             </StackPanel>
           </Expander>
           <CheckBox Content="{l:T wizard.open_pages}" IsChecked="{Binding OpenPages}" />
-          <Button Classes="accent" Padding="24,10" Content="{l:T wizard.start}" Command="{Binding StartCommand}" />
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Classes="accent" Padding="24,10" Content="{l:T wizard.start}" Command="{Binding StartCommand}" />
+            <TextBlock Classes="muted small" Text="Ctrl+Enter" VerticalAlignment="Center" />
+          </StackPanel>
         </StackPanel>
       </ScrollViewer>
 
@@ -87,7 +101,7 @@
         <StackPanel DockPanel.Dock="Top" Spacing="6">
           <TextBlock Classes="h2" Text="{l:T wizard.step2}" />
           <Grid ColumnDefinitions="*,Auto">
-            <ProgressBar Value="{Binding Percent}" Maximum="100" Height="10" VerticalAlignment="Center" />
+            <ProgressBar Value="{Binding Percent}" Maximum="100" Height="10" VerticalAlignment="Center" AutomationProperties.Name="{l:T wizard.progress}" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" Margin="12,0,0,0">
               <TextBlock Text="{Binding Percent, StringFormat={}{0:0}%}" />
               <TextBlock Text="{Binding ElapsedText}" />
@@ -112,9 +126,9 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:TargetRowViewModel">
                   <Border Classes="card" Margin="0,0,0,6">
-                    <Grid ColumnDefinitions="220,140,*,Auto">
-                      <TextBlock Text="{Binding Host}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Grid.Column="1" Text="{Binding StageText}" VerticalAlignment="Center" />
+                    <Grid ColumnDefinitions="2*,1.3*,3*,Auto">
+                      <TextBlock Text="{Binding Host}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Host}" Margin="0,0,8,0" />
+                      <TextBlock Grid.Column="1" Text="{Binding StageText}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,8,0" />
                       <TextBlock Grid.Column="2" Text="{Binding Message}" TextWrapping="Wrap" VerticalAlignment="Center" />
                       <TextBlock Grid.Column="3" Text="{Binding Found, StringFormat='✓ {0}'}" VerticalAlignment="Center" Margin="8,0,0,0" />
                     </Grid>
@@ -190,11 +204,14 @@
           <!-- this PC -->
           <Border Classes="card">
             <StackPanel Spacing="6">
-              <TextBlock Text="{l:T export.pc}" FontWeight="SemiBold" FontSize="15" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{l:T export.pc}" FontWeight="SemiBold" FontSize="15" />
+                <Border Classes="badge recommended" IsVisible="{Binding RecommendPc}" VerticalAlignment="Center"><TextBlock Text="{l:T export.recommended}" /></Border>
+              </StackPanel>
               <TextBlock Text="{l:T export.pc_when}" TextWrapping="Wrap" />
               <TextBlock Classes="muted" Text="{l:T export.pc_how}" TextWrapping="Wrap" />
               <WrapPanel>
-                <Button Classes="accent" Margin="0,0,8,0" Content="{l:T export.protect_here}" Command="{Binding ProtectHereCommand}" IsEnabled="{Binding HasSolution}" />
+                <Button Classes.accent="{Binding RecommendPc}" Margin="0,0,8,0" Content="{l:T export.protect_here}" Command="{Binding ProtectHereCommand}" IsEnabled="{Binding HasSolution}" />
                 <Button Margin="0,0,8,0" Content="{l:T export.service}" Command="{Binding ExportCommand}" CommandParameter="service" IsEnabled="{Binding HasSolution}" IsVisible="{Binding IsWindows}" />
                 <Button Content="{l:T export.pc_file}" Command="{Binding ExportCommand}" CommandParameter="pc" IsEnabled="{Binding HasSolution}" />
               </WrapPanel>
@@ -207,17 +224,20 @@
           <!-- Keenetic -->
           <Border Classes="card">
             <StackPanel Spacing="6">
-              <TextBlock Text="{l:T export.keenetic}" FontWeight="SemiBold" FontSize="15" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{l:T export.keenetic}" FontWeight="SemiBold" FontSize="15" />
+                <Border Classes="badge recommended" IsVisible="{Binding RecommendKeenetic}" VerticalAlignment="Center"><TextBlock Text="{l:T export.recommended}" /></Border>
+              </StackPanel>
               <TextBlock Text="{l:T export.keenetic_when}" TextWrapping="Wrap" />
               <TextBlock Classes="muted" Text="{l:T export.keenetic_where}" TextWrapping="Wrap" />
               <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
                 <TextBlock Text="{l:T export.router_host}" VerticalAlignment="Center" Margin="0,0,8,6" />
                 <TextBox Grid.Column="1" Text="{Binding RouterHost}" Watermark="192.168.1.1" Margin="0,0,0,6" />
                 <TextBlock Grid.Row="1" Text="{l:T export.router_password}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding RouterPassword}" PasswordChar="•" />
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding RouterPassword}" PasswordChar="•" AutomationProperties.Name="{l:T export.router_password}" />
               </Grid>
               <WrapPanel>
-                <Button Classes="accent" Margin="0,0,8,0" Content="{l:T export.keenetic_install}" Command="{Binding ExportCommand}" CommandParameter="keenetic_ssh" IsEnabled="{Binding HasSolution}" />
+                <Button Classes.accent="{Binding RecommendKeenetic}" Margin="0,0,8,0" Content="{l:T export.keenetic_install}" Command="{Binding ExportCommand}" CommandParameter="keenetic_ssh" IsEnabled="{Binding HasSolution}" />
                 <Button Content="{l:T export.save_archive}" Command="{Binding ExportCommand}" CommandParameter="keenetic" IsEnabled="{Binding HasSolution}" />
               </WrapPanel>
               <SelectableTextBlock Text="{Binding KeeneticStatus}" TextWrapping="Wrap" IsVisible="{Binding KeeneticStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
@@ -227,17 +247,20 @@
           <!-- zapret-gui -->
           <Border Classes="card">
             <StackPanel Spacing="6">
-              <TextBlock Text="{l:T export.gui}" FontWeight="SemiBold" FontSize="15" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{l:T export.gui}" FontWeight="SemiBold" FontSize="15" />
+                <Border Classes="badge recommended" IsVisible="{Binding RecommendGui}" VerticalAlignment="Center"><TextBlock Text="{l:T export.recommended}" /></Border>
+              </StackPanel>
               <TextBlock Text="{l:T export.gui_when}" TextWrapping="Wrap" />
               <TextBlock Classes="muted" Text="{l:T export.gui_where}" TextWrapping="Wrap" />
               <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
                 <TextBlock Text="{l:T export.gui_url}" VerticalAlignment="Center" Margin="0,0,8,6" />
                 <TextBox Grid.Column="1" Text="{Binding GuiUrl}" Watermark="http://192.168.1.1:8080" Margin="0,0,0,6" />
                 <TextBlock Grid.Row="1" Text="{l:T export.gui_password}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding GuiPassword}" PasswordChar="•" />
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding GuiPassword}" PasswordChar="•" AutomationProperties.Name="{l:T export.gui_password}" />
               </Grid>
               <WrapPanel>
-                <Button Classes="accent" Margin="0,0,8,0" Content="{l:T export.gui_send}" Command="{Binding ExportCommand}" CommandParameter="gui_send" IsEnabled="{Binding HasSolution}" />
+                <Button Classes.accent="{Binding RecommendGui}" Margin="0,0,8,0" Content="{l:T export.gui_send}" Command="{Binding ExportCommand}" CommandParameter="gui_send" IsEnabled="{Binding HasSolution}" />
                 <Button Content="{l:T export.save_archive}" Command="{Binding ExportCommand}" CommandParameter="gui" IsEnabled="{Binding HasSolution}" />
               </WrapPanel>
               <SelectableTextBlock Text="{Binding GuiStatus}" TextWrapping="Wrap" IsVisible="{Binding GuiStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
@@ -262,6 +285,7 @@
             </StackPanel>
           </Expander>
           <TextBlock Classes="muted" Text="{l:T export.targets_hint}" TextWrapping="Wrap" />
+          <TextBlock Classes="muted" Text="{l:T export.credentials_hint}" TextWrapping="Wrap" />
         </StackPanel>
       </ScrollViewer>
     </Panel>

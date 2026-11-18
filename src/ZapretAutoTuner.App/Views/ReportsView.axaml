@@ -9,14 +9,16 @@
       <TextBlock Classes="h1" Text="{l:T reports.title}" />
       <TextBlock Classes="muted" Text="{l:T reports.subtitle}" />
       <CheckBox Content="{l:T reports.mask_domains}" IsChecked="{Binding MaskDomains}" />
-      <TextBox Text="{Binding Environment}" AcceptsReturn="True" Height="60" Watermark="{l:T reports.environment}" />
+      <TextBlock Classes="caption" Text="{l:T reports.environment}" />
+      <TextBox Text="{Binding Environment}" AcceptsReturn="True" Height="60" AutomationProperties.Name="{l:T reports.environment}" />
       <WrapPanel>
         <Button Content="{l:T reports.refresh}" Command="{Binding RefreshCommand}" Margin="0,0,8,8" />
-        <Button Classes="accent" Content="{l:T reports.save}" Command="{Binding SaveCommand}" Margin="0,0,8,8" />
-        <Button Content="{l:T reports.copy}" Command="{Binding CopyCommand}" Margin="0,0,8,8" />
-        <Button Content="{l:T reports.copy_prompt}" Command="{Binding CopyPromptCommand}" Margin="0,0,8,8" />
+        <Button Classes="accent" Content="{l:T reports.save}" Command="{Binding SaveCommand}" Margin="0,0,8,8" ToolTip.Tip="{l:T reports.save_tip}" />
+        <Button Content="{l:T reports.copy}" Command="{Binding CopyCommand}" Margin="0,0,8,8" ToolTip.Tip="{l:T reports.copy_tip}" />
+        <Button Content="{l:T reports.copy_prompt}" Command="{Binding CopyPromptCommand}" Margin="0,0,8,8" ToolTip.Tip="{l:T reports.copy_prompt_tip}" />
         <Button Content="{l:T bugreport.button}" Command="{Binding ReportProblemCommand}" Margin="0,0,8,8" />
       </WrapPanel>
+      <TextBlock Classes="muted small" Text="{l:T reports.buttons_hint}" TextWrapping="Wrap" />
       <TextBlock Text="{Binding Status}" Classes="muted" />
     </StackPanel>
     <TextBox Text="{Binding Preview}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" FontSize="12" Margin="0,8,0,0" />

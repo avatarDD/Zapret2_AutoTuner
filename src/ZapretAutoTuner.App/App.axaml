@@ -15,7 +15,21 @@
     <DataTemplate DataType="vm:AdvisorViewModel"><v:AdvisorView /></DataTemplate>
     <DataTemplate DataType="vm:EngineViewModel"><v:EngineView /></DataTemplate>
     <DataTemplate DataType="vm:AutoViewModel"><v:AutoView /></DataTemplate>
+    <DataTemplate DataType="vm:EnvironmentViewModel"><v:EnvironmentView /></DataTemplate>
   </Application.DataTemplates>
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <!-- 4.5:1 and more on the card and window backgrounds of each theme -->
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="ErrorTextBrush" Color="#B3261E" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="ErrorTextBrush" Color="#FF9C94" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
     <Style Selector="TextBlock.h1">
@@ -31,9 +45,56 @@
       <Setter Property="Opacity" Value="0.7" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
+    <!-- the error colour follows the theme: the fixed #D0443E was about 3.6:1 on the dark theme (UX audit P2) -->
     <Style Selector="TextBlock.error">
-      <Setter Property="Foreground" Value="#D0443E" />
+      <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
       <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- compact tabs: Fluent's 24px headers wrapped to two rows at the window's minimum width -->
+    <Style Selector="TabControl.compact > TabItem">
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="Padding" Value="10,0" />
+    </Style>
+    <Style Selector="TextBlock.small">
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="TextBlock.caption">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Opacity" Value="0.75" />
+      <Setter Property="Margin" Value="0,0,0,2" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- the engine badge in the menu and on the pages -->
+    <Style Selector="Border.badge">
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="5,0,5,1" />
+      <Setter Property="Background" Value="#2A6FB0" />
+    </Style>
+    <Style Selector="Border.badge.geneva">
+      <Setter Property="Background" Value="#7A4FB5" />
+    </Style>
+    <Style Selector="Border.badge.recommended">
+      <Setter Property="Background" Value="#2E8A55" />
+    </Style>
+    <Style Selector="Border.badge > TextBlock">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <!-- a button that looks like a link: the status bar's items -->
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="2,1" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.link.error">
+      <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="Foreground" Value="{DynamicResource ErrorTextBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="Border.card">
       <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />

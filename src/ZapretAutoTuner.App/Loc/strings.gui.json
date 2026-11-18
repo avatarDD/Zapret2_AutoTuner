@@ -1,0 +1,518 @@
+{
+ "nav.environment": [
+  "Состояние",
+  "Status"
+ ],
+ "nav.environment_hint": [
+  "zapret2, geneva, браузер, права",
+  "zapret2, geneva, browser, rights"
+ ],
+ "nav.menu": [
+  "Разделы программы",
+  "Sections of the program"
+ ],
+ "nav.busy": [
+  "Сейчас работает",
+  "Running now"
+ ],
+ "status.idle": [
+  "Ничего не запущено: трафик не перехватывается.",
+  "Nothing runs: no traffic is intercepted."
+ ],
+ "status.auto": [
+  "Авто-обход geneva: вкл",
+  "geneva auto bypass: on"
+ ],
+ "status.geneva_run": [
+  "Обход geneva: вкл",
+  "geneva bypass: on"
+ ],
+ "status.geneva_search": [
+  "Подбор geneva: идёт",
+  "geneva search: running"
+ ],
+ "status.protection": [
+  "Защита zapret2: вкл",
+  "zapret2 protection: on"
+ ],
+ "status.wizard": [
+  "Подбор zapret2: {0} %",
+  "zapret2 tuning: {0} %"
+ ],
+ "status.wizard_paused": [
+  "Подбор zapret2: пауза",
+  "zapret2 tuning: paused"
+ ],
+ "status.checker": [
+  "Проверка блокировок…",
+  "Checking for blocks…"
+ ],
+ "status.expert_check": [
+  "Проверка стратегии на сайте (Эксперт)",
+  "Strategy check on a site (Expert)"
+ ],
+ "status.mcp": [
+  "MCP-клиент работает",
+  "An MCP client is working"
+ ],
+ "status.agent_on": [
+  "Агент с правами: запущен",
+  "Privileged agent: running"
+ ],
+ "status.agent_off": [
+  "Агент с правами: не запущен",
+  "Privileged agent: not running"
+ ],
+ "status.agent_lost": [
+  "Агент с правами: потерян",
+  "Privileged agent: lost"
+ ],
+ "status.env_problem": [
+  "⚠ Не готово: {0} — подробнее",
+  "⚠ Not ready: {0} — details"
+ ],
+ "status.stop_all": [
+  "Остановить всё",
+  "Stop everything"
+ ],
+ "status.stop_all_tip": [
+  "Остановить подборы, обход и защиту обоих движков. Агент снимет свои правила firewall.",
+  "Stop the searches, the bypass and the protection of both engines. The agent removes its firewall rules."
+ ],
+ "status.stop_all_title": [
+  "Остановить всё?",
+  "Stop everything?"
+ ],
+ "status.stop_all_text": [
+  "Будет остановлено:\n{0}\n\nОбход geneva и «Авто» выключатся и не включатся сами при следующем запуске. Подбор zapret2 можно будет продолжить с места остановки.",
+  "This stops:\n{0}\n\nThe geneva bypass and \"Auto\" are switched off and do not come back at the next start. The zapret2 search can be continued from where it stopped."
+ ],
+ "status.stopped_all": [
+  "Всё остановлено.",
+  "Everything is stopped."
+ ],
+ "status.search_still_stopping": [
+  "подбор или проверка ещё завершается",
+  "a search or check is still winding down"
+ ],
+ "status.stop_failed": [
+  "Остановлено не всё: {0}",
+  "Not everything stopped: {0}"
+ ],
+ "env.title": [
+  "Состояние",
+  "Status"
+ ],
+ "env.subtitle": [
+  "Что нужно программе и всё ли на месте. Проверка идёт без прав администратора и ничего не меняет.",
+  "What the program needs and whether it is all there. The check runs without administrator rights and changes nothing."
+ ],
+ "env.recheck": [
+  "Проверить снова",
+  "Check again"
+ ],
+ "env.checked_at": [
+  "Проверено в {0}",
+  "Checked at {0}"
+ ],
+ "env.summary_ok": [
+  "Всё готово к работе.",
+  "Everything is ready."
+ ],
+ "env.summary_warnings": [
+  "Работать можно, но есть замечания: {0}.",
+  "Ready to work, with remarks: {0}."
+ ],
+ "env.summary_errors": [
+  "Есть проблемы, из-за которых часть функций не работает: {0}.",
+  "Problems stop part of the program from working: {0}."
+ ],
+ "env.level_ok": [
+  "в порядке",
+  "fine"
+ ],
+ "env.level_info": [
+  "к сведению",
+  "for information"
+ ],
+ "env.level_warning": [
+  "есть ограничения",
+  "limited"
+ ],
+ "env.level_error": [
+  "не работает",
+  "not working"
+ ],
+ "env.how_get": [
+  "Скачать программу",
+  "Download the program"
+ ],
+ "env.zapret2_missing": [
+  "Движок zapret2 не найден рядом с программой (папка {0}). Без него не работают проверка блокировок, «Подбор zapret2» и «Защита zapret2». Скачайте полную сборку программы со страницы релизов.",
+  "The zapret2 engine is missing next to the program (folder {0}). Without it the block check, zapret2 tuning and protection do not work. Download the full build from the releases page."
+ ],
+ "env.zapret2_ok": [
+  "zapret2 {0} ({1}): файлы совпадают с официальным релизом.",
+  "zapret2 {0} ({1}): the files match the official release."
+ ],
+ "env.bundle_bad": [
+  "Файлы движка повреждены или изменены: {0}. Антивирус мог удалить их — добавьте папку программы в исключения или скачайте программу заново.",
+  "The engine's files are damaged or changed: {0}. An antivirus may have removed them: add the program folder to its exclusions or download the program again."
+ ],
+ "env.geneva_missing": [
+  "geneva не найдена рядом с программой (папка {0}). zapret2 работает, а «Авто-обход» и «Подбор geneva» — нет. Скачайте полную сборку программы со страницы релизов.",
+  "geneva is missing next to the program (folder {0}). zapret2 works, \"Auto bypass\" and geneva search do not. Download the full build from the releases page."
+ ],
+ "env.geneva_ok": [
+  "geneva {0} ({1}), протокол {2}: файлы совпадают с официальным релизом.",
+  "geneva {0} ({1}), protocol {2}: the files match the official release."
+ ],
+ "env.geneva_proto": [
+  "geneva {0} говорит на протоколе {1}, программа — на {2}. Обновите программу целиком.",
+  "geneva {0} speaks protocol {1}, the program speaks {2}. Update the whole program."
+ ],
+ "env.browser": [
+  "Браузер для проверки",
+  "Browser for the check"
+ ],
+ "env.browser_ok": [
+  "Встроенный браузер программы: {0}. Финальная проверка открывает страницы в нём; ваши браузеры и их профили не используются.",
+  "The program's own browser: {0}. The final check opens pages in it; your browsers and their profiles are never used."
+ ],
+ "env.browser_missing": [
+  "Встроенного браузера нет. Найденную стратегию программа проверит загрузкой страницы сама — это работает, но не видит блокировок, которые проявляются только в браузере. Ваши браузеры не используются.",
+  "There is no built-in browser. The program checks a found strategy by loading the page itself: it works, but misses blocks that show only in a browser. Your browsers are never used."
+ ],
+ "env.agent": [
+  "Агент с правами",
+  "Privileged agent"
+ ],
+ "env.agent_ok": [
+  "Запущен: перехват трафика и правила firewall доступны. Правила снимаются при выходе.",
+  "Running: traffic interception and firewall rules are available. The rules are removed on exit."
+ ],
+ "env.agent_idle_win": [
+  "Не запущен. Запустится при первом действии, которому нужны права (один запрос UAC).",
+  "Not running. It starts at the first action that needs rights (one UAC prompt)."
+ ],
+ "env.agent_idle_linux": [
+  "Не запущен. Запустится при первом действии, которому нужны права (один запрос pkexec).",
+  "Not running. It starts at the first action that needs rights (one pkexec prompt)."
+ ],
+ "env.agent_lost": [
+  "Агент остановился: {0}. Он запустится снова при следующем действии.",
+  "The agent stopped: {0}. It starts again at the next action."
+ ],
+ "env.linux": [
+  "Linux: nft и pkexec",
+  "Linux: nft and pkexec"
+ ],
+ "env.linux_ok": [
+  "nft: {0}, pkexec: {1}.",
+  "nft: {0}, pkexec: {1}."
+ ],
+ "env.nft_missing": [
+  "Не найдена программа nft (пакет nftables): без неё движки не получат трафик. Установите nftables средствами дистрибутива.",
+  "nft (the nftables package) is missing: the engines get no traffic without it. Install nftables with your distribution's package manager."
+ ],
+ "env.pkexec_missing": [
+  "nft: {0}. Не найден pkexec (polkit): агента придётся запускать от root вручную.",
+  "nft: {0}. pkexec (polkit) is missing: the agent has to be started as root by hand."
+ ],
+ "env.router": [
+  "Роутер",
+  "Router"
+ ],
+ "env.router_none": [
+  "Не настроен. Нужен только для подбора на роутере и установки стратегии на Keenetic или в zapret-gui.",
+  "Not set up. It is only needed to tune on the router and to install a strategy on Keenetic or in zapret-gui."
+ ],
+ "env.router_set": [
+  "Настроен: {0}. Проверить подключение можно в настройках.",
+  "Set up: {0}. The connection can be checked in Settings."
+ ],
+ "env.router_setup": [
+  "Настроить",
+  "Set up"
+ ],
+ "env.data": [
+  "Папка данных",
+  "Data folder"
+ ],
+ "env.data_text": [
+  "{0} — база знаний, найденные стратегии, ресурсы и журналы.",
+  "{0}: the knowledge base, found strategies, resources and logs."
+ ],
+ "env.open_folder": [
+  "Открыть папку данных",
+  "Open the data folder"
+ ],
+ "env.privacy": [
+  "Программа ничего не скачивает и не обновляет сама. Сторонние программы входят в сборку только из официальных релизов их авторов.",
+  "The program downloads and updates nothing by itself. Third-party programs come in the build only from their authors' official releases."
+ ],
+ "settings.autosave": [
+  "Изменения сохраняются сразу. Пароли и токены хранятся только до закрытия программы.",
+  "Changes are saved at once. Passwords and tokens are kept only until the program closes."
+ ],
+ "settings.tab_interface": [
+  "Интерфейс",
+  "Interface"
+ ],
+ "settings.tab_search": [
+  "Подбор",
+  "Search"
+ ],
+ "settings.tab_router": [
+  "Роутер и zapret-gui",
+  "Router and zapret-gui"
+ ],
+ "settings.tab_mcp": [
+  "MCP и мост",
+  "MCP and bridge"
+ ],
+ "settings.tab_advisor": [
+  "Советник",
+  "Advisor"
+ ],
+ "settings.tab_data": [
+  "Данные",
+  "Data"
+ ],
+ "settings.language": [
+  "Язык",
+  "Language"
+ ],
+ "settings.scale": [
+  "Масштаб интерфейса",
+  "Interface scale"
+ ],
+ "settings.scale_hint": [
+  "Увеличивает всё окно, включая мелкий текст журналов и подсказок.",
+  "Scales the whole window, the small text of logs and hints too."
+ ],
+ "settings.tray": [
+  "Значок в трее",
+  "Tray icon"
+ ],
+ "settings.shortcuts": [
+  "Клавиши",
+  "Keys"
+ ],
+ "settings.shortcuts_text": [
+  "Ctrl+1…9 — разделы меню по порядку. Ctrl+Enter в списке сайтов — начать подбор.",
+  "Ctrl+1…9: the menu's sections in order. Ctrl+Enter in the site list: start tuning."
+ ],
+ "settings.mode_hint_quick": [
+  "Быстро: меньше вариантов каждого приёма. Быстрее всего, хватает для простых блокировок.",
+  "Quick: fewer variants of each technique. The fastest, enough for simple blocks."
+ ],
+ "settings.mode_hint_standard": [
+  "Стандартно: основной набор вариантов; приём не перебирается, если уже работает более простой, от которого он зависит. Рекомендуется.",
+  "Standard: the main set of variants; a technique is skipped once a simpler one it depends on works. Recommended."
+ ],
+ "settings.mode_hint_full": [
+  "Полностью: все варианты всех приёмов, без пропусков. Дольше всего — для сложных блокировок, когда «Стандартно» не нашёл.",
+  "Full: every variant of every technique, nothing skipped. The slowest, for hard blocks when Standard found nothing."
+ ],
+ "settings.router_intro": [
+  "Одно место для подключения к роутеру: мастер, ресурсы и экспорт берут адреса и пароли отсюда. Пароли вводятся один раз за сеанс и не сохраняются на диск.",
+  "One place for the router connection: the wizard, resources and export take the addresses and passwords from here. Passwords are typed once per session and never written to disk."
+ ],
+ "settings.router_ssh": [
+  "Keenetic по SSH (nfqws2-keenetic)",
+  "Keenetic over SSH (nfqws2-keenetic)"
+ ],
+ "settings.show_password": [
+  "Показать",
+  "Show"
+ ],
+ "settings.gui_password_hint": [
+  "Пароль входа в веб-интерфейс zapret-gui. Нужен для отправки стратегии и ресурсов.",
+  "The password of zapret-gui's web interface. Needed to send a strategy and resources."
+ ],
+ "settings.gui_token_hint": [
+  "Это не пароль: токен выдаётся в zapret-gui в разделе MCP. Нужен только для подбора прямо на роутере.",
+  "Not the password: the token is issued in zapret-gui's MCP section. Needed only to tune on the router itself."
+ ],
+ "settings.passwords_session": [
+  "Пароли и токен хранятся только в памяти до закрытия программы.",
+  "Passwords and the token are kept in memory only, until the program closes."
+ ],
+ "settings.data_hint": [
+  "Чтобы перенести программу на другой компьютер, скопируйте папку программы вместе с папкой data.",
+  "To move the program to another computer, copy the program folder together with its data folder."
+ ],
+ "advisor.provider": [
+  "Провайдер",
+  "Provider"
+ ],
+ "advisor.endpoint": [
+  "Адрес сервера (OpenAI-совместимый)",
+  "Server address (OpenAI-compatible)"
+ ],
+ "mcp.token": [
+  "Токен MCP этой программы",
+  "This program's MCP token"
+ ],
+ "router.check": [
+  "Проверить подключение",
+  "Check the connection"
+ ],
+ "router.checking": [
+  "Проверяю подключение…",
+  "Checking the connection…"
+ ],
+ "router.check_nothing": [
+  "Укажите адрес zapret-gui или роутера.",
+  "Enter the zapret-gui or router address."
+ ],
+ "router.check_gui_ok": [
+  "zapret-gui {0} отвечает: хостлистов {1}.",
+  "zapret-gui {0} answers: {1} hostlists."
+ ],
+ "router.check_gui_failed": [
+  "zapret-gui {0} не отвечает или отказал: {1}",
+  "zapret-gui {0} does not answer or refused: {1}"
+ ],
+ "router.check_no_token": [
+  "Токен MCP не указан: подбор на роутере недоступен (отправка стратегии работает и без него).",
+  "No MCP token: tuning on the router is unavailable (sending a strategy works without it)."
+ ],
+ "router.check_mcp_ok": [
+  "MCP zapret-gui работает: инструментов {0}.",
+  "zapret-gui's MCP works: {0} tools."
+ ],
+ "router.check_mcp_failed": [
+  "MCP zapret-gui отказал: {0}. Проверьте токен и его разрешения.",
+  "zapret-gui's MCP refused: {0}. Check the token and its permissions."
+ ],
+ "router.check_ssh_ok": [
+  "SSH {0}: вход выполнен, ключ совпадает с запомненным ({1}).",
+  "SSH {0}: logged in, the key matches the remembered one ({1})."
+ ],
+ "router.check_ssh_ok_new": [
+  "SSH {0}: вход выполнен. Ключ роутера {1} запомнится при первой установке после вашего «Да».",
+  "SSH {0}: logged in. The router's key {1} is remembered at the first install, after your Yes."
+ ],
+ "router.check_ssh_no_password": [
+  "SSH {0} отвечает (ключ {1}). Введите пароль, чтобы проверить вход.",
+  "SSH {0} answers (key {1}). Enter the password to check the login."
+ ],
+ "router.check_ssh_mismatch": [
+  "SSH {0}: ключ роутера изменился ({1}). Если вы меняли роутер или прошивку, нажмите «Забыть ключи SSH».",
+  "SSH {0}: the router's key changed ({1}). If you replaced the router or its firmware, press \"Forget SSH keys\"."
+ ],
+ "router.check_ssh_failed": [
+  "SSH {0}: {1}",
+  "SSH {0}: {1}"
+ ],
+ "wizard.done": [
+  "Готово",
+  "Done"
+ ],
+ "wizard.done_tip": [
+  "Закончить: стратегия остаётся сохранённой, мастер начнётся с первого шага.",
+  "Finish: the strategy stays saved, the wizard starts again from step 1."
+ ],
+ "wizard.export_result": [
+  "Результат последнего действия",
+  "The last action's result"
+ ],
+ "wizard.input_name": [
+  "Сайты для подбора",
+  "Sites to tune"
+ ],
+ "wizard.progress": [
+  "Ход подбора",
+  "Search progress"
+ ],
+ "export.recommended": [
+  "рекомендуется",
+  "recommended"
+ ],
+ "export.credentials_hint": [
+  "Адреса и пароли роутера вводятся один раз: они общие с «Настройки → Роутер и zapret-gui», где есть «Проверить подключение».",
+  "The router's addresses and passwords are typed once: they are shared with Settings → Router and zapret-gui, which has \"Check the connection\"."
+ ],
+ "monitor.need_solution": [
+  "Стратегии пока нет. Подберите её или вставьте готовую — тогда защиту можно будет включить.",
+  "There is no strategy yet. Find one or paste a ready one, then the protection can be turned on."
+ ],
+ "monitor.go_wizard": [
+  "Подобрать стратегию",
+  "Find a strategy"
+ ],
+ "monitor.go_expert": [
+  "Вставить готовую",
+  "Paste a ready one"
+ ],
+ "reports.save_tip": [
+  "Собрать архив: отчёт, журналы и стратегию — чтобы приложить к сообщению о проблеме.",
+  "Build an archive: the report, logs and strategy, to attach to a problem report."
+ ],
+ "reports.copy_tip": [
+  "Скопировать текст отчёта как есть.",
+  "Copy the report's text as it is."
+ ],
+ "reports.copy_prompt_tip": [
+  "Скопировать отчёт вместе с вопросом для ИИ-помощника: вставьте его в чат с ассистентом.",
+  "Copy the report together with a question for an AI assistant: paste it into the assistant's chat."
+ ],
+ "reports.buttons_hint": [
+  "«Собрать отчёт» — архив для разработчиков, «Копировать текст» — сам отчёт, «Копировать с промтом» — отчёт с вопросом для ИИ.",
+  "\"Build the report\": an archive for the developers; \"Copy the text\": the report itself; \"Copy with the prompt\": the report with a question for an AI."
+ ],
+ "resources.search": [
+  "Поиск по имени",
+  "Search by name"
+ ],
+ "resources.shown": [
+  "Показано {0} из {1}",
+  "{0} of {1} shown"
+ ],
+ "resources.nothing_found": [
+  "Ничего не найдено.",
+  "Nothing found."
+ ],
+ "resources.import": [
+  "Импорт файлов…",
+  "Import files…"
+ ],
+ "resources.import_tip": [
+  "Каждый файл станет ресурсом этого типа с именем файла. Если имя уже есть, появится новая версия (старые сохраняются). Lua-скрипт попадает черновиком и ждёт подтверждения.",
+  "Each file becomes a resource of this kind named after the file. An existing name gets a new version (the old ones are kept). A Lua script lands as a draft that waits for approval."
+ ],
+ "resources.imported": [
+  "Импорт: новых {0}, обновлено {1}, с ошибками {2}.",
+  "Import: {0} new, {1} updated, {2} failed."
+ ],
+ "resources.export": [
+  "Сохранить в файл…",
+  "Save to a file…"
+ ],
+ "resources.duplicate": [
+  "Копия",
+  "Copy"
+ ],
+ "resources.duplicate_tip": [
+  "Копия под новым именем. Чтобы переименовать: сохраните копию и удалите старый ресурс.",
+  "A copy under a new name. To rename: save the copy and delete the old resource."
+ ],
+ "resources.duplicated": [
+  "Это копия: поправьте имя и нажмите «Сохранить».",
+  "This is a copy: adjust the name and press Save."
+ ],
+ "resources.stats": [
+  "Записей: {0}, повторов: {1}, комментариев: {2}",
+  "Entries: {0}, repeats: {1}, comments: {2}"
+ ],
+ "resources.dedupe": [
+  "Убрать повторы",
+  "Remove repeats"
+ ],
+ "resources.content": [
+  "Содержимое",
+  "Content"
+ ]
+}

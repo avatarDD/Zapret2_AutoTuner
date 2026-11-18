@@ -198,7 +198,8 @@ public class UnitTests
         var dir = TestEnv.NewTempDir();
         var engine = TestEnv.WriteFakeEngine(dir);
         using var inst = Engine.EngineInstance.Start("e1", "t", engine, ["--filter-tcp=443"], null);
-        Assert.True(await TestEnv.WaitUntil(() => File.Exists(Path.Combine(dir, "engine.pid")), TimeSpan.FromSeconds(5)));
+        // the shell creates the file before it writes the number
+        Assert.True(await TestEnv.WaitUntil(() => File.Exists(Path.Combine(dir, "engine.pid")) && File.ReadAllText(Path.Combine(dir, "engine.pid")).Trim().Length > 0, TimeSpan.FromSeconds(5)));
         int pid = int.Parse(File.ReadAllText(Path.Combine(dir, "engine.pid")).Trim(), System.Globalization.CultureInfo.InvariantCulture);
         Assert.True(TestEnv.ProcessAlive(pid));
         int code = await inst.StopAsync(TimeSpan.FromSeconds(3));

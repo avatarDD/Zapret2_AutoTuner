@@ -207,7 +207,8 @@ public class IpcTests
             // again, then kill the Agent hard: the engine must die with it
             File.Delete(Path.Combine(dir, "engine.pid"));
             await conn.Client.StartEngineAsync(start.WithLuaFiles());
-            Assert.True(await TestEnv.WaitUntil(() => File.Exists(Path.Combine(dir, "engine.pid")), TimeSpan.FromSeconds(5)));
+            // the fake engine creates the file and then writes it: wait for the number, not for the name
+            Assert.True(await TestEnv.WaitUntil(() => File.Exists(Path.Combine(dir, "engine.pid")) && File.ReadAllText(Path.Combine(dir, "engine.pid")).Trim().Length > 0, TimeSpan.FromSeconds(5)));
             int enginePid = int.Parse(File.ReadAllText(Path.Combine(dir, "engine.pid")).Trim(), System.Globalization.CultureInfo.InvariantCulture);
             using var agent = Process.GetProcessById(hb.AgentPid);
             agent.Kill();

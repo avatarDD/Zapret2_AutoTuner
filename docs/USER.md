@@ -313,7 +313,14 @@ zapret-gui на роутере (например, 192.168.2.1).
 
 **Трей.** В Windows свёрнутое окно по умолчанию уходит в трей. В настройках
 можно включить и закрытие окна в трей; тогда программа завершается только
-через «Выход» в меню значка.
+через «Выход» в меню значка. В меню значка есть общий тумблер «Включить
+обход / Выключить обход (всё)»: выключение останавливает любой работающий
+обход (защиту zapret2, авто-обход geneva, обход geneva для сайта), подборы
+продолжаются. Два движка не могут обрабатывать трафик одновременно, поэтому
+включение запускает один — тот, что тумблер выключил последним; в первый раз —
+защиту zapret2, если стратегия уже есть, иначе авто-обход geneva. Ниже — пункты
+для каждого обхода отдельно. Если обход включить или выключить не удалось,
+откроется его страница с причиной.
 
 **Телеметрия.** Её нет. Настройки, база знаний и журнал хранятся только
 локально (путь показан в настройках).
@@ -522,5 +529,11 @@ Stop on the banner cuts the bridge too.
   a user can swap it.
 - **Tray:** on Windows a minimized window goes to the tray by default; Settings
   can also make closing the window go to the tray, and then Exit in the tray
-  menu closes the program.
+  menu closes the program. The tray menu has a common switch "Turn the bypass
+  on / off (all)": off stops every bypass (zapret2 protection, geneva Auto,
+  geneva's bypass of one site; searches go on). The two engines cannot share
+  the traffic, so on starts one: the one the switch turned off last, the first
+  time zapret2 protection if there is a strategy, else geneva Auto. Items for
+  each bypass follow. When a bypass cannot be switched, its page opens with
+  the reason.
 - **No telemetry.** All data stays local.

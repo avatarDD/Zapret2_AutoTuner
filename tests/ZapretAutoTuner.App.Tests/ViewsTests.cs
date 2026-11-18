@@ -205,4 +205,36 @@ public sealed class ViewsTests : IAsyncLifetime
         Assert.NotEmpty(e.StrategyResult);
         Assert.DoesNotContain("✖", e.StrategyResult, StringComparison.Ordinal);
     }
+
+    [AvaloniaFact]
+    public void ExpertUsesAStrategyForASiteAndOffersTheNextStep()
+    {
+        bool exported = false;
+        var e = new ExpertViewModel { StrategyText = "--lua-desync=multisplit:pos=1", OpenExport = () => exported = true };
+        Assert.False(e.UseStrategyCommand.CanExecute(null));   // no site yet
+        // without the Agent there is nothing to check with
+        e.SiteText = "https://www.YouTube.com/watch?v=1";
+        Assert.False(e.CheckOnSiteCommand.CanExecute(null));
+        Assert.True(e.UseStrategyCommand.CanExecute(null));
+        e.UseStrategyCommand.Execute(null);
+        var s = SessionState.I.Last?.Solution;
+        Assert.NotNull(s);
+        Assert.Equal(["www.youtube.com"], Assert.Single(s.Profiles).HostlistDomains);
+        Assert.True(e.StrategyNextStep);
+        e.ExportCommand.Execute(null);
+        Assert.True(exported);
+        // the buttons act on what was made current: editing hides them until «Использовать» again
+        e.SiteText = "youtube.com";
+        Assert.False(e.StrategyNextStep);
+
+        // an invalid strategy or a non-domain is refused and the current solution stays
+        e.SiteText = "1.2.3.4";
+        e.UseStrategyCommand.Execute(null);
+        Assert.StartsWith("✖", e.SiteResult, StringComparison.Ordinal);
+        e.SiteText = "example.org";
+        e.StrategyText = "--lua-desync=nosuchfunction";
+        e.UseStrategyCommand.Execute(null);
+        Assert.StartsWith("✖", e.SiteResult, StringComparison.Ordinal);
+        Assert.Same(s, SessionState.I.Last?.Solution);
+    }
 }

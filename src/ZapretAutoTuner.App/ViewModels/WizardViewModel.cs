@@ -499,6 +499,11 @@ public sealed partial class WizardViewModel : PageViewModel
             Error = L["wizard.geneva_busy"];
             return;
         }
+        if (_host.ExpertCheckRunning)
+        {
+            Error = L["engine.busy_expert"];
+            return;
+        }
         var hosts = run.Hosts;
         var mode = Enum.TryParse<SearchMode>(run.Mode, out var m) ? m : SearchMode.Standard;
         var sessions = new Dictionary<string, long>(run.Sessions, StringComparer.OrdinalIgnoreCase);

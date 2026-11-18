@@ -49,7 +49,7 @@ public abstract class PageViewModel : ObservableObject
     public bool HasEngine => _engine is not null;
 
     /// <summary>Something of this page runs now (a search, a bypass, the protection): a dot next to its name in the menu.</summary>
-    public bool Busy
+    public bool IsBusy
     {
         get => _busy;
         set => SetProperty(ref _busy, value);

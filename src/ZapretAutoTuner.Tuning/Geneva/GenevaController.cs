@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using ZapretAutoTuner.Core.Diagnostics;
 using ZapretAutoTuner.Core.Geneva;
+using ZapretAutoTuner.Core.Geneva.Auto;
 using ZapretAutoTuner.Protocol;
 
 namespace ZapretAutoTuner.Tuning.Geneva;
@@ -616,7 +617,12 @@ public sealed class GenevaController : IAsyncDisposable
             if (Busy?.Invoke() is { } why)
                 throw new GenevaRefusedException(why);
             var agent = await _agent(ct).ConfigureAwait(false);
-            var reply = await agent.StartAsync(new GenevaStartRequest { Mode = "run", Strategy = settings.Strategy, Ports = settings.Ports, Tag = "geneva-run" }, CancellationToken.None).ConfigureAwait(false);
+            // the user's "не трогать" list (a VPN or proxy server) stays out of the bypass (geneva_c 2.0)
+            var excluded = new AutoNameList(State.Lists.Excluded);
+            var req = new GenevaStartRequest { Mode = "run", Strategy = settings.Strategy, Ports = settings.Ports, Tag = "geneva-run" };
+            req.ExcludeSubnets.AddRange(excluded.Subnets);
+            req.ExcludeDomains.AddRange(excluded.Domains);
+            var reply = await agent.StartAsync(req, CancellationToken.None).ConfigureAwait(false);
             lock (_lock)
             {
                 _runId = reply.Id;
@@ -770,6 +776,31 @@ public sealed class GenevaController : IAsyncDisposable
 
     /// <summary>Saves the "Авто" mode's state with the rest (one settings key).</summary>
     public void SaveAuto(GenevaAutoState auto) => Update(s => s with { Auto = auto });
+
+    /// <summary>The user's lists (important, unimportant, never touched); a change reaches the "Авто" mode at once.</summary>
+    public AutoLists Lists
+    {
+        get => State.Lists;
+        set
+        {
+            Update(s => s with { Lists = value });
+            ListsChanged?.Invoke();
+        }
+    }
+
+    /// <summary>The "Авто" mode applies site strategies by name too (geneva_c 2.0).</summary>
+    public bool ByName
+    {
+        get => State.ByName;
+        set
+        {
+            Update(s => s with { ByName = value });
+            ListsChanged?.Invoke();
+        }
+    }
+
+    /// <summary>The lists or the by-name switch changed.</summary>
+    public event Action? ListsChanged;
 
     /// <summary>Strategies a search judges at once, 1 to <see cref="GenevaSearchSettings.WorkersRange"/>'s maximum.</summary>
     public int Workers

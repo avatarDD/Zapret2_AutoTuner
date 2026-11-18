@@ -38,6 +38,16 @@ public static class GenevaStrategyText
             return "нет разделителя \\/ между исходящими и входящими деревьями / no \\/ between outbound and inbound trees";
         return null;
     }
+
+    private static readonly System.Text.RegularExpressions.Regex XAction = new(
+        @"(?:^|[-(,])x[a-z0-9]+(?=[{(,)-]|$)|\[(?:L7|FLOW|META):", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The strategy uses geneva_c 2.0's extensions (x-actions such as <c>xsplit{...}</c>, triggers <c>L7:</c>,
+    /// <c>FLOW:</c>, <c>META:</c>): <c>check</c>, <c>run</c> and <c>evolve</c> need <c>--ext</c> for it. Geneva's own
+    /// actions (tamper, duplicate, fragment, drop, sleep, trace) never start with an x.
+    /// </summary>
+    public static bool NeedsExt(string? s) => !string.IsNullOrEmpty(s) && XAction.IsMatch(s);
 }
 
 /// <summary>What the user (or the model over MCP) chose for a search; the Agent turns it into the command line.</summary>
@@ -114,6 +124,12 @@ public sealed record GenevaSearchSettings
 
     /// <summary>The target profile in geneva's strategy database: the same host and port share their results.</summary>
     public string TargetKey => GenevaArgv.TargetKey(Host, Port, Probe);
+
+    /// <summary>geneva_c 2.0's extensions (<c>--ext</c>): a seed or the saved population holds x-actions.</summary>
+    public bool Ext => Seeds.Any(GenevaStrategyText.NeedsExt) || ResumeExt;
+
+    /// <summary>The search being continued was started with <c>--ext</c> (its checkpoint may hold x-actions).</summary>
+    public bool ResumeExt { get; init; }
 }
 
 /// <summary>The strategy that bypasses on this PC: one strategy for every connection to the ports (geneva has no hostlist).</summary>
@@ -123,11 +139,27 @@ public sealed record GenevaRunSettings
 
     public string Ports { get; init; } = "80,443";
 
+    /// <summary>
+    /// Subnets no packet of the bypass is applied to (a VPN or proxy server): geneva_c 2.0's
+    /// <c>--ipset-exclude-ip</c>. Needs the feature <c>ext_lists</c>; the Agent leaves them out otherwise.
+    /// </summary>
+    public IReadOnlyList<string> ExcludeSubnets { get; init; } = [];
+
+    /// <summary>Names (with subdomains) the bypass leaves alone: <c>--hostlist-exclude-domains</c>.</summary>
+    public IReadOnlyList<string> ExcludeDomains { get; init; } = [];
+
     public IReadOnlyList<string> Problems()
     {
         var p = new List<string>();
         if (GenevaStrategyText.Problem(Strategy) is { } bad)
             p.Add(bad);
+        foreach (var e in ExcludeSubnets.Concat(ExcludeDomains))
+        {
+            if (Auto.AutoNameList.Problem(e) is { } wrong)
+                p.Add(wrong);
+            else if (e.Contains(',', StringComparison.Ordinal) || e.Trim().Length == 0)
+                p.Add($"исключение не разобрано / an exclusion not understood: {e}");
+        }
         try
         {
             var ranges = PortList.ParseRanges(Ports);
@@ -170,19 +202,30 @@ public static class GenevaArgv
         $"external:{(probe == ReplayProbe ? "replay:" : "")}{host.ToLowerInvariant()}:{port.ToString(CultureInfo.InvariantCulture)}";
 
     /// <summary><c>geneva run</c> with events on stdout and the control socket on loopback (the token goes in the environment).</summary>
-    public static List<string> Run(GenevaRunSettings s, int controlPort)
+    /// <param name="lists">geneva_c has the feature <c>ext_lists</c>: the exclusions go in; without it they cannot.</param>
+    public static List<string> Run(GenevaRunSettings s, int controlPort, bool lists = false)
     {
         var bad = s.Problems();
         if (bad.Count > 0)
             throw new FormatException(string.Join("; ", bad));
-        return
+        var a = new List<string> { "run" };
+        bool exclude = lists && (s.ExcludeSubnets.Count > 0 || s.ExcludeDomains.Count > 0);
+        // the extensions only when needed: without them geneva behaves exactly as before
+        if (exclude || GenevaStrategyText.NeedsExt(s.Strategy))
+            a.Add("--ext");
+        a.AddRange(
         [
-            "run", "-s", s.Strategy, "-p", NormalizePorts(s.Ports),
+            "-s", s.Strategy, "-p", NormalizePorts(s.Ports),
             "-q", RunQueue.ToString(CultureInfo.InvariantCulture),
             "-c", "tcp:" + controlPort.ToString(CultureInfo.InvariantCulture),
             "-e", "-", "--stats-interval", StatsInterval.ToString(CultureInfo.InvariantCulture),
             "--quiet",
-        ];
+        ]);
+        if (exclude && s.ExcludeSubnets.Count > 0)
+            a.AddRange(["--ipset-exclude-ip", string.Join(',', s.ExcludeSubnets)]);
+        if (exclude && s.ExcludeDomains.Count > 0)
+            a.AddRange(["--hostlist-exclude-domains", string.Join(',', s.ExcludeDomains)]);
+        return a;
     }
 
     /// <summary>
@@ -195,16 +238,19 @@ public static class GenevaArgv
         var bad = s.Problems();
         if (bad.Count > 0)
             throw new FormatException(string.Join("; ", bad));
-        var a = new List<string>
+        var a = new List<string> { "evolve" };
+        if (s.Ext)
+            a.Add("--ext");
+        a.AddRange(new[]
         {
-            "evolve", "--probe", "external", "--host", s.Host.ToLowerInvariant(), "--port", s.Port.ToString(CultureInfo.InvariantCulture),
+            "--probe", "external", "--host", s.Host.ToLowerInvariant(), "--port", s.Port.ToString(CultureInfo.InvariantCulture),
             "--population", s.Population.ToString(CultureInfo.InvariantCulture),
             "--generations", s.Generations.ToString(CultureInfo.InvariantCulture),
             "--workers", s.Workers.ToString(CultureInfo.InvariantCulture), "--local-ports", LocalPortsBase.ToString(CultureInfo.InvariantCulture),
             "-q", EvalQueue.ToString(CultureInfo.InvariantCulture),
             "--checkpoint", checkpoint, "--db", db, "--target", s.TargetKey,
             "--top", "10", "-e", "-", "--quiet",
-        };
+        });
         if (s.Protos != "TCP")
         {
             a.Add("--protos");

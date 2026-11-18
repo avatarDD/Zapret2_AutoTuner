@@ -91,6 +91,12 @@ public static class HttpProbe
 {
     private const int MaxHeaderBytes = 64 * 1024;
 
+    /// <summary>
+    /// Wire bytes after the request that mean the response started although nothing decrypted: its first TLS record
+    /// was cut. TLS 1.3 session tickets that follow the handshake are a few hundred bytes.
+    /// </summary>
+    private const int ResponseOnWire = 1024;
+
     public static async Task<ProbeResult> RunAsync(HttpProbeOptions o, CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
@@ -232,6 +238,7 @@ public static class HttpProbe
     {
         var request = BuildRequest(o);
         TimeSpan sent;
+        long wireBeforeResponse = raw.BytesIn;
         try
         {
             await stream.WriteAsync(request, total).ConfigureAwait(false);
@@ -265,7 +272,7 @@ public static class HttpProbe
             {
                 if (total.IsCancellationRequested)
                     r.SetError(r.BytesIn == 0 ? ProbeError.HttpTimeout : ProbeError.TimeLimit, "истекло общее время");
-                else if (r.BytesIn == 0)
+                else if (r.BytesIn == 0 && raw.BytesIn - wireBeforeResponse < ResponseOnWire)
                     r.SetError(ProbeError.HttpTimeout, "нет ответа на запрос");
                 else
                     r.Stall(raw.BytesIn);
@@ -560,6 +567,7 @@ public static class HttpProbe
             RstSeen |= rst || e is ProbeError.HttpReset;
         }
 
+        /// <param name="rawBytes">What the server sent on the wire so far, handshake included.</param>
         public void Stall(long rawBytes)
         {
             Error = ProbeError.Stalled;
@@ -584,6 +592,7 @@ public static class HttpProbe
             TlsOk = TlsOk,
             HttpStatus = HttpStatus,
             BytesIn = BytesIn,
+            WireBytesIn = raw?.BytesIn ?? 0,
             BytesOut = raw?.BytesOut ?? 0,
             BodyBytes = BodyBytes,
             BodySha256 = BodyBytes > 0 ? Convert.ToHexStringLower(BodyHash.GetHashAndReset()) : null,

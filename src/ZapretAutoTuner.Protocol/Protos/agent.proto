@@ -241,6 +241,8 @@ message GenevaStartRequest {
   string protos = 11;           // evolve: the layers the search may use ("TCP", "UDP,IP", ...); empty: TCP
   string probe = 12;            // evolve: what the UI's probe checks, for the target key ("web" or empty, "replay", ...)
   int32 workers = 13;           // evolve: strategies judged at once; 0 or 1: one (more needs the feature external_workers)
+  repeated string exclude_subnets = 14; // run: never touched (VPN, proxy); needs geneva_c's ext_lists
+  repeated string exclude_domains = 15;
 }
 
 message GenevaStartReply {
@@ -328,8 +330,18 @@ message GenevaAutoGroup {
   repeated GenevaAutoTarget targets = 2;
 }
 
+// A strategy applied by the site's name (geneva_c 2.0 profiles with host lists in one "geneva run --ext").
+message GenevaAutoHost {
+  string strategy = 1;
+  bool udp = 2;                  // QUIC (UDP 443); else TLS and HTTP (TCP 80, 443)
+  repeated string domains = 3;   // registrable domains, subdomains included
+}
+
 message GenevaAutoApplyRequest {
   repeated GenevaAutoGroup groups = 1;
+  repeated GenevaAutoHost hosts = 2;          // empty: nothing by name
+  repeated string exclude_subnets = 3;        // never touched by the name-based process (VPN, proxy)
+  repeated string exclude_domains = 4;
 }
 
 message GenevaAutoGroupState {
@@ -344,4 +356,8 @@ message GenevaAutoApplyReply {
   repeated GenevaAutoGroupState groups = 1;
   repeated string problems = 2;  // groups that did not start, why (Russian / English)
   bool limited = 3;              // Windows without geneva's --filter: nothing applied, the page says why
+  bool by_name = 4;              // geneva_c can apply by name (ext_profile, ext_lists, ext_l7)
+  GenevaAutoGroupState host = 5; // the name-based process when it runs; requested: its strategies
+  bool ext = 6;                  // geneva_c knows x-actions (ext_xact): zapret2's methods may be tried
+  repeated string blobs = 7;     // zapret2's fakes every geneva with --ext gets (z2_ names): strategies may name them
 }

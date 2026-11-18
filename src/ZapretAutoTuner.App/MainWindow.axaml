@@ -74,7 +74,7 @@
                   <DockPanel>
                     <!-- runs now: a dot (the status bar says what) -->
                     <Ellipse DockPanel.Dock="Right" Width="8" Height="8" Fill="#2E9E5B" VerticalAlignment="Center" Margin="6,0,0,0"
-                             IsVisible="{Binding Busy}" ToolTip.Tip="{l:T nav.busy}" />
+                             IsVisible="{Binding IsBusy}" ToolTip.Tip="{l:T nav.busy}" />
                     <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
                   </DockPanel>
                   <DockPanel>

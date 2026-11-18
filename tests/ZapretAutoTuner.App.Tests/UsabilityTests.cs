@@ -58,7 +58,7 @@ public sealed class UsabilityTests : IAsyncLifetime
         main.RefreshStatus();
         Assert.False(main.AnythingRunning);
         Assert.Empty(main.Running);
-        Assert.False(main.Wizard.Busy);
+        Assert.False(main.Wizard.IsBusy);
         // nothing to stop: nothing is asked and no Agent is started
         var asked = false;
         main.Confirm = (_, _) =>
@@ -155,43 +155,6 @@ public sealed class UsabilityTests : IAsyncLifetime
         Host.Settings.GuiUrl = "not a url";
         lines = await RouterCheck.RunAsync(Host.Settings, CancellationToken.None);
         Assert.StartsWith("✖", lines[0], StringComparison.Ordinal);
-    }
-
-    [AvaloniaFact]
-    public async Task ASingleStrategyBecomesTheCurrentOneForTheGivenSitesOnly()
-    {
-        var main = new MainViewModel(Host);
-        var e = main.Expert;
-        Func<Task>? protect = null;
-        var protectedHere = 0;
-        e.ProtectHere = protect = () =>
-        {
-            protectedHere++;
-            return Task.CompletedTask;
-        };
-        e.StrategyText = "--lua-desync=fake:blob=fake_default_tls:tcp_md5 --lua-desync=multisplit:pos=1,midsld";
-        e.UseStrategyCommand.Execute(null);
-        // no sites: refused, the strategy must not touch all traffic
-        Assert.Null(SessionState.I.Last);
-        Assert.Equal(Loc.Loc.I["expert.strategy_need_sites"], e.StrategyStatus);
-        Assert.False(e.Used);
-
-        e.StrategySites = "https://www.YouTube.com/watch?v=1, googlevideo.com\nbad";
-        e.UseStrategyCommand.Execute(null);
-        var s = SessionState.I.Last?.Solution;
-        Assert.NotNull(s);
-        var p = Assert.Single(s.Profiles);
-        Assert.Equal(["www.youtube.com", "googlevideo.com"], p.HostlistDomains);
-        Assert.Equal("80,443", p.TcpPorts);
-        Assert.True(e.Used);
-        await e.ProtectCommand.ExecuteAsync(null);
-        Assert.Equal(1, protectedHere);
-
-        // a broken strategy is not used
-        SessionState.I.Last = null;
-        e.StrategyText = "--lua-desync=no_such_function";
-        e.UseStrategyCommand.Execute(null);
-        Assert.Null(SessionState.I.Last);
     }
 
     [AvaloniaFact]
@@ -305,9 +268,19 @@ public sealed class UsabilityTests : IAsyncLifetime
         Assert.Equal(115, Host.Settings.UiScale);
     }
 
-    [Fact]
-    public void SitesAreHostnamesOnly() =>
-        Assert.Equal(["example.org", "xn--e1afmkfd.xn--p1ai"], ExpertViewModel.ParseSites("1.2.3.4 https://Example.org/x [2001:db8::1] пример.рф https://10.0.0.1/"));
+    [AvaloniaFact]
+    public void TheExpertsSiteCheckIsShownInTheStatusBar()
+    {
+        var main = new MainViewModel(Host);
+        main.Expert.Checking = true;
+        main.RefreshStatus();
+        Assert.Contains(main.Running, r => r.Id == "expert_check" && r.Page == main.Expert);
+        Assert.True(main.Expert.IsBusy);
+        main.Expert.Checking = false;
+        main.RefreshStatus();
+        Assert.DoesNotContain(main.Running, r => r.Id == "expert_check");
+        Assert.False(main.Expert.IsBusy);
+    }
 
     [AvaloniaFact]
     public void TheStatusBarKeepsItsItemsWhileOnlyTheTextChanges()

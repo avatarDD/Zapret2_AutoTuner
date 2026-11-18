@@ -19,6 +19,27 @@ public interface IAutoProbes
 
     /// <summary>How geneva's search judges a strategy for the service from a local port; null: the page's full download.</summary>
     GenevaJudge? Judge(AutoService s);
+
+    /// <summary>
+    /// The site's own browser handshakes (<see cref="AutoService.Replays"/>), sent again with whatever is applied: every
+    /// one must get an answer. True when there are none. A strategy that lets the program's small ClientHello through
+    /// but not Chrome's two-packet one with ML-KEM would otherwise be "found" and fail in the browser a minute later.
+    /// </summary>
+    Task<bool> HandshakesAsync(AutoService s, CancellationToken ct) => Task.FromResult(true);
+
+    /// <summary>
+    /// A strategy on the service works: the probe passes <see cref="AutoRules.TrialPasses"/> times in a row (one lucky
+    /// load through a DPI that lets some connections pass is not a bypass) and the browser's handshakes get answers.
+    /// </summary>
+    async Task<bool> WorksAsync(AutoService s, CancellationToken ct)
+    {
+        for (int i = 0; i < AutoRules.TrialPasses; i++)
+        {
+            if (await CheckAsync(s, ct).ConfigureAwait(false) != AutoConfirm.NotBlocked)
+                return false;
+        }
+        return await HandshakesAsync(s, ct).ConfigureAwait(false);
+    }
 }
 
 /// <summary>
@@ -51,6 +72,36 @@ public sealed class AutoProbes : IAutoProbes
                 return AutoConfirm.NotBlocked;
         }
         return last!.Error == ReplayError.NoConnection ? AutoConfirm.IpBlocked : AutoConfirm.Blocked;
+    }
+
+    public async Task<bool> HandshakesAsync(AutoService s, CancellationToken ct)
+    {
+        if (s.Address is not { } address)
+            return true;
+        // the recorded hellos are TLS: they go to the site's TLS port, never to its plain-HTTP 80
+        int tls = s.Ports.Count == 0 || s.Ports.Contains(443) ? 443 : s.Ports.FirstOrDefault(p => p != 80);
+        if (tls == 0)
+            return true;
+        foreach (var replay in s.Replays)
+        {
+            bool ok = false;
+            // two tries each: one lost segment is not a block
+            for (int i = 0; i < 2 && !ok; i++)
+            {
+                var r = await ReplayProbe.RunAsync(new ReplayProbeOptions
+                {
+                    Address = address,
+                    Port = tls,
+                    Udp = false,
+                    Payloads = AutoObserver.FromBase64(replay),
+                    App = AppProtocol.Unknown,
+                }, ct).ConfigureAwait(false);
+                ok = r.Ok;
+            }
+            if (!ok)
+                return false;
+        }
+        return true;
     }
 
     public GenevaJudge? Judge(AutoService s)

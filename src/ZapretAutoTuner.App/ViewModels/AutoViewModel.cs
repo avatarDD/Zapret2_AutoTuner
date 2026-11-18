@@ -13,7 +13,17 @@ using ZapretAutoTuner.Tuning.Geneva;
 namespace ZapretAutoTuner.App.ViewModels;
 
 /// <summary>A service of the "Авто" mode: what it is, where it stands, the strategy applied to it.</summary>
-public sealed record AutoRow(string Key, string Name, string Status, string Detail, string Strategy, string Brush, bool CanReset);
+public sealed record AutoRow(string Key, string Name, string Status, string Detail, string Strategy, string Brush, bool CanReset)
+{
+    /// <summary>Importance and pin as words: "важно · закреплена".</summary>
+    public string Tags { get; init; } = "";
+
+    public bool CanPin { get; init; }
+
+    public bool Pinned { get; init; }
+
+    public string PinText { get; init; } = "";
+}
 
 /// <summary>
 /// One working strategy and every service it bypasses: one strategy for many addresses is one group (one
@@ -42,6 +52,12 @@ public sealed partial class AutoViewModel : PageViewModel
         _workers = host.Geneva.Workers;
         host.Geneva.Changed += () => _dirty = true;
         host.GenevaAuto.Changed += () => _dirty = true;
+        // lists changed elsewhere (MCP geneva_auto_lists): the boxes show them, so a later "Сохранить" does not undo them
+        host.Geneva.ListsChanged += () =>
+        {
+            _listsLoaded = false;
+            _dirty = true;
+        };
         Loc.Loc.I.PropertyChanged += (_, _) => _dirty = true;
         _timer = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => Refresh());
         _timer.Start();
@@ -160,6 +176,129 @@ public sealed partial class AutoViewModel : PageViewModel
             AutoBusy = false;
             _dirty = true;
         }
+    }
+
+    // ---- one service: the user's word
+
+    [RelayCommand]
+    private void CheckNow(AutoRow row)
+    {
+        _host.GenevaAuto.CheckNow(row.Key);
+        Status = L.F("auto.checking", row.Name);
+    }
+
+    [RelayCommand]
+    private void MarkImportant(AutoRow row) => _host.GenevaAuto.SetPriority(row.Key, AutoUserPriority.Important);
+
+    [RelayCommand]
+    private void MarkUnimportant(AutoRow row) => _host.GenevaAuto.SetPriority(row.Key, AutoUserPriority.Unimportant);
+
+    [RelayCommand]
+    private void MarkAuto(AutoRow row) => _host.GenevaAuto.SetPriority(row.Key, AutoUserPriority.None);
+
+    [RelayCommand]
+    private void TogglePin(AutoRow row) => _host.GenevaAuto.Pin(row.Key, !row.Pinned);
+
+    /// <summary>The service whose own strategy the user is about to try (the small form above the list).</summary>
+    [ObservableProperty]
+    private AutoRow? _tryRow;
+
+    [ObservableProperty]
+    private string _tryStrategy = "";
+
+    [ObservableProperty]
+    private string _tryTitle = "";
+
+    partial void OnTryRowChanged(AutoRow? value) => TryTitle = value is null ? "" : L.F("auto.try_title", value.Name);
+
+    [ObservableProperty]
+    private bool _tryBusy;
+
+    [RelayCommand]
+    private void BeginTry(AutoRow row)
+    {
+        TryRow = row;
+        TryStrategy = row.Strategy;
+    }
+
+    [RelayCommand]
+    private void CancelTry() => TryRow = null;
+
+    [RelayCommand]
+    private async Task TryAsync()
+    {
+        if (TryRow is not { } row)
+            return;
+        TryBusy = true;
+        Status = L.F("auto.try_running", row.Name);
+        try
+        {
+            bool ok = await _host.GenevaAuto.TryStrategyAsync(row.Key, TryStrategy, CancellationToken.None);
+            Status = ok ? L.F("auto.try_ok", row.Name) : L.F("auto.try_failed", row.Name);
+            if (ok)
+                TryRow = null;
+        }
+        catch (Exception e) when (e is GenevaRefusedException or Grpc.Core.RpcException or InvalidOperationException)
+        {
+            Status = L.F("engine.failed", e.Message);
+        }
+        finally
+        {
+            TryBusy = false;
+        }
+    }
+
+    // ---- the lists
+
+    [ObservableProperty]
+    private string _importantText = "";
+
+    [ObservableProperty]
+    private string _unimportantText = "";
+
+    [ObservableProperty]
+    private string _excludedText = "";
+
+    [ObservableProperty]
+    private bool _knownImportant = true;
+
+    [ObservableProperty]
+    private bool _byName = true;
+
+    [ObservableProperty]
+    private string _listsStatus = "";
+
+    private volatile bool _listsLoaded;
+
+    private void LoadLists()
+    {
+        var l = _host.Geneva.Lists;
+        ImportantText = string.Join("\n", l.Important);
+        UnimportantText = string.Join("\n", l.Unimportant);
+        ExcludedText = string.Join("\n", l.Excluded);
+        KnownImportant = l.KnownImportant;
+        ByName = _host.Geneva.ByName;
+        _listsLoaded = true;
+    }
+
+    private static List<string> Lines(string text) =>
+        [.. text.Split(['\n', '\r', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase)];
+
+    [RelayCommand]
+    private void SaveLists()
+    {
+        var important = Lines(ImportantText);
+        var unimportant = Lines(UnimportantText);
+        var excluded = Lines(ExcludedText);
+        if (important.Concat(unimportant).Concat(excluded).Select(AutoNameList.Problem).FirstOrDefault(p => p is not null) is { } bad)
+        {
+            ListsStatus = bad;
+            return;
+        }
+        _host.Geneva.Lists = new AutoLists { Important = important, Unimportant = unimportant, Excluded = excluded, KnownImportant = KnownImportant };
+        if (_host.Geneva.ByName != ByName)
+            _host.Geneva.ByName = ByName;
+        ListsStatus = L["auto.lists_saved"];
     }
 
     [RelayCommand]
@@ -282,6 +421,8 @@ public sealed partial class AutoViewModel : PageViewModel
         if (!_dirty)
             return;
         _dirty = false;
+        if (!_listsLoaded)
+            LoadLists();
         bool en = Loc.Loc.I.English;
         var a = _host.GenevaAuto.View;
         AutoOn = a.Running;
@@ -300,7 +441,20 @@ public sealed partial class AutoViewModel : PageViewModel
                 var detail = x.Status == AutoStatus.Searching && x.Name == a.Current && a.Trying is { } t
                     ? L.F("engine.auto_trying", t)
                     : x.Why;
-                return new AutoRow(x.Key, x.Name, status, detail, x.Strategy ?? "", brush, x.Status != AutoStatus.Watching);
+                var tags = new List<string>();
+                if (x.Priority == AutoPriority.Important)
+                    tags.Add(L["auto.tag_important"]);
+                else if (x.Priority == AutoPriority.Background)
+                    tags.Add(L["auto.tag_background"]);
+                if (x.Pinned)
+                    tags.Add(L["auto.tag_pinned"]);
+                return new AutoRow(x.Key, x.Name, status, detail, x.Strategy ?? "", brush, x.Status != AutoStatus.Watching)
+                {
+                    Tags = string.Join(" · ", tags),
+                    CanPin = x.Strategy is not null,
+                    Pinned = x.Pinned,
+                    PinText = x.Pinned ? L["auto.unpin"] : L["auto.pin"],
+                };
             }).ToList();
         Sync(AutoServices, rows);
         Sync(AutoGroups, Groups(a));
@@ -318,7 +472,7 @@ public sealed partial class AutoViewModel : PageViewModel
     {
         if (a.Groups.Count > 0)
         {
-            return [.. a.Groups.Select(g => new AutoGroupRow(g.Strategy, string.Join(", ", g.Services),
+            return [.. a.Groups.Select(g => new AutoGroupRow(g.Strategy, (g.ByName ? L["auto.by_name"] + ": " : "") + string.Join(", ", g.Services),
                 g.Stats is { } st ? L.F("engine.auto_counters", st.PktsOut + st.PktsIn, g.Rate.ToString("0", CultureInfo.InvariantCulture), st.Triggered, Uptime(st.UptimeMs)) : "",
                 g.Services.Count))];
         }

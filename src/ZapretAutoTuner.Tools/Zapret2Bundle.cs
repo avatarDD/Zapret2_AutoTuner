@@ -76,6 +76,10 @@ public sealed partial class Zapret2Bundle
             problems.Add("нет bundle.json: бандл собран не скриптом tools/bundle");
             return new BundleCheck(problems.Count == 0, problems);
         }
+        // the argv and the validator follow AppInfo.Zapret2Version (winws2 1.0.7 --wf-priority for test instances):
+        // an older engine would refuse to start on options it does not know
+        if (IsOlder(manifest.Version, AppInfo.Zapret2Version))
+            problems.Add($"бандл zapret2 {manifest.Version} старее {AppInfo.Zapret2Version}, под который собрано приложение: обновите программу целиком");
         if (manifest.LuaCompat != AppInfo.LuaCompatVersion)
             problems.Add($"lua бандла рассчитан на compat {manifest.LuaCompat}, приложение — на {AppInfo.LuaCompatVersion}");
         foreach (var (rel, hash) in manifest.Files)
@@ -94,6 +98,10 @@ public sealed partial class Zapret2Bundle
             problems.Add($"zapret-lib.lua требует NFQWS2_COMPAT_VER {compat}, ожидается {AppInfo.LuaCompatVersion}");
         return new BundleCheck(problems.Count == 0, problems);
     }
+
+    /// <summary>Is the dotted version <paramref name="v"/> lower than <paramref name="than"/>? Unparsable is not older.</summary>
+    public static bool IsOlder(string v, string than) =>
+        System.Version.TryParse(v.TrimStart('v'), out var a) && System.Version.TryParse(than.TrimStart('v'), out var b) && a < b;
 
     public int? ReadLuaCompat()
     {

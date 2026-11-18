@@ -126,6 +126,7 @@ public static class ProgramCheck
             Profiles = profiles,
             QueueNum = options.QueueNum,
             TargetAddresses = anyName ? [] : found.Select(f => f.Endpoint.Remote.Address).Distinct().ToList(),
+            WinDivertPriority = options.WinDivertPriority,
         };
         var argv = EngineArgsBuilder.Build(launch);
         if (options.Platform == EnginePlatform.Windows)

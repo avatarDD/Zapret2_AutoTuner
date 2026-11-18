@@ -125,6 +125,16 @@ winws2.exe @"%~dp0zt-config.txt"
 Windows строка в двойных кавычках: cmd.exe не знает одинарных, и `<`
 диапазона стал бы перенаправлением.
 
+### 1.4 Списки и zapret2 1.0.7
+
+- Все экспортёры собирают профиль через `Profile.ToArgs`, а он пишет один
+  файл в одном типе списка один раз: с 1.0.7 повтор валит запуск
+  (nfqws2-engine §11).
+- Записи `!домен` (локальное исключение) и `^домен` переносятся как есть,
+  в каноничном порядке `!^`. Цель, где zapret2 старше 1.0.7 (например,
+  nfqws2-keenetic со старым nfqws2), прочитает `!домен` как имя, которого
+  нет: исключение просто не подействует, ошибки не будет.
+
 ## 2. nfqws2-keenetic (1.3.x)
 
 Пакет: `/opt/etc/nfqws2/nfqws2.conf` (shell, `source`-ится init-скриптом
@@ -396,7 +406,7 @@ zapret-gui читает каталоги `catalogs/*.txt` (INI-секции ст
 | Цель | Как |
 |---|---|
 | zapret2 | файл `/opt/zapret2/ipset/zt-<provider>-ipset.txt`, в профиле `--ipset=…` |
-| winws2 | `lists/zt-<provider>-ipset.txt` + `--ipset=…`. В `--wf-raw-filter` диапазоны не переносим (лимит 64 KB): перехват по портам, отбор по ipset внутри winws2 |
+| winws2 | `lists/zt-<provider>-ipset.txt` + `--ipset=…`. В `--wf-raw-filter` диапазоны не переносим (лимит фильтра winws2 1.0.7 — 16 KB): перехват по портам, отбор по ipset внутри winws2 |
 | nfqws2-keenetic | профиль в `NFQWS_ARGS_CUSTOM` с `--ipset=/opt/etc/nfqws2/lists/zt-<provider>-ipset.list` и `--new`, чтобы он шёл раньше общих. `NFQWS_ARGS_IPSET` не трогаем: он общий |
 | zapret-gui | ipset с именем `<provider>-ipset` (проходит `IPSET_NAMESPACE_RE`), создаётся через `/api/ipsets/create` + `/api/ipsets/<name>`. В args `--ipset=lists/<provider>-ipset.txt` |
 

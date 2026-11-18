@@ -47,6 +47,10 @@
   "Проверка блокировок…",
   "Checking for blocks…"
  ],
+ "status.expert_check": [
+  "Проверка стратегии на сайте (Эксперт)",
+  "Strategy check on a site (Expert)"
+ ],
  "status.mcp": [
   "MCP-клиент работает",
   "An MCP client is working"
@@ -88,8 +92,8 @@
   "Everything is stopped."
  ],
  "status.search_still_stopping": [
-  "подбор ещё завершается",
-  "a search is still winding down"
+  "подбор или проверка ещё завершается",
+  "a search or check is still winding down"
  ],
  "status.stop_failed": [
   "Остановлено не всё: {0}",
@@ -430,42 +434,6 @@
  "export.credentials_hint": [
   "Адреса и пароли роутера вводятся один раз: они общие с «Настройки → Роутер и zapret-gui», где есть «Проверить подключение».",
   "The router's addresses and passwords are typed once: they are shared with Settings → Router and zapret-gui, which has \"Check the connection\"."
- ],
- "expert.subtitle": [
-  "Готовая стратегия: вставить, проверить, включить на этом компьютере или установить на роутер.",
-  "A ready strategy: paste it, check it, turn it on on this PC or install it on the router."
- ],
- "expert.export": [
-  "Установить на роутер или сохранить…",
-  "Install on the router or save…"
- ],
- "expert.strategy_label": [
-  "Стратегия (--lua-desync=…)",
-  "Strategy (--lua-desync=…)"
- ],
- "expert.strategy_sites": [
-  "Для каких сайтов (через пробел или с новой строки)",
-  "For which sites (separated by spaces or lines)"
- ],
- "expert.use_strategy_tip": [
-  "Проверить и сделать текущей: её можно включить на этом компьютере или установить на роутер.",
-  "Check and make it the current one: turn it on on this PC or install it on the router."
- ],
- "expert.strategy_invalid": [
-  "Стратегия не прошла проверку: исправьте ошибки выше.",
-  "The strategy did not pass the check: fix the errors above."
- ],
- "expert.strategy_need_sites": [
-  "Укажите хотя бы один сайт: стратегия применяется только к ним, а не ко всему трафику.",
-  "Enter at least one site: the strategy applies to them only, not to all traffic."
- ],
- "expert.strategy_used": [
-  "Стратегия выбрана для: {0}. Включите её на этом компьютере — «Защита zapret2» сразу покажет, открываются ли сайты.",
-  "The strategy is selected for: {0}. Turn it on on this PC: zapret2 protection shows at once whether the sites open."
- ],
- "expert.check_on_site": [
-  "Проверить на сайте: «Включить на этом компьютере» запускает защиту, и она сама проверяет каждый сайт и показывает итог. Подобрать стратегию с нуля — «Подбор zapret2».",
-  "To check it on a site: \"Turn on on this PC\" starts the protection, which checks every site itself and shows the result. To find a strategy from scratch, use zapret2 tuning."
  ],
  "monitor.need_solution": [
   "Стратегии пока нет. Подберите её или вставьте готовую — тогда защиту можно будет включить.",

@@ -41,6 +41,12 @@ public sealed class EngineLaunch
     /// </summary>
     public IReadOnlyList<IPAddress> TargetAddresses { get; init; } = [];
 
+    /// <summary>
+    /// Windows: <c>--wf-priority</c> (zapret2 1.0.7+, −30000..30000, higher sees packets first); null leaves the
+    /// engine default 0. Test instances use <see cref="EngineArgsBuilder.TrialWinDivertPriority"/>.
+    /// </summary>
+    public int? WinDivertPriority { get; init; }
+
     /// <summary><c>--wf-tcp-empty=1</c> like blockcheck2, so the packet counter <c>n</c> is exact.</summary>
     public bool WinDivertTcpEmpty { get; init; }
 

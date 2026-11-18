@@ -14,7 +14,15 @@ namespace ZapretAutoTuner.Core.Engine;
 /// </summary>
 public static class EngineArgsBuilder
 {
-    public const int WinDivertMaxFilter = 65536;
+    /// <summary>WINDIVERT_MAX of winws2: 16384 since zapret2 1.0.7 (64K before).</summary>
+    public const int WinDivertMaxFilter = 16384;
+
+    /// <summary>
+    /// <c>--wf-priority</c> of AutoTuner's own test instances, as blockcheck2 1.0.7 uses for pktws: a higher
+    /// WinDivert priority sees the packets first, so a winws2 the user left running cannot desync them before the
+    /// strategy under test does.
+    /// </summary>
+    public const int TrialWinDivertPriority = 2000;
     public const int WinDivertMaxPortFilter = 4096;
 
     public static IReadOnlyList<string> StandardLuaFiles => LuaCatalog.Default.Data.LuaInitOrder.Take(3).ToList();
@@ -79,6 +87,12 @@ public static class EngineArgsBuilder
         if (tcp.Length > WinDivertMaxPortFilter || udp.Length > WinDivertMaxPortFilter)
             throw new ArgumentException("port filter is longer than WinDivert allows (4096)");
         bool incoming = l.Profiles.Any(NeedsIncoming);
+        if (l.WinDivertPriority is { } prio)
+        {
+            if (prio is < StrategyValidator.WinDivertMinPriority or > StrategyValidator.WinDivertMaxPriority)
+                throw new ArgumentException("--wf-priority must be -30000..30000");
+            a.Add("--wf-priority=" + prio.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
         if (l.WinDivertTcpEmpty)
             a.Add("--wf-tcp-empty=1");
         if (l.TargetAddresses.Count > 0)

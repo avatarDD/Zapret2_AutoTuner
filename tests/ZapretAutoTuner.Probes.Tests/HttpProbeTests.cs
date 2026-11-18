@@ -69,6 +69,21 @@ public class HttpProbeTests
     }
 
     [Fact]
+    public async Task Cutoff_inside_a_tls_record_counts_wire_bytes()
+    {
+        // the cut lands inside the first 16 KB record of the response, so nothing of it decrypts: still a stall, and
+        // the wire count shows where the flow stopped
+        await using var s = new TestServer(ServerMode.WireStallAfter, TestCerts.Leaf(Host), bodyBytes: 600_000) { CutAt = 16_000 };
+        var r = await HttpProbe.RunAsync(Opts(s));
+        Assert.Equal(ProbeError.Stalled, r.Error);
+        Assert.True(r.TlsOk);
+        Assert.Equal(0, r.BytesIn);
+        Assert.InRange(r.WireBytesIn, Classifier.CutoffWireMin, 16_000);
+        Assert.True(Classifier.IsVolumeStop(r));
+        Assert.False(r.Passes(ProbeLevel.L2Body));
+    }
+
+    [Fact]
     public async Task Cutoff_at_16k_is_a_stall()
     {
         await using var s = new TestServer(ServerMode.StallAfter, TestCerts.Leaf(Host), bodyBytes: 500_000) { CutAt = 16 * 1024 };

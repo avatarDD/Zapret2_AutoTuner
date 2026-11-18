@@ -13,7 +13,7 @@ public sealed partial class MainViewModel : ObservableObject
         Wizard = new WizardViewModel(host);
         Monitor = new MonitorViewModel(host);
         Reports = new ReportsViewModel();
-        Expert = new ExpertViewModel { Resources = host.Resources };
+        Expert = new ExpertViewModel { Resources = host.Resources, Host = host };
         Resources = new ResourcesViewModel(host.Resources, host.RouterResources);
         Mcp = new McpService(host, Monitor, Wizard);
         // the wizard and the model never tune at the same time (review M6)
@@ -30,6 +30,7 @@ public sealed partial class MainViewModel : ObservableObject
             Monitor.Active ? Loc.Loc.I["engine.busy_protection"]
             : Wizard.LocalTuningRunning ? Loc.Loc.I["engine.busy_wizard"]
             : Mcp.Session.Busy ? Loc.Loc.I["engine.busy_mcp"]
+            : host.ExpertCheckRunning ? Loc.Loc.I["engine.busy_expert"]
             : null;
         // and zapret2 waits for geneva: its bypass, and its search (the probe's packets would pass both engines)
         host.GenevaAuto.Busy = host.Geneva.Busy;
@@ -42,6 +43,16 @@ public sealed partial class MainViewModel : ObservableObject
             if (SessionState.I.Last?.Solution is { } s)
                 await Monitor.ApplySolutionAsync(s);
         };
+        // "Эксперт": a pasted strategy is checked on a site by its own engine instance, so not while geneva bypasses
+        // or the wizard tunes (the probe's packets would pass both); then exported or turned on like the wizard's result
+        // nor while the protection holds the traffic: the baseline would pass through it and call a blocked site open
+        Expert.Busy = () => Monitor.GenevaRunning?.Invoke() == true ? Loc.Loc.I["expert.busy_geneva"]
+            : Monitor.Active ? Loc.Loc.I["expert.busy_protection"]
+            : Wizard.LocalTuningRunning ? Loc.Loc.I["engine.busy_wizard"]
+            : Mcp.Session.Busy ? Loc.Loc.I["engine.busy_mcp"]
+            : null;
+        Expert.OpenExport = OpenExport;
+        Expert.ProtectHere = Wizard.ProtectHere;
         // the menu by what the user does: the automatic mode first (the main one), then manual work by engine, then
         // the service pages
         EnvironmentPage = new EnvironmentViewModel(host, () => AgentStatus) { Navigate = Navigate };
@@ -55,8 +66,6 @@ public sealed partial class MainViewModel : ObservableObject
         _host = host;
         host.AgentLost += m => AgentStatus = Loc.Loc.I.F("agent.lost", m);
         Wizard.Finish = () => Current = Monitor.Active ? Monitor : Home;
-        Expert.ProtectHere = Wizard.ProtectHere;
-        Expert.OpenExport = OpenExport;
         Monitor.Navigate = Navigate;
         Loc.Loc.I.PropertyChanged += (_, _) =>
         {
@@ -206,6 +215,8 @@ public sealed partial class MainViewModel : ObservableObject
             items.Add(new StatusItem("wizard", Wizard.Paused ? L["status.wizard_paused"] : L.F("status.wizard", Wizard.Percent.ToString("0")), Wizard));
         if (Home.Running)
             items.Add(new StatusItem("checker", L["status.checker"], Home));
+        if (Expert.Checking)
+            items.Add(new StatusItem("expert_check", L["status.expert_check"], Expert));
         if (Mcp.Session.Busy)
             items.Add(new StatusItem("mcp", L["status.mcp"], Settings));
         // the same things run: only their texts change (the percent), the bar's buttons stay and keep the focus
@@ -224,11 +235,12 @@ public sealed partial class MainViewModel : ObservableObject
         // the answer of the last "Остановить всё" is about that moment: it goes once something runs again
         if (AnythingRunning && !Stopping)
             StopResult = "";
-        Auto.Busy = auto;
-        Engine.Busy = genevaRun || genevaSearch;
-        Monitor.Busy = Monitor.Active;
-        Wizard.Busy = Wizard.Running;
-        Home.Busy = Home.Running;
+        Auto.IsBusy = auto;
+        Engine.IsBusy = genevaRun || genevaSearch;
+        Monitor.IsBusy = Monitor.Active;
+        Wizard.IsBusy = Wizard.Running;
+        Home.IsBusy = Home.Running;
+        Expert.IsBusy = Expert.Checking;
         AgentText = AgentStatus.Length > 0 ? L["status.agent_lost"] : _host.AgentRunning ? L["status.agent_on"] : L["status.agent_off"];
         EnvironmentProblem = EnvironmentPage.Problem is { } p ? L.F("status.env_problem", p) : "";
     }
@@ -294,9 +306,11 @@ public sealed partial class MainViewModel : ObservableObject
                 Wizard.StopCommand.Execute(null);
             if (Home.Running)
                 Home.CheckCommand.Execute(null);
-            for (var waited = TimeSpan.Zero; (Wizard.Running || Home.Running) && waited < SearchStopWait; waited += TimeSpan.FromMilliseconds(100))
+            if (Expert.Checking)
+                Expert.StopCheckCommand.Execute(null);
+            for (var waited = TimeSpan.Zero; (Wizard.Running || Home.Running || Expert.Checking) && waited < SearchStopWait; waited += TimeSpan.FromMilliseconds(100))
                 await Task.Delay(100);
-            if (Wizard.Running || Home.Running)
+            if (Wizard.Running || Home.Running || Expert.Checking)
                 failures.Add(L["status.search_still_stopping"]);
             await Step(Mcp.Session.Busy, Mcp.StopAsync);
             await Step(_host.Geneva.SearchRunning, () => _host.Geneva.StopSearchAsync());

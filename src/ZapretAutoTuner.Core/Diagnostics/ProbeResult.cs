@@ -90,6 +90,13 @@ public sealed record ProbeResult
     /// <summary>Response bytes after the TLS layer (headers and body).</summary>
     public long BytesIn { get; init; }
 
+    /// <summary>
+    /// Bytes the server sent on the wire, TLS handshake and records included: what a volume DPI counts.
+    /// <see cref="BytesIn"/> lags it by up to one TLS record (16 KB), so a cut inside a record shows only here.
+    /// 0 when unknown.
+    /// </summary>
+    public long WireBytesIn { get; init; }
+
     /// <summary>Request bytes sent on the wire, TLS included (a padded request is large).</summary>
     public long BytesOut { get; init; }
 

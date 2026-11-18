@@ -44,9 +44,21 @@ public class PageCheckTests
                 : Page(3_000));
         }, default);
         Assert.False(r.Passes);
-        Assert.Equal(2, asked.Count);
+        Assert.Equal(3, asked.Count); // the plain page, then the padded one twice: the cut must happen again
         Assert.Equal(128 * 1024, r.Criteria.MinBytes);
         Assert.Equal(ProbeCriteria.VolumePad, r.Criteria.PadBytes);
+    }
+
+    [Fact]
+    public async Task A_server_that_refuses_a_big_request_is_not_a_cutoff()
+    {
+        // a reset right after the 24 KB request, before any answer: the server's own limit, not DPI
+        var r = await PageCheck.RunAsync(ProbeCriteria.Default, learn: true, new LinkCapacity(), (c, _) => Task.FromResult(c.PadBytes > 0
+            ? Page(0, complete: false) with { Error = ProbeError.HttpReset, BytesIn = 0, BytesOut = 26_000, WireBytesIn = 5_000 }
+            : Page(3_000)), default);
+        Assert.True(r.Passes);
+        Assert.Null(r.Finding);
+        Assert.Equal(ProbeCriteria.Default, r.Criteria);
     }
 
     [Fact]

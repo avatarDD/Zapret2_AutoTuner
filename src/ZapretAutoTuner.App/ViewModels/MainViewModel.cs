@@ -294,6 +294,8 @@ public sealed partial class MainViewModel : ObservableObject
         return false;
     }
 
+    private bool _trayRunAutoStart;
+
     /// <summary>A bypass works now: zapret2's protection, geneva's "Авто" or geneva's bypass of one site.</summary>
     public bool BypassOn => Monitor.Active || _host.GenevaAuto.Running || _host.Geneva.RunRunning;
 
@@ -314,6 +316,10 @@ public sealed partial class MainViewModel : ObservableObject
                 _host.Settings.TrayBypass = "zapret2";
             else if (_host.GenevaAuto.Running)
                 _host.Settings.TrayBypass = "auto";
+            else if (_host.Geneva.RunRunning)
+                _host.Settings.TrayBypass = "geneva";
+            // the switch forgets the run for the next start of the program; turned on again, it comes back as it was
+            _trayRunAutoStart = _host.Geneva.State.Active?.AutoStart ?? false;
             if (Monitor.Active)
                 await Monitor.StopAsync();
             if (_host.GenevaAuto.Running)
@@ -339,6 +345,22 @@ public sealed partial class MainViewModel : ObservableObject
         var which = _host.Settings.TrayBypass ?? (SessionState.I.Last?.Solution is not null ? "zapret2" : "auto");
         if (which == "zapret2")
             return await ToggleProtectionAsync();
+        // geneva's bypass of one site: the strategy and ports it ran with stay in its state after the switch stopped it
+        if (which == "geneva" && _host.Geneva.State.Active is { } run)
+        {
+            try
+            {
+                await _host.Geneva.StartRunAsync(run.Strategy, run.Ports, autoStart: _trayRunAutoStart, CancellationToken.None);
+                RefreshStatus();
+                return true;
+            }
+            catch (Exception e) when (e is Tuning.Geneva.GenevaRefusedException or Grpc.Core.RpcException or InvalidOperationException or IOException)
+            {
+                Engine.Status = Loc.Loc.I.F("engine.failed", e.Message);
+                Current = Engine;
+                return false;
+            }
+        }
         await Auto.ToggleAutoCommand.ExecuteAsync(null);
         RefreshStatus();
         if (_host.GenevaAuto.Running)

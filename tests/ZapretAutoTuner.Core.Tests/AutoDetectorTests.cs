@@ -78,4 +78,22 @@ public class AutoDetectorTests
         book.Evaluate(T0.AddSeconds(20));
         Assert.Equal(AutoStatus.Watching, book.Find("web:example.com")!.Status);
     }
+
+    [Fact]
+    public void A_failure_on_a_new_address_counts_against_a_strategy_applied_by_name()
+    {
+        var book = new AutoBook();
+        book.Feed([Site("example.com", T0)], T0);
+        var s = book.Find("web:example.com")!;
+        s.Status = AutoStatus.Applied;
+        s.Strategy = "\\/";
+        var failed = Site("example.com", T0.AddSeconds(5), "198.51.100.9") with { Health = AutoHealth.Failed, Why = "rst" };
+        // an address group only: the new CDN address went without the bypass, its failure says nothing
+        book.Feed([failed], T0.AddSeconds(5));
+        Assert.Empty(s.Fails);
+        // by name the strategy reaches every address: the failure is the strategy's
+        book.ByName = new HashSet<string> { "web:example.com" };
+        book.Feed([failed with { Server = new IPEndPoint(IPAddress.Parse("198.51.100.10"), 443) }], T0.AddSeconds(6));
+        Assert.Single(s.Fails);
+    }
 }

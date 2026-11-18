@@ -112,9 +112,11 @@ public static class HttpProbe
 
     /// <summary>
     /// Wire bytes after the request that mean the response started although nothing decrypted: its first TLS record
-    /// was cut. TLS 1.3 session tickets that follow the handshake are a few hundred bytes.
+    /// was cut. TLS 1.3 session tickets that follow the handshake come in only when the response is read, so they count
+    /// here too: a few hundred bytes each, some servers send several (well under 4 KB). A cut inside the first record
+    /// of a volume DPI is at 14 KB and more (<c>Classifier.CutoffWireMin</c>).
     /// </summary>
-    private const int ResponseOnWire = 1024;
+    private const int ResponseOnWire = 4096;
 
     public static async Task<ProbeResult> RunAsync(HttpProbeOptions o, CancellationToken ct = default)
     {
@@ -541,7 +543,7 @@ public static class HttpProbe
         /// <summary>The body bytes as received (chunk framing included): a fingerprint, never the content.</summary>
         public readonly IncrementalHash BodyHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         public RateReading? Rate;
-        public SpeedMeter Speed = new(TimeSpan.FromMilliseconds(500));
+        public required SpeedMeter Speed;
 
         public void Certificate(HttpProbeOptions o, X509Certificate? cert, SslPolicyErrors errors)
         {

@@ -251,17 +251,17 @@ public sealed class AppSettings
         set => kb.SetSetting("search.mode", value);
     }
 
-    /// <summary>"ask" (default) or "auto": whether the monitor applies a repaired strategy by itself (PLAN 7.3).</summary>
     /// <summary>
-    /// Which bypass the tray's common switch turned off last ("zapret2" or "auto"), so that it turns the same one on
-    /// again; null before the first time.
+    /// Which bypass the tray's common switch turned off last ("zapret2", "auto" or "geneva", geneva's bypass of one
+    /// site), so that it turns the same one on again; null before the first time.
     /// </summary>
     public string? TrayBypass
     {
-        get => kb.GetSetting("ui.tray_bypass") is "zapret2" or "auto" ? kb.GetSetting("ui.tray_bypass") : null;
+        get => kb.GetSetting("ui.tray_bypass") is "zapret2" or "auto" or "geneva" ? kb.GetSetting("ui.tray_bypass") : null;
         set => kb.SetSetting("ui.tray_bypass", value ?? "");
     }
 
+    /// <summary>"ask" (default) or "auto": whether the monitor applies a repaired strategy by itself (PLAN 7.3).</summary>
     public string ApplyPolicy
     {
         get => kb.GetSetting("monitor.apply") ?? "ask";
@@ -322,13 +322,13 @@ public sealed class AppSettings
         set => kb.SetSetting("ui.large_font", value ? "1" : "0");
     }
 
+    /// <summary>The scales the settings offer; another stored value is not trusted.</summary>
+    public static IReadOnlyList<int> Scales { get; } = [100, 115, 130, 150];
+
     /// <summary>
     /// The interface scale in percent (100…150). Not set yet: 115 for those who had "Крупный шрифт" on, which it
     /// replaces (the font switch grew only the base size, the fixed small sizes stayed).
     /// </summary>
-    /// <summary>The scales the settings offer; another stored value is not trusted.</summary>
-    public static IReadOnlyList<int> Scales { get; } = [100, 115, 130, 150];
-
     public int UiScale
     {
         get => int.TryParse(kb.GetSetting("ui.scale"), out var s) && Scales.Contains(s) ? s : LargeFont ? 115 : 100;

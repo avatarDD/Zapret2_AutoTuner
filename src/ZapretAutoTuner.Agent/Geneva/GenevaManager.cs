@@ -914,17 +914,19 @@ internal sealed class GenevaManager : IDisposable
         return argv;
     }
 
-    private Task<GenevaAutoGroupState> EnsureObserverAsync(string geneva, CancellationToken ct)
+    private async Task<GenevaAutoGroupState> EnsureObserverAsync(string geneva, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         if (_observer is not { HasExited: false })
         {
+            // a detector that died leaves its rules (NFLOG, its queue): gone before the next one starts
+            await StopObserverAsync();
             int port = FreeLoopbackPort();
             var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
             _observer = Launch("auto", geneva, ObserverArgv(port, OperatingSystem.IsWindows()),
                 new Dictionary<string, string> { ["GENEVA_CONTROL_TOKEN"] = token }, supervise: true, port, token, AutoRules.ObservePort, AutoRules.ObserveQueue);
         }
-        return Task.FromResult(new GenevaAutoGroupState { Strategy = "", Id = _observer.Id, Queue = _observer.Queue, Pid = _observer.Pid });
+        return new GenevaAutoGroupState { Strategy = "", Id = _observer.Id, Queue = _observer.Queue, Pid = _observer.Pid };
     }
 
     private async Task StopObserverAsync()

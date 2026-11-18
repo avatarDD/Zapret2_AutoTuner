@@ -206,7 +206,7 @@ public static class HttpProbe
             }
 
             await ExchangeAsync(o, stream, raw, r, sw, total.Token, ct).ConfigureAwait(false);
-            r.Rate = Core.Diagnostics.RateShelf.Read(r.Speed.Closed(), o.RateWindow);
+            r.Rate = Core.Diagnostics.RateShelf.Read(r.Speed.Closed(), o.RateWindow) ?? Core.Diagnostics.RateShelf.Burst(r.Speed.Bytes, r.Speed.Elapsed);
             if (o.MinRate > 0 && r.Error == ProbeError.None && r.Rate is { } rate && rate.Rate < o.MinRate)
                 r.SetError(ProbeError.Throttled, $"скорость {Core.Diagnostics.RateShelf.Human(rate.Rate)} ниже {Core.Diagnostics.RateShelf.Human(o.MinRate)}");
             return r.Build(sw, raw);
@@ -650,7 +650,15 @@ internal sealed class SpeedMeter(TimeSpan window)
 {
     private readonly List<long> _windows = [];
     private TimeSpan? _start;
+    private long _first;
     private long _last;
+    private TimeSpan _at;
+
+    /// <summary>Bytes since the first response byte.</summary>
+    public long Bytes => _last - _first;
+
+    /// <summary>From the first response byte to the last.</summary>
+    public TimeSpan Elapsed => _start is { } s ? _at - s : TimeSpan.Zero;
 
     /// <summary><paramref name="wire"/>: all bytes from the server so far; the meter counts what came since the last call.</summary>
     public void Add(TimeSpan now, long wire)
@@ -661,7 +669,8 @@ internal sealed class SpeedMeter(TimeSpan window)
         {
             // the bytes before the first response byte are the handshake: not the download
             _start = now;
-            _last = wire;
+            _at = now;
+            _first = _last = wire;
             return;
         }
         int i = (int)Math.Min(100_000, (now - _start.Value).Ticks / window.Ticks);
@@ -669,6 +678,7 @@ internal sealed class SpeedMeter(TimeSpan window)
             _windows.Add(0);
         _windows[i] += wire - _last;
         _last = wire;
+        _at = now;
     }
 
     /// <summary>How long the response has been coming.</summary>

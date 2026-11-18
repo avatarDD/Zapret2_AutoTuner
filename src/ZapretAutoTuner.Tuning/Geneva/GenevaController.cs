@@ -541,7 +541,7 @@ public sealed class GenevaController : IAsyncDisposable
         {
             GenevaJudge judge;
             lock (_lock)
-                judge = _judge ?? ((port, c) => PageJudgeAsync(settings, port, e.Str("strategy") ?? "", c));
+                judge = _judge ?? ((port, c) => PageJudgeAsync(settings, port, lports, e.Str("strategy") ?? "", c));
             GenevaJudgement? j = null;
             for (int attempt = 0; attempt < MaxPortAttempts; attempt++)
             {
@@ -592,14 +592,16 @@ public sealed class GenevaController : IAsyncDisposable
     /// page (<see cref="PageCheck"/>): a page that only seems to open is blocked, and every strategy after it must pass
     /// the tighter criterion (the speed, the padded 128 KB). geneva repeats the baseline when a search continues.
     /// </summary>
-    private async Task<GenevaJudgement> PageJudgeAsync(GenevaSearchSettings settings, int port, string strategy, CancellationToken ct)
+    private async Task<GenevaJudgement> PageJudgeAsync(GenevaSearchSettings settings, int port, string lports, string strategy, CancellationToken ct)
     {
         ProbeCriteria c;
         lock (_lock)
             c = _criteria;
         bool baseline = GenevaStrategyText.IsEmpty(strategy);
+        int n = 0;
         var check = await PageCheck.RunAsync(c, baseline, LinkCapacity.Shared,
-            (k, t) => _probe(settings.Host, settings.Port, settings.Tls, port, k, t), ct).ConfigureAwait(false);
+            // the baseline's padded second download gets a port of its own: the first one's may still be in TIME_WAIT
+            (k, t) => _probe(settings.Host, settings.Port, settings.Tls, n++ == 0 ? port : GenevaArgv.LocalPort(lports, Interlocked.Increment(ref _probeSeq)), k, t), ct).ConfigureAwait(false);
         var r = check.Probe;
         if (LocalPortUnavailable(r))
             return new GenevaJudgement(0, r.ErrorDetail ?? "", PortUnavailable: true);

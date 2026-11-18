@@ -502,10 +502,6 @@ public sealed class AutoBook
     }
 
     /// <summary>
-    /// A suspected or degraded service whose probe is due: the most important first (issue 28), within a level a
-    /// broken bypass before a new suspicion, then the one used most recently and most.
-    /// </summary>
-    /// <summary>
     /// A key geneva's detector holds impaired (<c>ext_status</c>, <c>impaired</c>): a name (<paramref name="level"/>
     /// <c>host</c>) or an address (<c>ip</c>) with a class of <see cref="AutoRules.DetectorClasses"/>. The services it
     /// names — a site by its name or a subdomain of it, any service by an address it was seen at — are suspected unless
@@ -521,8 +517,9 @@ public sealed class AutoBook
         {
             bool match = level switch
             {
-                "host" => s.Kind is AutoKind.Web or AutoKind.Quic && (key == s.Host.ToLowerInvariant() || SiteOf(s) is { Length: > 0 } site && (key == site || key.EndsWith("." + site, StringComparison.Ordinal))),
-                "ip" => s.Addresses.Any(a => string.Equals(a.Ip, key, StringComparison.OrdinalIgnoreCase)),
+                // the detector's classes are TCP ones: a site's QUIC or a UDP service at the address is not judged by them
+                "host" => s.Kind == AutoKind.Web && (key == s.Host.ToLowerInvariant() || AutoFamilies.SiteOf(s) is var site && (key == site || key.EndsWith("." + site, StringComparison.Ordinal))),
+                "ip" => s.Transport == L4Kind.Tcp && s.Addresses.Any(a => string.Equals(a.Ip, key, StringComparison.OrdinalIgnoreCase)),
                 _ => false,
             };
             if (!match || s.Status is not (AutoStatus.Watching or AutoStatus.Fallback or AutoStatus.Suspected)
@@ -539,9 +536,10 @@ public sealed class AutoBook
         return hit;
     }
 
-    private static string SiteOf(AutoService s) => s.Key.StartsWith("web:", StringComparison.Ordinal) ? s.Key[4..]
-        : s.Key.StartsWith("quic:", StringComparison.Ordinal) ? s.Key[5..] : "";
-
+    /// <summary>
+    /// A suspected or degraded service whose probe is due: the most important first (issue 28), within a level a
+    /// broken bypass before a new suspicion, then the one used most recently and most.
+    /// </summary>
     public AutoService? NextToConfirm(DateTime now) => Queue(_services.Values
         .Where(s => s.Status is AutoStatus.Suspected or AutoStatus.Degraded && (s.NextCheck is null || now >= s.NextCheck)), now)
         .FirstOrDefault();
@@ -652,6 +650,7 @@ public sealed class AutoBook
                 // the strategy still works: the failures were something else
                 s.Fails.Clear();
                 s.NoConnections.Clear();
+                s.Detected.Clear();
                 s.AppliedAt = now;
                 Move(s, AutoStatus.Applied, now, "проверка с обходом прошла");
                 return $"{s.Name}: с обходом открывается, оставляю стратегию";
@@ -670,6 +669,7 @@ public sealed class AutoBook
                 s.AppliedAt = now;
                 s.Fails.Clear();
                 s.NoConnections.Clear();
+                s.Detected.Clear();
                 Move(s, AutoStatus.Applied, now, "закреплена; проверка с обходом не прошла");
                 return $"{s.Name}: проверка с обходом не прошла, но стратегия закреплена — оставляю";
             default:
@@ -696,6 +696,7 @@ public sealed class AutoBook
         s.NextCheck = null;
         s.Fails.Clear();
         s.NoConnections.Clear();
+        s.Detected.Clear();
         Move(s, AutoStatus.Applied, now, "обход работает");
     }
 
@@ -722,6 +723,7 @@ public sealed class AutoBook
         s.Pinned = false;
         s.Fails.Clear();
         s.NoConnections.Clear();
+        s.Detected.Clear();
         Move(s, AutoStatus.Watching, now, "");
     }
 

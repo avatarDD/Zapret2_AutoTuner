@@ -630,7 +630,8 @@ public sealed class GenevaAuto : IAsyncDisposable
             if (s.Criteria is { } learned && _book.Find(s.Key) is { } kept && kept.Criteria != learned)
             {
                 kept.Criteria = learned;
-                tightened = $"{s.Name}: страница открывается не вся или медленно (шейпер, обрыв 16 КБ) — успех теперь: {learned}";
+                if (learned != Core.Diagnostics.ProbeCriteria.Default)
+                    tightened = $"{s.Name}: страница открывается не вся или медленно (шейпер, обрыв 16 КБ) — успех теперь: {learned}";
             }
             line = _book.Confirmed(s.Key, result, _now());
         }

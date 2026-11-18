@@ -57,4 +57,25 @@ public class AutoDetectorTests
         book.Find("web:example.com")!.Status = AutoStatus.Applied;
         Assert.Empty(book.Detect("host", "example.com", "THROTTLE", T0));
     }
+
+    [Fact]
+    public void A_sites_quic_is_not_judged_by_the_detectors_tcp_classes()
+    {
+        var book = new AutoBook();
+        var quic = Site("example.com", T0) with { Key = "quic:example.com", Kind = AutoKind.Quic, Transport = L4Kind.Udp, App = "quic" };
+        book.Feed([quic], T0);
+        Assert.Empty(book.Detect("host", "example.com", "THROTTLE", T0));
+        Assert.Empty(book.Detect("ip", "203.0.113.5", "FREEZE_N", T0));
+    }
+
+    [Fact]
+    public void A_reset_forgets_the_detectors_marks()
+    {
+        var book = new AutoBook();
+        book.Feed([Site("example.com", T0)], T0);
+        book.Detect("host", "example.com", "THROTTLE", T0);
+        book.Reset("web:example.com", T0.AddSeconds(10));
+        book.Evaluate(T0.AddSeconds(20));
+        Assert.Equal(AutoStatus.Watching, book.Find("web:example.com")!.Status);
+    }
 }

@@ -39,6 +39,9 @@ public static class GenevaStrategyText
         return null;
     }
 
+    /// <summary>geneva's baseline request: <c>eval_request</c> with no strategy at all (<c>src/evaluator.c</c>, <c>external_run</c>).</summary>
+    public static bool IsEmpty(string? s) => string.IsNullOrWhiteSpace(s);
+
     private static readonly System.Text.RegularExpressions.Regex XAction = new(
         @"(?:^|[-(,])x[a-z0-9]+(?=[{(,)-]|$)|\[(?:L7|FLOW|META):", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
@@ -47,9 +50,6 @@ public static class GenevaStrategyText
     /// <c>FLOW:</c>, <c>META:</c>): <c>check</c>, <c>run</c> and <c>evolve</c> need <c>--ext</c> for it. Geneva's own
     /// actions (tamper, duplicate, fragment, drop, sleep, trace) never start with an x.
     /// </summary>
-    /// <summary>geneva's baseline request: <c>eval_request</c> with no strategy at all (<c>src/evaluator.c</c>, <c>external_run</c>).</summary>
-    public static bool IsEmpty(string? s) => string.IsNullOrWhiteSpace(s);
-
     public static bool NeedsExt(string? s) => !string.IsNullOrEmpty(s) && XAction.IsMatch(s);
 }
 

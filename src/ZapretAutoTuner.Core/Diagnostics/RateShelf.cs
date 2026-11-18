@@ -29,10 +29,22 @@ public static class RateShelf
     public const long MinBytes = 64 * 1024;
 
     /// <summary>
-    /// A shelf when the link capacity is not known yet: 64 KB/s (512 kbit/s). Shapers of the TSPU sit at 16–100 KB/s,
-    /// and a download of the program's probe is rarely that slow on its own.
+    /// A shelf when the link capacity is not known yet: 128 KB/s (1 Mbit/s). Shapers of the TSPU sit at 16–100 KB/s,
+    /// and a download of the program's probe is rarely that slow and that even on its own.
     /// </summary>
-    public const double FloorRate = 64 * 1024;
+    public const double FloorRate = 128 * 1024;
+
+    /// <summary>
+    /// The slowest speed that may become the link capacity while none is known: a slower one could be a shaper's own
+    /// shelf (above <see cref="FloorRate"/>, so not called one) and would then hide every shelf for ten minutes.
+    /// </summary>
+    public const double TrustRate = 4 * FloorRate;
+
+    /// <summary>A download too short for windows (a fast link): only its average, never a shelf (cv 1).</summary>
+    public static RateReading? Burst(long bytes, TimeSpan elapsed) =>
+        bytes >= 1024 * 1024 && elapsed > TimeSpan.Zero
+            ? new RateReading(bytes / elapsed.TotalSeconds, 1, bytes / elapsed.TotalSeconds, 0, bytes)
+            : null;
 
     /// <summary>
     /// The reading of per-window byte counts in time order (zero = no data in that window); null when there are
@@ -97,7 +109,7 @@ public sealed class LinkCapacity
     private double _rate;
     private DateTime _at;
 
-    /// <summary>A steady speed seen now (B/s) that is not a shelf (a shelf would become the capacity and hide itself).</summary>
+    /// <summary>A speed seen now (B/s) that is not a shelf (a shelf would become the capacity and hide itself).</summary>
     public void Observe(double rate, DateTime? now = null)
     {
         var t = now ?? DateTime.UtcNow;
@@ -116,8 +128,9 @@ public sealed class LinkCapacity
     {
         if (r is null)
             return false;
-        bool shelf = RateShelf.IsShelf(r, Current(now));
-        if (!shelf)
+        double cap = Current(now);
+        bool shelf = RateShelf.IsShelf(r, cap);
+        if (!shelf && (cap > 0 || r.Rate >= RateShelf.TrustRate))
             Observe(r.Rate, now);
         return shelf;
     }

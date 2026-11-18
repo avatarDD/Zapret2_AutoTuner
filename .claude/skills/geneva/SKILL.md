@@ -110,7 +110,7 @@ handshake — не успех.
 (`ClassifierVerdict.Criteria`) или узнаёт сама проба baseline: она меряет
 скорость (`HttpProbeOptions.RateBytes`, окна по 500 мс, `RateShelf`) и, если
 страница пришла полкой ниже четверти ёмкости канала (`LinkCapacity`, без
-неё — ниже 64 КБ/с), считает baseline неуспехом (`ProbeError.Throttled`), а
+неё — ниже 128 КБ/с), считает baseline неуспехом (`ProbeError.Throttled`), а
 каждой стратегии ставит `MinRate` (`RateShelf.Threshold`: 3 полки, не
 больше половины канала, не меньше 1,5 полки). Страница короче 128 КБ
 проверяется ещё раз с добивкой (`VolumePad`): обрыв на ней → все стратегии

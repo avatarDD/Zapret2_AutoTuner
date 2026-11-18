@@ -105,10 +105,13 @@ public static class ClassifierRunner
         IPAddress? neutralIp = o.NeutralAddress;
         var observations = new List<AddressObservation>();
         bool extrasDone = false;
+        bool speedDone = false;
         foreach (var ip in list)
         {
             ct.ThrowIfCancellationRequested();
-            var obs = await ProbeAddressAsync(host, ip, o, profiles, Step, ct).ConfigureAwait(false);
+            // one address's speed download tells the shaper: the others are judged by their baseline
+            var obs = await ProbeAddressAsync(host, ip, o, profiles, Step, measure: !speedDone, ct).ConfigureAwait(false);
+            speedDone |= obs.Speed?.Rate is not null;
 
             if (obs.NeutralSni is { } n && !n.TlsOk && n.Error != ProbeError.TlsFailed && obs.NeutralControl is null)
             {
@@ -148,10 +151,7 @@ public static class ClassifierRunner
         foreach (var a in observations)
         {
             foreach (var r in a.Baseline.Append(a.Speed))
-            {
-                if (r?.Rate is { } rate && !RateShelf.IsShelf(rate, cap))
-                    capacity.Observe(rate.Rate);
-            }
+                capacity.Judge(r?.Rate);
         }
         cap = capacity.Current();
         var target = new TargetObservation
@@ -174,7 +174,7 @@ public static class ClassifierRunner
     }
 
     private static async Task<AddressObservation> ProbeAddressAsync(string host, IPAddress ip, ClassifierOptions o, List<ClientProfile> profiles,
-        Action<string, string?, string, string> step, CancellationToken ct)
+        Action<string, string?, string, string> step, bool measure, CancellationToken ct)
     {
         string a = ip.ToString();
         step("port", a, $"Порт-тест: TCP {o.Port}", $"Port test: TCP {o.Port}");
@@ -212,7 +212,7 @@ public static class ClassifierRunner
             obs = obs with { Padded = await HttpAsync(o, host, ip, o.Port, ProbeLevel.L2Body, null, ct, padBytes: 24_000, minBytes: 128 * 1024).ConfigureAwait(false) };
         }
         if (baseline.Count > 0 && baseline.All(b => b.Passes(ProbeLevel.L2Body)))
-            obs = obs with { Speed = await SpeedAsync(host, ip, o, baseline, step, ct).ConfigureAwait(false) };
+            obs = obs with { Speed = await SpeedAsync(host, ip, o, baseline, step, measure, ct).ConfigureAwait(false) };
 
         step("tls", a, "TLS 1.2 и TLS 1.3 по отдельности", "TLS 1.2 and TLS 1.3 separately");
         obs = obs with
@@ -244,9 +244,9 @@ public static class ClassifierRunner
     /// read for up to <see cref="SpeedBytes"/> or six seconds.
     /// </summary>
     private static async Task<ProbeResult?> SpeedAsync(string host, IPAddress ip, ClassifierOptions o, List<ProbeResult> baseline,
-        Action<string, string?, string, string> step, CancellationToken ct)
+        Action<string, string?, string, string> step, bool measure, CancellationToken ct)
     {
-        if (baseline.All(b => b.Complete))
+        if (!measure || baseline.All(b => b.Complete))
             return baseline.FirstOrDefault(b => b.Rate is not null) ?? baseline[0];
         step("speed", ip.ToString(), "Страница открывается: проверяю скорость загрузки (шейпер)", "The page opens: checking the download speed (shaper)");
         await Task.Delay(o.Pause, ct).ConfigureAwait(false);

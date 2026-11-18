@@ -380,14 +380,21 @@ public sealed partial class EngineViewModel : PageViewModel
         }
     }
 
-    /// <summary>The bundled geneva knows geneva_c 2.0's x-actions (<c>ext_xact</c>); false when it cannot be asked.</summary>
+    private bool? _xActions;
+
+    /// <summary>
+    /// The bundled geneva knows geneva_c 2.0's x-actions (<c>ext_xact</c>), asked once; false when it cannot be asked
+    /// (asked again next time).
+    /// </summary>
     private async Task<bool> HasXActionsAsync()
     {
+        if (_xActions is { } known)
+            return known;
         if (!_host.GenevaBundle.Exists)
             return false;
         try
         {
-            return (await _host.GenevaBundle.GetVersionAsync()).Features.Contains("ext_xact");
+            return (_xActions = (await _host.GenevaBundle.GetVersionAsync()).Features.Contains("ext_xact")).Value;
         }
         catch (Exception e) when (e is InvalidOperationException or IOException or FormatException or System.Text.Json.JsonException or System.ComponentModel.Win32Exception)
         {
@@ -396,19 +403,19 @@ public sealed partial class EngineViewModel : PageViewModel
     }
 
     /// <summary>
-    /// The seeds of zapret2's methods for a site search: the "Авто" mode's quick round for TLS (and the HTTP ones first
-    /// for a site on port 80, where xhttp acts and the TLS splits find no ClientHello).
+    /// The seeds of zapret2's methods for a site search: the "Авто" mode's quick round for TLS, the HTTP ones for a site
+    /// on port 80 (xhttp acts there; the TLS splits find no ClientHello).
     /// </summary>
-    internal static IReadOnlyList<string> Zapret2Methods(int port) =>
-        port == 80 ? [.. AutoCandidates.XHttp, .. AutoCandidates.XTcp] : AutoCandidates.XTcp;
+    internal static IReadOnlyList<string> Zapret2Methods(int port) => port == 80 ? AutoCandidates.XHttp : AutoCandidates.XTcp;
 
-    /// <summary>Every zapret2 method the "Авто" mode tries, with where it acts.</summary>
+    /// <summary>
+    /// Every TCP method of zapret2 the "Авто" mode tries, with where it acts: what the single-strategy bypass (TCP
+    /// ports) can take. The QUIC and UDP ones stay with the "Авто" mode.
+    /// </summary>
     internal static IEnumerable<(string Strategy, string Where)> Zapret2Library() =>
         AutoCandidates.XTcp.Select(x => (x, "zapret2 / TLS"))
             .Concat(AutoCandidates.XTcpWide.Select(x => (x, "zapret2 / TLS")))
             .Concat(AutoCandidates.XHttp.Select(x => (x, "zapret2 / HTTP")))
-            .Concat(AutoCandidates.XQuic.Concat(AutoCandidates.XQuicWide).Select(x => (x, "zapret2 / QUIC")))
-            .Concat(AutoCandidates.XUdp.Select(x => (x, "zapret2 / UDP")))
             .Concat(AutoCandidates.XTcpAny.Select(x => (x, "zapret2 / TCP")))
             .DistinctBy(x => x.Item1, StringComparer.Ordinal);
 

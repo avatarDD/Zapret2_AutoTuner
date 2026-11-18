@@ -595,12 +595,12 @@ public static class AutoCandidates
     /// <summary>geneva_c 2.0's x-actions and L7 payloads that exist for TCP only (docs/EXT.md: X5a, X5b, X8).</summary>
     private static readonly System.Text.RegularExpressions.Regex TcpOnly = new(
         @"(?:^|[-(,])x(?:split|disorder|tcpseg|hostfake|fakedsplit|fakeddisorder|synack|synacksplit|wsize|wssize|syndata|rst|http|oob|tlsrec|drip|tlsclone|synhide)(?=[{(,)-]|$)"
-        + @"|payload[:=](?:tls_client_hello|http_req)\b|\[TCP:", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        + @"|payload[:=](?:tls_client_hello|http_req)\b|\[TCP:", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     /// <summary>geneva_c 2.0's x-actions and L7 payloads that exist for UDP only.</summary>
     private static readonly System.Text.RegularExpressions.Regex UdpOnly = new(
         @"(?:^|[-(,])x(?:udplen|dhtdn|wgobfs|udp2icmp)(?=[{(,)-]|$)|payload[:=](?:quic_initial|dht|wireguard\w*|stun|discord_ip_discovery|dtls\w*)\b|\[UDP:",
-        System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     /// <summary>
     /// geneva's search space for the service (<c>--protos</c>). <paramref name="wide"/>: the wider search after the

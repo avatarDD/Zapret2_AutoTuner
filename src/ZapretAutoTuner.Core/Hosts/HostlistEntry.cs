@@ -89,11 +89,12 @@ public readonly record struct HostlistEntry(string Domain, bool Strict, bool Exe
                     // what the exemption leaves out, another list may take: the name, and for a non-strict one the
                     // names under it. All of it: the exemption goes. Only the names under it: it keeps the name alone
                     // (strict). Only the name or nothing: it stays, else a wider include would bring the names under
-                    // it back.
+                    // it back (a list that takes only the name itself loses it then: one entry per name). "*." is no
+                    // name a list can hold: it stands for any name below.
                     int self = i;
                     var others = lists.Where((_, j) => j != self).ToList();
                     bool name = others.Any(l => Matches(l, e.Domain));
-                    bool below = !e.Strict && others.Any(l => Matches(l, "sub." + e.Domain));
+                    bool below = !e.Strict && others.Any(l => Matches(l, "*." + e.Domain));
                     if (name && (e.Strict || below))
                         continue;
                     if (below)

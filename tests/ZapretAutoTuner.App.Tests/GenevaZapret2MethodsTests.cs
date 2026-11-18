@@ -12,9 +12,9 @@ public sealed class GenevaZapret2MethodsTests
     {
         Assert.Equal(AutoCandidates.XTcp, EngineViewModel.Zapret2Methods(443));
         var http = EngineViewModel.Zapret2Methods(80);
-        Assert.StartsWith("[TCP:flags:PA]-xhttp", http[0], StringComparison.Ordinal);
-        Assert.Superset(AutoCandidates.XTcp.ToHashSet(), http.ToHashSet());
+        Assert.Equal(AutoCandidates.XHttp, http);
         // all of them need --ext, and they fit geneva's seed limit next to the found ones
+        Assert.All(AutoCandidates.XTcp, s => Assert.True(GenevaStrategyText.NeedsExt(s)));
         Assert.All(http, s => Assert.True(GenevaStrategyText.NeedsExt(s)));
         Assert.True(http.Count + 20 < GenevaArgv.MaxSeeds);
     }
@@ -24,8 +24,10 @@ public sealed class GenevaZapret2MethodsTests
     {
         var rows = EngineViewModel.Zapret2Library().ToList();
         Assert.Equal(rows.Count, rows.Select(r => r.Strategy).Distinct(StringComparer.Ordinal).Count());
-        foreach (var x in AutoCandidates.XTcp.Concat(AutoCandidates.XTcpWide).Concat(AutoCandidates.XQuic).Concat(AutoCandidates.XUdp))
+        foreach (var x in AutoCandidates.XTcp.Concat(AutoCandidates.XTcpWide).Concat(AutoCandidates.XHttp))
             Assert.Contains(rows, r => r.Strategy == x);
+        // the single-strategy bypass runs on TCP ports: no QUIC or UDP method is offered for it
+        Assert.DoesNotContain(rows, r => r.Strategy.Contains("[UDP:", StringComparison.Ordinal));
         Assert.All(rows, r => Assert.Null(GenevaStrategyText.Problem(r.Strategy)));
         Assert.Equal("xfake, xdisorder", EngineViewModel.XActions(@"[TCP:flags:PA]-xfake{blob=fake_default_tls;ttl=4}(xdisorder{pos=1,midsld},)-| \/"));
         Assert.Equal("xwssize", EngineViewModel.XActions(@"[FLOW:n:a]-xwssize{wsize=1;scale=6}-| \/"));

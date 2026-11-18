@@ -813,7 +813,7 @@ internal sealed class GenevaManager : IDisposable
             ini.Append($"ipset-exclude = {Path.Combine(dir, "exclude-ip.txt")}\n");
             ini.Append($"strategy-file = {Path.Combine(dir, $"strategy-{n}.txt")}\n");
         }
-        if (reload && _host is { } running)
+        if (reload && _host is { HasExited: false } running)
         {
             // the lists changed at most: geneva rereads them; the command makes it at once
             try
@@ -827,6 +827,8 @@ internal sealed class GenevaManager : IDisposable
         }
         else
         {
+            // gone while the files were written: it starts again with them
+            await StopHostAsync();
             var profiles = Path.Combine(dir, "profiles.ini");
             await WriteAtomicAsync(profiles, ini.ToString(), ct);
             int port = FreeLoopbackPort();

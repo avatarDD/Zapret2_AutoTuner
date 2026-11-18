@@ -226,8 +226,14 @@ internal sealed class GenevaManager : IDisposable
             settings = settings with { Seeds = [] };
         // a search started with the extensions may hold x-actions in its checkpoint: it goes on with them
         var extMark = Path.Combine(dir, "ext");
-        bool ext = (await FeaturesAsync(geneva, ct)).Contains("ext_xact");
-        settings = settings with { ResumeExt = ext && settings.Resume && File.Exists(extMark) };
+        var feats = await FeaturesAsync(geneva, ct);
+        bool ext = feats.Contains("ext_xact");
+        // geneva makes x-actions and mutates their parameters itself: every search runs with the extensions
+        settings = settings with
+        {
+            ResumeExt = ext && settings.Resume && File.Exists(extMark),
+            XGen = ext && feats.Contains(GenevaBundle.XGenFeature),
+        };
         await File.WriteAllTextAsync(Path.Combine(dir, "target.txt"), settings.TargetKey, ct);
         string? seedsFile = null;
         if (settings.Seeds.Count > 0 && !settings.Resume)

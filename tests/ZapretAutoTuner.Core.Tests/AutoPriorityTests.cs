@@ -301,6 +301,9 @@ public class AutoPriorityTests
         Assert.Equal(["evolve", "--ext"], GenevaArgv.Evolve(with, "c", "d", "s").Take(2));
         Assert.DoesNotContain("--ext", GenevaArgv.Evolve(with with { Seeds = [AutoCandidates.Tcp[0]] }, "c", "d", "s"));
         Assert.Contains("--ext", GenevaArgv.Evolve(with with { Seeds = [], Resume = true, ResumeExt = true }, "c", "d", null));
+        // geneva_c with ext_xgen makes x-actions and mutates their parameters itself: Geneva's seeds get --ext too
+        Assert.Equal(["evolve", "--ext"], GenevaArgv.Evolve(with with { Seeds = [AutoCandidates.Tcp[0]], XGen = true }, "c", "d", "s").Take(2));
+        Assert.Contains("--ext", GenevaArgv.Evolve(with with { Seeds = [], XGen = true }, "c", "d", null));
     }
 
     [Theory]

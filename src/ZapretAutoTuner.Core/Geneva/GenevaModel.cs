@@ -125,8 +125,18 @@ public sealed record GenevaSearchSettings
     /// <summary>The target profile in geneva's strategy database: the same host and port share their results.</summary>
     public string TargetKey => GenevaArgv.TargetKey(Host, Port, Probe);
 
-    /// <summary>geneva_c 2.0's extensions (<c>--ext</c>): a seed or the saved population holds x-actions.</summary>
-    public bool Ext => Seeds.Any(GenevaStrategyText.NeedsExt) || ResumeExt;
+    /// <summary>
+    /// geneva_c 2.0's extensions (<c>--ext</c>): a seed or the saved population holds x-actions, or geneva makes x-actions
+    /// and changes their parameters itself (<see cref="XGen"/>).
+    /// </summary>
+    public bool Ext => Seeds.Any(GenevaStrategyText.NeedsExt) || ResumeExt || XGen;
+
+    /// <summary>
+    /// geneva_c has the feature <c>ext_xgen</c>: with <c>--ext</c> its search makes new x-actions of zapret2 and mutates
+    /// their parameters (without it the x-actions of the seeds are only crossed over). The search then always runs with
+    /// <c>--ext</c>, so every kind of strategy with every parameter takes part.
+    /// </summary>
+    public bool XGen { get; init; }
 
     /// <summary>The search being continued was started with <c>--ext</c> (its checkpoint may hold x-actions).</summary>
     public bool ResumeExt { get; init; }

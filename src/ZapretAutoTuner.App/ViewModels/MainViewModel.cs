@@ -12,7 +12,7 @@ public sealed partial class MainViewModel : ObservableObject
         Wizard = new WizardViewModel(host);
         Monitor = new MonitorViewModel(host);
         Reports = new ReportsViewModel();
-        Expert = new ExpertViewModel { Resources = host.Resources };
+        Expert = new ExpertViewModel { Resources = host.Resources, Host = host };
         Resources = new ResourcesViewModel(host.Resources, host.RouterResources);
         Mcp = new McpService(host, Monitor, Wizard);
         // the wizard and the model never tune at the same time (review M6)
@@ -29,6 +29,7 @@ public sealed partial class MainViewModel : ObservableObject
             Monitor.Active ? Loc.Loc.I["engine.busy_protection"]
             : Wizard.LocalTuningRunning ? Loc.Loc.I["engine.busy_wizard"]
             : Mcp.Session.Busy ? Loc.Loc.I["engine.busy_mcp"]
+            : host.ExpertCheckRunning ? Loc.Loc.I["engine.busy_expert"]
             : null;
         // and zapret2 waits for geneva: its bypass, and its search (the probe's packets would pass both engines)
         host.GenevaAuto.Busy = host.Geneva.Busy;
@@ -41,6 +42,16 @@ public sealed partial class MainViewModel : ObservableObject
             if (SessionState.I.Last?.Solution is { } s)
                 await Monitor.ApplySolutionAsync(s);
         };
+        // "Эксперт": a pasted strategy is checked on a site by its own engine instance, so not while geneva bypasses
+        // or the wizard tunes (the probe's packets would pass both); then exported or turned on like the wizard's result
+        // nor while the protection holds the traffic: the baseline would pass through it and call a blocked site open
+        Expert.Busy = () => Monitor.GenevaRunning?.Invoke() == true ? Loc.Loc.I["expert.busy_geneva"]
+            : Monitor.Active ? Loc.Loc.I["expert.busy_protection"]
+            : Wizard.LocalTuningRunning ? Loc.Loc.I["engine.busy_wizard"]
+            : Mcp.Session.Busy ? Loc.Loc.I["engine.busy_mcp"]
+            : null;
+        Expert.OpenExport = OpenExport;
+        Expert.ProtectHere = Wizard.ProtectHere;
         // the menu by what the user does: the automatic mode first (the main one), then manual work by engine, then
         // the service pages
         Pages = [Auto, Engine, Home, Wizard, Monitor, Expert, Resources, Reports, Advisor, Settings];

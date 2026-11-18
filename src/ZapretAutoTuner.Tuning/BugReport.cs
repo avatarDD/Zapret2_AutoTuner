@@ -199,7 +199,7 @@ public static partial class BugReport
             foreach (var key in new[] { "--hostlist-domains=", "--hostlist-exclude-domains=" })
             {
                 if (a.StartsWith(key, StringComparison.Ordinal))
-                    list.AddRange(a[key.Length..].Split(',', StringSplitOptions.RemoveEmptyEntries).Select(d => d.TrimStart('^')));
+                    list.AddRange(a[key.Length..].Split(',', StringSplitOptions.RemoveEmptyEntries).Select(d => d.TrimStart('^', '!')));
             }
             if (a.StartsWith("--lua-desync=", StringComparison.Ordinal) && Regex.Match(a, "sni=([A-Za-z0-9.-]+)") is { Success: true } m)
                 list.Add(m.Groups[1].Value);

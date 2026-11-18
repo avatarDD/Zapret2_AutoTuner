@@ -86,10 +86,25 @@ public sealed class Profile
     /// <summary>
     /// Builds the profile's argv (no <c>--new</c>). <paramref name="listPath"/> maps a list reference
     /// to the path written into <c>--hostlist=</c>/<c>--ipset=</c>; by default the literal path or name.
+    /// A file named twice in one list type is written once: since zapret2 1.0.7 the engine refuses to start on a
+    /// repeat (<c>failed to register hostlist</c>), earlier versions ignored it. <c>--hostlist</c> and
+    /// <c>--hostlist-auto</c> are the same type there, and the autolist wins.
     /// </summary>
     public List<string> ToArgs(Func<ListRef, bool, string>? listPath = null)
     {
-        listPath ??= (r, _) => r.ToString();
+        var map = listPath ?? ((r, _) => r.ToString());
+        var include = new HashSet<string>(StringComparer.Ordinal);
+        var exclude = new HashSet<string>(StringComparer.Ordinal);
+        var ipset = new HashSet<string>(StringComparer.Ordinal);
+        var ipsetExclude = new HashSet<string>(StringComparer.Ordinal);
+        var autoPath = HostlistAuto is null ? null : map(HostlistAuto, false);
+        if (autoPath is not null)
+            include.Add(autoPath);
+        string? Once(HashSet<string> seen, ListRef r, bool isIpset)
+        {
+            var path = map(r, isIpset);
+            return seen.Add(path) ? path : null;
+        }
         var a = new List<string>();
         if (Name.Length > 0)
             a.Add("--name=" + Name);
@@ -102,19 +117,31 @@ public sealed class Profile
         if (L7.Count > 0)
             a.Add("--filter-l7=" + string.Join(',', L7));
         foreach (var h in Hostlists)
-            a.Add("--hostlist=" + listPath(h, false));
+        {
+            if (Once(include, h, false) is { } path)
+                a.Add("--hostlist=" + path);
+        }
         if (HostlistDomains.Count > 0)
             a.Add("--hostlist-domains=" + string.Join(',', HostlistDomains));
         foreach (var h in HostlistExcludes)
-            a.Add("--hostlist-exclude=" + listPath(h, false));
-        if (HostlistAuto is not null)
-            a.Add("--hostlist-auto=" + listPath(HostlistAuto, false));
+        {
+            if (Once(exclude, h, false) is { } path)
+                a.Add("--hostlist-exclude=" + path);
+        }
+        if (autoPath is not null)
+            a.Add("--hostlist-auto=" + autoPath);
         foreach (var s in Ipsets)
-            a.Add("--ipset=" + listPath(s, true));
+        {
+            if (Once(ipset, s, true) is { } path)
+                a.Add("--ipset=" + path);
+        }
         if (IpsetIps.Count > 0)
             a.Add("--ipset-ip=" + string.Join(',', IpsetIps));
         foreach (var s in IpsetExcludes)
-            a.Add("--ipset-exclude=" + listPath(s, true));
+        {
+            if (Once(ipsetExclude, s, true) is { } path)
+                a.Add("--ipset-exclude=" + path);
+        }
         a.AddRange(ExtraOptions);
         a.AddRange(Strategy.ToArgs());
         return a;

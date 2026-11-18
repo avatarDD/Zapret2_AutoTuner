@@ -16,7 +16,8 @@ namespace ZapretAutoTuner.App.Services;
 /// <summary>The MCP tools' view of this program: probes from the UI process, the engine and capture through the Agent.</summary>
 public sealed class AppMcpHost(AppHost host, MonitorViewModel monitor, WizardViewModel? wizard = null) : IAutoTunerHost
 {
-    public bool LocalTuningRunning => wizard?.LocalTuningRunning ?? false;
+    // «Эксперт» checking a strategy on a site counts as local tuning: one engine on the target at a time
+    public bool LocalTuningRunning => (wizard?.LocalTuningRunning ?? false) || host.ExpertCheckRunning;
 
     public bool RouterTuningRunning => wizard?.RouterTuningRunning ?? false;
 

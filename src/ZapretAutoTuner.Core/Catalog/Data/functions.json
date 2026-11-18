@@ -1,5 +1,5 @@
 {
-  "zapret2_version": "1.0.6",
+  "zapret2_version": "1.0.7",
   "lua_compat": 6,
   "lua_init_order": ["zapret-lib.lua", "zapret-antidpi.lua", "zapret-auto.lua", "zapret-obfs.lua", "zapret-pcap.lua"],
   "builtin_blobs": ["fake_default_tls", "fake_default_http", "fake_default_quic"],
@@ -261,7 +261,8 @@
       "category": "obfs", "two_sided": true, "ru": "XOR протокола и данных (нужна вторая сторона)", "en": "XOR protocol and data (needs the other side)" },
     { "name": "udp2icmp", "file": "zapret-obfs.lua", "blocks": [],
       "args": [ { "name": "ctype", "kind": "int" }, { "name": "ccode", "kind": "int" }, { "name": "stype", "kind": "int" }, { "name": "scode", "kind": "int" },
-                { "name": "dataxor", "kind": "blob" }, { "name": "server", "kind": "enum", "values": ["0", "1"] } ],
+                { "name": "dataxor", "kind": "blob" }, { "name": "server", "kind": "enum", "values": ["0", "1"] },
+                { "name": "cgnat", "kind": "flag" }, { "name": "id_lifetime", "kind": "int", "min": 1 } ],
       "category": "obfs", "two_sided": true, "ru": "UDP в ICMP (нужна вторая сторона)", "en": "UDP in ICMP (needs the other side)" },
     { "name": "synhide", "file": "zapret-obfs.lua", "blocks": [],
       "args": [ { "name": "ghost", "kind": "int", "min": 1, "max": 255 }, { "name": "ghost6", "kind": "int", "min": 1, "max": 255 }, { "name": "synack", "kind": "flag" },

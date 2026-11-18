@@ -128,9 +128,19 @@ geneva не идёт. Если обход перестал работать, с�
    winws2, строка аргументов, JSON zapret-gui) с проверкой и использованием.
    Если стратегия ссылается на файл списка, которого нет рядом (например
    `--hostlist=C:\zapret\lists\list-general.txt`), программа берёт список
-   из «Ресурсов» с тем же именем (`list-general`).
+   из «Ресурсов» с тем же именем (`list-general`). После «Использовать»
+   рядом появляются «Экспортировать» и «Включить на этом компьютере».
+   На вкладке «Стратегия» одну строку `--lua-desync=…` можно проверить на
+   своём сайте: «Проверить на сайте» сначала открывает сайт без обхода
+   (он должен не открываться, иначе проверять не на чем), затем 5 раз
+   полностью загружает его по HTTPS (TCP 443) со стратегией и пишет итог:
+   работает, нестабильно или не работает. «Использовать для сайта»
+   делает стратегию текущей только для этого сайта (и его поддоменов).
 7. **Ресурсы.** Свои хостлисты, ipset'ы, блобы и Lua-скрипты. Имя можно
-   ввести с расширением: «youtube.txt» сохранится как «youtube».
+   ввести с расширением: «youtube.txt» сохранится как «youtube». В хостлисте
+   `^домен` — только сам домен без поддоменов, `!домен` — исключение из
+   этого списка (например, `com` и `!vk.com` — все сайты .com, кроме
+   vk.com; работает с zapret2 1.0.7).
 8. **Подбор для сайта (geneva вручную).** Свой подбор geneva для одного
    сайта в три шага: «Подбор» — генетический поиск стратегии для
    заблокированного сайта (каждую стратегию программа проверяет полной
@@ -347,9 +357,17 @@ geneva_c 1.1 or newer.
    sent anywhere.
 6. **Expert** imports and validates someone else's strategy. A list file the
    strategy names but that is not there (`--hostlist=C:\zapret\lists\list-general.txt`)
-   is taken from Resources under the same name (`list-general`).
+   is taken from Resources under the same name (`list-general`). After Use,
+   Export and Turn on on this computer appear next to it. On the Strategy tab
+   a single `--lua-desync=…` line can be checked on your site: Check on the
+   site first loads the site without a bypass (it must fail, or there is
+   nothing to check), then loads it fully 5 times over HTTPS (TCP 443) with the
+   strategy and says whether it works, is unstable or does not work. Use for
+   the site makes the strategy current for that site (and its subdomains) only.
 7. **Resources** keeps your hostlists, ipsets, blobs and Lua scripts. A name may
-   have an extension: "youtube.txt" is saved as "youtube".
+   have an extension: "youtube.txt" is saved as "youtube". In a hostlist
+   `^domain` means the domain without subdomains and `!domain` excludes it from
+   that list (`com` and `!vk.com` are all .com sites but vk.com; zapret2 1.0.7).
 8. **Search for a site (manual geneva)** is your own geneva search for one
    site in three steps: Search (a genetic search for a blocked site, every
    strategy judged by a full page load, with the generation, percent, best

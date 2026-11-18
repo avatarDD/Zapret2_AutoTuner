@@ -68,11 +68,11 @@ public static class ConfigCheck
         var profiles = solution.Profiles.Select(p =>
         {
             var c = p.Clone();
-            foreach (var list in p.Hostlists)
-            {
-                if (solution.Hostlists.TryGetValue(list.Name, out var domains))
-                    c.HostlistDomains.AddRange(domains);
-            }
+            // the lists we hold go inline as the profile's one static list; their "!" exemptions are local to each
+            // list in the engine, which Merge keeps (zapret2 1.0.7)
+            var held = p.Hostlists.Where(l => solution.Hostlists.ContainsKey(l.Name)).ToList();
+            if (held.Count > 0)
+                c.HostlistDomains = Core.Hosts.HostlistEntry.Merge([p.HostlistDomains, .. held.Select(l => (IReadOnlyList<string>)solution.Hostlists[l.Name])]);
             c.Hostlists = [.. p.Hostlists.Where(l => !solution.Hostlists.ContainsKey(l.Name))];
             return c;
         }).ToList();
@@ -87,6 +87,7 @@ public static class ConfigCheck
             Profiles = profiles,
             QueueNum = options.QueueNum,
             TargetAddresses = addresses,
+            WinDivertPriority = options.WinDivertPriority,
             IpcacheHostname = Unifier.NeedsIpcacheHostname(solution),
         };
         var argv = EngineArgsBuilder.Build(launch);

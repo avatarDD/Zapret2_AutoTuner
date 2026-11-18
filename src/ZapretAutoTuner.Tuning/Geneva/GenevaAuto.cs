@@ -1138,6 +1138,12 @@ public sealed class GenevaAuto : IAsyncDisposable
             {
                 if ((bool?)k["impaired"] == false)
                     continue;
+                if ((string?)k["class"] == "DNS_POISON" && (string?)k["level"] == "host")
+                {
+                    if (book.DnsPoisoned((string?)k["key"] ?? "", now))
+                        log.Add($"Детектор geneva: DNS подменяет ответ для {(string?)k["key"]} — стратегия тут не поможет, включите DoH (DNS через HTTPS) в браузере или системе");
+                    continue;
+                }
                 var hit = book.Detect((string?)k["level"] ?? "", (string?)k["key"] ?? "", (string?)k["class"] ?? "", now);
                 if (hit.Count > 0)
                     log.Add($"Детектор geneva: {(string?)k["key"]} — {(string?)k["class"]}: проверяю {string.Join(", ", hit)}");

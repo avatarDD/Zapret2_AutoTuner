@@ -164,6 +164,7 @@ public enum AutoConfirm
 public sealed class AutoBook
 {
     private readonly Dictionary<string, AutoService> _services = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTime> _dnsPoisoned = new(StringComparer.Ordinal);
     private AutoLists _lists = new();
     private AutoNameList _important = AutoNameList.Empty;
     private AutoNameList _unimportant = AutoNameList.Empty;
@@ -499,6 +500,22 @@ public sealed class AutoBook
         }
         if (why.Length > 0)
             s.Why = why;
+    }
+
+    /// <summary>
+    /// geneva's detector saw a forged DNS answer for a name (<c>DNS_POISON</c>: a stub address, or an injected answer
+    /// that came before the resolver's). No packet strategy helps here (geneva_c docs/EXT.md): the user is told to use
+    /// DoH. True when the name is new or was last reported more than an hour ago.
+    /// </summary>
+    public bool DnsPoisoned(string name, DateTime now)
+    {
+        name = name.TrimEnd('.').ToLowerInvariant();
+        if (name.Length == 0 || _dnsPoisoned.TryGetValue(name, out var at) && now - at < TimeSpan.FromHours(1))
+            return false;
+        if (_dnsPoisoned.Count > 256)
+            _dnsPoisoned.Clear();
+        _dnsPoisoned[name] = now;
+        return true;
     }
 
     /// <summary>

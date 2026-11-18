@@ -42,4 +42,17 @@ public sealed class GenevaDetectorTests
         var status = JsonNode.Parse("""{"ok":true,"auto":"off"}""")!.AsObject();
         Assert.Empty(GenevaAuto.Detected(status, book, new Lock(), T0));
     }
+
+    [Fact]
+    public void A_forged_dns_answer_advises_doh_once_an_hour()
+    {
+        var book = new AutoBook();
+        var status = JsonNode.Parse("""
+            {"impaired":[{"key":"blocked.example","level":"host","impaired":true,"class":"DNS_POISON","flows":2,"fails":2}]}
+            """)!.AsObject();
+        var log = GenevaAuto.Detected(status, book, new Lock(), T0);
+        Assert.Contains("DoH", Assert.Single(log), StringComparison.Ordinal);
+        Assert.Empty(GenevaAuto.Detected(status, book, new Lock(), T0.AddMinutes(30)));
+        Assert.Single(GenevaAuto.Detected(status, book, new Lock(), T0.AddMinutes(61)));
+    }
 }

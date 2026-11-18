@@ -145,6 +145,12 @@ public sealed record ProbeResult
     /// <summary>The certificate is valid for <see cref="Host"/> and chains to a trusted root.</summary>
     public bool CertValid { get; init; }
 
+    /// <summary>
+    /// The certificate names <see cref="Host"/>, whatever its chain: a site whose root this system does not trust (the
+    /// Russian national CA of many .ru sites, a corporate root) still proves its name, which a DPI cannot fake.
+    /// </summary>
+    public bool CertNameOk { get; init; }
+
     public string? CertSubject { get; init; }
 
     public string? CertIssuer { get; init; }
@@ -176,6 +182,19 @@ public sealed record ProbeResult
             _ => false,
         };
     }
+
+    /// <summary>
+    /// <see cref="Passes"/> with a certificate whose only fault is that this system lacks its root, when that root is a
+    /// national one the user's browser may have (<see cref="NationalRoot"/>: Russia's Минцифры CA of many .ru sites).
+    /// The "Авто" mode asks this, so a working .ru site is never searched. Any other untrusted chain (a self-made
+    /// certificate of a MITM, which can name any host) still fails.
+    /// </summary>
+    public bool PassesNameOnly(ProbeLevel level, long minBytes = 64 * 1024) =>
+        Passes(level, minBytes) || (Tls && !CertValid && CertNameOk && NationalRoot(CertIssuer) && (this with { CertValid = true }).Passes(level, minBytes));
+
+    /// <summary>The issuers of Russia's national CA (Минцифры): "Russian Trusted Root CA" and its "Russian Trusted Sub CA".</summary>
+    public static bool NationalRoot(string? issuer) =>
+        issuer is not null && (issuer.Contains("CN=Russian Trusted Sub CA", StringComparison.Ordinal) || issuer.Contains("CN=Russian Trusted Root CA", StringComparison.Ordinal));
 
     public override string ToString()
     {

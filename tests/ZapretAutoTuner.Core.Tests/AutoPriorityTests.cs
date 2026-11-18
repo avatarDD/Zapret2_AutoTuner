@@ -328,6 +328,85 @@ public class AutoPriorityTests
         Assert.Null(AutoFamilies.Of("notyoutube.com"));
     }
 
+    [Fact]
+    public void Masks_take_a_zone_a_pattern_and_an_AS_but_never_touch_takes_only_names_and_networks()
+    {
+        var asn = new Dictionary<string, IReadOnlyList<string>> { ["12389"] = ["95.165.0.0/16", "95.166.0.0/16", "2a02:2698::/32", "10.0.0.0/8"] };
+        var l = new AutoNameList(["*.ru", ".su", "*google*", "AS12389", "ya?.net", "*cdn.org"], asn);
+        Assert.True(l.MatchesName("sberbank.ru"));
+        Assert.True(l.MatchesName("www.gosuslugi.ru"));
+        Assert.True(l.MatchesName("example.su"));
+        Assert.False(l.MatchesName("ru.example.com"));
+        Assert.True(l.MatchesName("www.googleapis.com"));
+        Assert.True(l.MatchesName("yax.net"));
+        Assert.False(l.MatchesName("yaxx.net"));
+        // "*cdn.org" is a pattern, not the domain cdn.org
+        Assert.True(l.MatchesName("fastcdn.org"));
+        Assert.False(l.MatchesName("cdn.org.example.com"));
+        Assert.True(l.MatchesAddress(IPAddress.Parse("95.165.12.1")));
+        Assert.True(l.MatchesAddress(IPAddress.Parse("95.166.255.255")));
+        Assert.True(l.MatchesAddress(IPAddress.Parse("10.1.2.3")));
+        Assert.True(l.MatchesAddress(IPAddress.Parse("::ffff:95.165.0.9")));
+        Assert.True(l.MatchesAddress(IPAddress.Parse("2a02:2698:1::1")));
+        Assert.False(l.MatchesAddress(IPAddress.Parse("95.167.0.1")));
+        Assert.False(l.MatchesAddress(IPAddress.Parse("9.255.255.255")));
+        Assert.Equal([12389], l.Asns);
+        // geneva and the firewall get plain names and the user's own networks only
+        Assert.Empty(l.Domains);
+        Assert.Empty(l.Subnets);
+        // an AS whose networks are not known yet matches nothing
+        Assert.True(new AutoNameList(["AS1"]).IsEmpty);
+
+        foreach (var ok in new[] { "*.ru", ".ru", "*google*", "AS12389", "as3216", "example.com", "10.0.0.0/8" })
+            Assert.Null(AutoNameList.MaskProblem(ok));
+        foreach (var bad in new[] { "*", "*.", "AS", "ASx1", "exa mple.com", "a/b" })
+            Assert.NotNull(AutoNameList.MaskProblem(bad));
+        foreach (var strict in new[] { "*.ru", "AS12389", "*google*", "*cdn.org" })
+            Assert.NotNull(AutoNameList.Problem(strict));
+        Assert.Equal([12389, 3216], AutoNameList.AsnsOf(["AS12389", "as3216", "x.com", "AS12389"]));
+    }
+
+    [Fact]
+    public void Do_not_search_keeps_services_out_of_the_book_and_the_search_but_keeps_an_applied_strategy()
+    {
+        var book = Blocked([.. Fails((_, h, t) => Site("example.ru", h, t), 0)]);
+        book.Feed([Site("bank.ru", AutoHealth.Ok, T0, ip: "203.0.113.9")], T0);
+        book.Feed([Site("works.ru", AutoHealth.Ok, T0, ip: "203.0.113.10")], T0);
+        book.Applied("web:works.ru", AutoCandidates.Tcp[0], 400, T0);
+        Assert.Equal("web:example.ru", book.NextToSearch(T0.AddMinutes(1))?.Key);
+
+        Assert.Empty(book.SetLists(new AutoLists { NoSearch = ["*.ru"] }, out var skipped));
+        Assert.Equal(["bank.ru", "example.ru"], skipped.Order(StringComparer.Ordinal));
+        Assert.Null(book.Find("web:example.ru"));
+        // a working bypass stays
+        Assert.Equal(AutoStatus.Applied, book.Find("web:works.ru")!.Status);
+        // new traffic of such a site does not come back as a problem
+        book.Feed([.. Fails((_, h, t) => Site("example.ru", h, t), 0)], T0.AddSeconds(5));
+        Assert.Null(book.Find("web:example.ru"));
+        Assert.Null(book.NextToSearch(T0.AddMinutes(2)));
+        // the applied one failing with its bypass leaves too: no new search for it
+        book.Find("web:works.ru")!.Status = AutoStatus.Degraded;
+        Assert.Contains("не подбирать", book.Confirmed("web:works.ru", AutoConfirm.Blocked, T0.AddMinutes(3)), StringComparison.Ordinal);
+        Assert.Null(book.Find("web:works.ru"));
+        Assert.Null(book.NextToSearch(T0.AddMinutes(3)));
+    }
+
+    [Fact]
+    public void A_search_stopped_for_do_not_search_leaves_and_a_confirmed_block_remembers_when()
+    {
+        var book = Blocked([.. Fails((_, h, t) => Site("example.ru", h, t), 0)]);
+        var s = book.Find("web:example.ru")!;
+        book.Confirmed(s.Key, AutoConfirm.Blocked, T0.AddMinutes(1));
+        Assert.Equal(T0.AddMinutes(1), s.BaselineAt);
+        book.Searching(s.Key, T0.AddMinutes(2));
+        // a service in its search stays until the search stops
+        book.SetLists(new AutoLists { NoSearch = ["example.ru"] }, out var skipped);
+        Assert.Empty(skipped);
+        Assert.NotNull(book.Find(s.Key));
+        book.Interrupted(s.Key, T0.AddMinutes(3));
+        Assert.Null(book.Find(s.Key));
+    }
+
     // ---- the whole of geneva_c 2.0
 
     /// <summary>zapret2's fakes as the bundled zapret2 v1.0.6 names them (files/fake).</summary>

@@ -272,20 +272,25 @@ internal sealed class GenevaManager : IDisposable
     /// A geneva with extensions gets every fake of zapret2 as a blob (<c>--ext-blob z2_NAME:@FILE</c>,
     /// <see cref="GenevaBlobs"/>): a strategy, a search resumed from its checkpoint or one the user wrote may name any.
     /// </summary>
-    internal List<string> WithBlobs(List<string> argv)
+    /// <para><paramref name="only"/>: a process whose strategy never changes (an "Авто" group, the detector) gets only
+    /// the fakes it names, so its command line stays short and readable; null: every fake (a bypass that may take
+    /// another strategy over its control socket, a search that makes strategies itself).</para>
+    internal List<string> WithBlobs(List<string> argv, IReadOnlyCollection<string>? only = null)
     {
         int i = argv.IndexOf("--ext");
         if (i < 0 || FakeDir?.Invoke() is not { } dir)
             return argv;
+        var blobs = GenevaBlobs.Files(dir).Where(f => only is null || only.Contains(f.Name))
+            .SelectMany(f => new[] { "--ext-blob", $"{f.Name}:@{f.Path}" }).ToList();
         var a = new List<string>(argv);
-        a.InsertRange(i + 1, GenevaBlobs.Argv(dir));
+        a.InsertRange(i + 1, blobs);
         return a;
     }
 
     private GenevaInstance Launch(string mode, string geneva, List<string> argv, Dictionary<string, string> env, bool supervise,
-        int controlPort = 0, string token = "", string ports = "", int queue = 0)
+        int controlPort = 0, string token = "", string ports = "", int queue = 0, IReadOnlyCollection<string>? blobs = null)
     {
-        argv = WithBlobs(argv);
+        argv = WithBlobs(argv, blobs);
         var id = "g" + Interlocked.Increment(ref _seq).ToString(CultureInfo.InvariantCulture);
         var inst = GenevaInstance.Start(id, mode, geneva, argv, env, supervise, _job, controlPort, token, ports, queue);
         _running[id] = inst;
@@ -765,7 +770,8 @@ internal sealed class GenevaManager : IDisposable
         {
             argv.AddRange(["-q", q, "--firewall", "none"]);
         }
-        return Launch("auto", geneva, argv, new Dictionary<string, string> { ["GENEVA_CONTROL_TOKEN"] = token }, supervise: true, port, token, "1-65535", queue);
+        return Launch("auto", geneva, argv, new Dictionary<string, string> { ["GENEVA_CONTROL_TOKEN"] = token }, supervise: true, port, token, "1-65535", queue,
+            blobs: GenevaBlobs.Refs(strategy));
     }
 
     /// <summary>What applying by name needs from geneva_c (2.0): profiles, host lists, the name from the ClientHello.</summary>
@@ -924,7 +930,8 @@ internal sealed class GenevaManager : IDisposable
             int port = FreeLoopbackPort();
             var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
             _observer = Launch("auto", geneva, ObserverArgv(port, OperatingSystem.IsWindows()),
-                new Dictionary<string, string> { ["GENEVA_CONTROL_TOKEN"] = token }, supervise: true, port, token, AutoRules.ObservePort, AutoRules.ObserveQueue);
+                new Dictionary<string, string> { ["GENEVA_CONTROL_TOKEN"] = token }, supervise: true, port, token, AutoRules.ObservePort, AutoRules.ObserveQueue,
+                blobs: []);
         }
         return new GenevaAutoGroupState { Strategy = "", Id = _observer.Id, Queue = _observer.Queue, Pid = _observer.Pid };
     }

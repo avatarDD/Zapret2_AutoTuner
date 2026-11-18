@@ -17,6 +17,9 @@ public sealed class GenevaAutoTests
     {
         public List<(string Key, string? Applied)> Checks { get; } = [];
 
+        /// <summary>Called on each check with the strategy applied to the service (null: none); a value replaces the answer.</summary>
+        public Func<AutoService, string?, AutoConfirm?>? Answer { get; set; }
+
         public Task<AutoConfirm> CheckAsync(AutoService s, CancellationToken ct)
         {
             GenevaAutoApplyRequest? last;
@@ -25,6 +28,8 @@ public sealed class GenevaAutoTests
             var on = last?.Groups.FirstOrDefault(g => g.Targets.Any(t => t.Addresses.Contains(s.Address?.ToString() ?? "-")))?.Strategy;
             lock (Checks)
                 Checks.Add((s.Key, on));
+            if (Answer?.Invoke(s, on) is { } given)
+                return Task.FromResult(given);
             return Task.FromResult(on == works ? AutoConfirm.NotBlocked : AutoConfirm.Blocked);
         }
 
@@ -272,5 +277,91 @@ public sealed class GenevaAutoTests
         await Assert.ThrowsAsync<GenevaRefusedException>(() => auto.EnableAsync(default));
         Assert.False(auto.Running);
         Assert.False(await auto.RestoreAsync(default));
+    }
+
+    [Fact]
+    public async Task A_strategy_being_tried_is_not_listed_as_a_working_one()
+    {
+        var (controller, auto, _, probes, _) = Make(works: "nothing works");
+        await using var _c = controller;
+        await using var _a = auto;
+        var seen = new List<AutoGroupView>();
+        probes.Answer = (s, on) =>
+        {
+            if (on is not null)
+            {
+                lock (seen)
+                    seen.AddRange(auto.View.Groups);
+            }
+            return null;
+        };
+        await auto.EnableAsync(default);
+        await Until(() => { lock (seen) return seen.Count > 0; });
+        lock (seen)
+        {
+            // the group runs (the trial needs it), but it serves nobody yet: the page leaves it out
+            Assert.All(seen, g => Assert.True(g.Trial));
+            Assert.All(seen, g => Assert.Empty(g.Services));
+        }
+    }
+
+    [Fact]
+    public async Task A_search_long_after_the_block_was_seen_looks_again_and_a_site_that_opens_is_not_searched()
+    {
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var saved = new GenevaState
+        {
+            Auto = new GenevaAutoState
+            {
+                Services =
+                [
+                    new AutoService
+                    {
+                        Key = "dns:8.8.8.8", Kind = AutoKind.Dns, Transport = Core.Model.L4Kind.Udp, Name = "DNS 8.8.8.8", App = "dns",
+                        Addresses = [new AutoAddress("8.8.8.8", t0)], Ports = [53], Replay = Convert.ToBase64String([1, 2, 3]),
+                        Status = AutoStatus.Blocked, BaselineAt = t0.AddHours(-3),
+                    },
+                ],
+            },
+        };
+        var (controller, auto, agent, probes, _) = Make(saved: saved);
+        await using var _c = controller;
+        await using var _a = auto;
+        // the resolver answers by now without a bypass
+        probes.Answer = (_, on) => on is null ? AutoConfirm.NotBlocked : null;
+        await auto.EnableAsync(default);
+        await Until(() => auto.View.Services.Single(x => x.Key == "dns:8.8.8.8").Status == AutoStatus.NotBlocked);
+        lock (probes.Checks)
+            Assert.DoesNotContain(probes.Checks, c => c.Applied is not null);
+        lock (agent.Started)
+            Assert.DoesNotContain(agent.Started, r => r.Mode == "evolve");
+    }
+
+    [Fact]
+    public async Task A_service_on_the_do_not_search_list_leaves_and_is_never_searched()
+    {
+        var (controller, auto, agent, probes, _) = Make(works: "nothing works");
+        await using var _c = controller;
+        await using var _a = auto;
+        controller.Lists = new AutoLists { NoSearch = ["8.8.8.0/24"] };
+        await auto.EnableAsync(default);
+        await Task.Delay(600);
+        Assert.DoesNotContain(auto.View.Services, x => x.Key == "dns:8.8.8.8");
+        lock (probes.Checks)
+            Assert.Empty(probes.Checks);
+        lock (agent.Started)
+            Assert.DoesNotContain(agent.Started, r => r.Mode == "evolve");
+    }
+
+    [Fact]
+    public async Task Taking_the_searched_service_out_of_the_search_stops_its_search()
+    {
+        var (controller, auto, _, probes, _) = Make(works: "nothing works");
+        await using var _c = controller;
+        await using var _a = auto;
+        await auto.EnableAsync(default);
+        await Until(() => { lock (probes.Checks) return probes.Checks.Any(c => c.Applied is not null); });
+        controller.Lists = new AutoLists { NoSearch = ["AS15169"], AsnPrefixes = new Dictionary<string, IReadOnlyList<string>> { ["15169"] = ["8.8.8.0/24"] } };
+        await Until(() => auto.View.Services.All(x => x.Key != "dns:8.8.8.8") && auto.View.Current is null);
     }
 }

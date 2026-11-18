@@ -2156,36 +2156,20 @@
   "Click the tray icon to open the window; 'Exit' in its menu closes the program and removes the bypass."
  ],
  "tray.open": [
-  "Открыть",
-  "Open"
- ],
- "tray.auto_on": [
-  "Включить авто-обход",
-  "Turn the Auto bypass on"
- ],
- "tray.auto_off": [
-  "Выключить авто-обход",
-  "Turn the Auto bypass off"
+  "Открыть окно",
+  "Open the window"
  ],
  "tray.bypass_on": [
   "Включить обход",
   "Turn the bypass on"
  ],
  "tray.bypass_off": [
-  "Выключить обход (всё)",
-  "Turn the bypass off (all)"
- ],
- "tray.protection_on": [
-  "Включить защиту zapret2",
-  "Turn zapret2 protection on"
- ],
- "tray.protection_off": [
-  "Выключить защиту zapret2",
-  "Turn zapret2 protection off"
+  "Выключить обход",
+  "Turn the bypass off"
  ],
  "tray.exit": [
-  "Выход",
-  "Exit"
+  "Закрыть",
+  "Close"
  ],
  "help.wizard": [
   "Подбор стратегии zapret2 (nfqws2/winws2) по шагам: сайты → диагностика → подбор → проверка → где включить. Стратегию zapret2 можно поставить на роутер Keenetic, в zapret-gui или в свой zapret2.\nПример: впишите youtube.com и discord.com, нажмите «Найти» и дождитесь шага 5.",
@@ -2240,8 +2224,8 @@
   "Important services and exclusions"
  ],
  "auto.lists_about": [
-  "По одному в строке: домен (с поддоменами), адрес или подсеть. Важные подбираются первыми и прерывают подбор для фоновых; неважные идут в последнюю очередь. «Не трогать» — то, к чему geneva не применяется никогда (сервер VPN или прокси), и в «Авто», и в обходе одной стратегией.",
-  "One per line: a domain (with subdomains), an address or a subnet. Important ones are searched first and interrupt a search for background ones; unimportant ones go last. \"Never touch\" is what geneva is never applied to (a VPN or proxy server), in Auto and in the single-strategy bypass."
+  "По одному в строке. «Важно» подбирается первым и прерывает подбор для фоновых, «Не важно» идёт последним. «Не подбирать» — для чего обход не ищется вообще: такие сервисы не попадают в список проблем, а уже применённая стратегия остаётся. В этих трёх списках можно писать домен (с поддоменами), зону (*.ru), маску (*google*), адрес, подсеть или сеть провайдера по номеру AS (AS12389: её адреса берутся из RIPEstat при сохранении, отправляется только номер). «Не трогать» — к чему geneva не применяется никогда (сервер VPN или прокси), и в «Авто», и в обходе одной стратегией; там только домены, адреса и подсети.",
+  "One per line. \"Important\" is searched first and interrupts a search for background ones, \"Not important\" goes last. \"Do not search\" is what no bypass is looked for at all: such services stay off the problems, and a strategy already applied stays. These three lists take a domain (with subdomains), a zone (*.ru), a pattern (*google*), an address, a subnet or a provider's network by its AS number (AS12389: its addresses come from RIPEstat on saving, only the number is sent). \"Never touch\" is what geneva is never applied to (a VPN or proxy server), in Auto and in the single-strategy bypass; it takes domains, addresses and subnets only."
  ],
  "auto.lists_save": [
   "Сохранить",
@@ -2318,5 +2302,29 @@
  "auto.unpin": [
   "Снять закрепление",
   "Unpin the strategy"
+ ],
+ "auto.list_nosearch": [
+  "Не подбирать (*.ru, AS)",
+  "Do not search (*.ru, AS)"
+ ],
+ "auto.asn_loading": [
+  "Загружаю сети AS из RIPEstat…",
+  "Loading the AS networks from RIPEstat…"
+ ],
+ "auto.filter": [
+  "Найти сервис: имя, адрес или протокол",
+  "Find a service: name, address or protocol"
+ ],
+ "auto.filter_count": [
+  "{0} из {1}",
+  "{0} of {1}"
+ ],
+ "auto.no_search": [
+  "Не подбирать для этого сервиса",
+  "Do not search for this service"
+ ],
+ "auto.no_search_done": [
+  "{0}: добавлен в «Не подбирать»",
+  "{0}: added to \"Do not search\""
  ]
 }

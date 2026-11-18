@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
 using ZapretAutoTuner.Core.Model;
+using ZapretAutoTuner.Core.Providers;
 
 namespace ZapretAutoTuner.Core.Geneva.Auto;
 
@@ -62,14 +64,24 @@ public static class AutoFamilies
 
 /// <summary>
 /// A list the user keeps: domains (with their subdomains), addresses and subnets. Used for the important and the
-/// unimportant services and for the traffic no bypass may touch (a VPN, a proxy).
+/// unimportant services, the services the mode does not search for, and the traffic no bypass may touch (a VPN, a
+/// proxy). The lists the mode only reads in the App (not "не трогать", which the Agent's firewall and geneva's name
+/// lists take as they are) also take masks: a whole zone (<c>*.ru</c>, <c>.ru</c>), a pattern with <c>*</c> and
+/// <c>?</c> (<c>*google*</c>), and a provider's network by its AS number (<c>AS12389</c>), whose announced prefixes
+/// come from <paramref name="asn"/>.
 /// </summary>
 public sealed class AutoNameList
 {
     private readonly HashSet<string> _domains = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<(IPAddress Net, int Bits)> _nets = [];
+    private readonly List<Regex> _patterns = [];
+    private readonly List<Cidr> _asnNets = [];
+    private Cidr[] _asnV4 = [];
+    private Cidr[] _asnV6 = [];
+    private readonly List<int> _asns = [];
 
-    public AutoNameList(IEnumerable<string>? entries)
+    /// <param name="asn">Announced prefixes by AS number ("12389"); an AS without them matches nothing yet.</param>
+    public AutoNameList(IEnumerable<string>? entries, IReadOnlyDictionary<string, IReadOnlyList<string>>? asn = null)
     {
         foreach (var raw in entries ?? [])
         {
@@ -80,19 +92,54 @@ public sealed class AutoNameList
                 _nets.Add((net, bits));
             else if (IsDomain(e))
                 _domains.Add(e.TrimStart('*', '.'));
+            else if (Zone(e) is { } zone)
+                _domains.Add(zone);
+            else if (Asn(e) is { } number)
+            {
+                _asns.Add(number);
+                if (asn is not null && asn.TryGetValue(number.ToString(CultureInfo.InvariantCulture), out var prefixes))
+                {
+                    foreach (var p in prefixes)
+                    {
+                        if (Cidr.TryParse(p, out var c))
+                            _asnNets.Add(c);
+                    }
+                }
+            }
+            else if (IsPattern(e))
+                _patterns.Add(new Regex("^" + Regex.Escape(e).Replace("\\*", ".*", StringComparison.Ordinal).Replace("\\?", ".", StringComparison.Ordinal) + "$",
+                    RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50)));
+        }
+        if (_asnNets.Count > 0)
+        {
+            // a carrier announces thousands of prefixes: merged and sorted, an address is found by a binary search
+            var merged = CidrSet.Aggregate(_asnNets);
+            _asnV4 = [.. merged.Where(c => c.Family == AddressFamily.InterNetwork)];
+            _asnV6 = [.. merged.Where(c => c.Family == AddressFamily.InterNetworkV6)];
         }
     }
 
     public static AutoNameList Empty { get; } = new([]);
 
-    public bool IsEmpty => _domains.Count == 0 && _nets.Count == 0;
+    public bool IsEmpty => _domains.Count == 0 && _nets.Count == 0 && _patterns.Count == 0 && _asnNets.Count == 0;
 
-    public IReadOnlyCollection<string> Domains => _domains;
+    /// <summary>The plain domains (a zone such as <c>ru</c> and the patterns are left out: geneva's name lists take names).</summary>
+    public IReadOnlyCollection<string> Domains => [.. _domains.Where(d => d.Contains('.', StringComparison.Ordinal))];
 
-    /// <summary>The subnets in CIDR form (an address is /32 or /128).</summary>
+    /// <summary>The subnets in CIDR form (an address is /32 or /128); the AS networks are left out.</summary>
     public IEnumerable<string> Subnets => _nets.Select(n => $"{n.Net}/{n.Bits.ToString(CultureInfo.InvariantCulture)}");
 
-    /// <summary>Why an entry is not a domain, an address or a subnet; null when it is one.</summary>
+    /// <summary>The AS numbers the list names.</summary>
+    public IReadOnlyList<int> Asns => _asns;
+
+    /// <summary>The AS numbers named in <paramref name="entries"/> ("AS12389" or "as12389").</summary>
+    public static List<int> AsnsOf(IEnumerable<string> entries) =>
+        [.. entries.Select(e => Asn(e.Trim().ToLowerInvariant())).Where(a => a is not null).Select(a => a!.Value).Distinct()];
+
+    /// <summary>
+    /// Why an entry is not a domain, an address or a subnet; null when it is one. The strict form: the "не трогать" list,
+    /// which the Agent and geneva take as it is.
+    /// </summary>
     public static string? Problem(string entry)
     {
         var e = entry.Trim().TrimEnd('.').ToLowerInvariant();
@@ -101,11 +148,32 @@ public sealed class AutoNameList
         return TryNet(e, out _, out _) || IsDomain(e) ? null : $"не домен и не адрес / neither a domain nor an address: {entry.Trim()}";
     }
 
+    /// <summary>Like <see cref="Problem"/>, with the masks too: a zone (<c>*.ru</c>), a pattern (<c>*google*</c>), an AS (<c>AS12389</c>).</summary>
+    public static string? MaskProblem(string entry)
+    {
+        var e = entry.Trim().TrimEnd('.').ToLowerInvariant();
+        if (e.Length == 0 || e.StartsWith('#'))
+            return null;
+        return TryNet(e, out _, out _) || IsDomain(e) || Zone(e) is not null || Asn(e) is not null || IsPattern(e) ? null
+            : $"не домен, не маска, не адрес и не AS / neither a domain, a mask, an address nor an AS: {entry.Trim()}";
+    }
+
     public bool MatchesName(string? name)
     {
-        if (string.IsNullOrEmpty(name) || _domains.Count == 0)
+        if (string.IsNullOrEmpty(name) || _domains.Count == 0 && _patterns.Count == 0)
             return false;
         var n = name.Trim().TrimEnd('.').ToLowerInvariant();
+        foreach (var p in _patterns)
+        {
+            try
+            {
+                if (p.IsMatch(n))
+                    return true;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+            }
+        }
         while (n.Length > 0)
         {
             if (_domains.Contains(n))
@@ -129,7 +197,25 @@ public sealed class AutoNameList
             if (InNet(a, net, bits))
                 return true;
         }
-        return false;
+        var sorted = a.AddressFamily == AddressFamily.InterNetwork ? _asnV4 : _asnV6;
+        if (sorted.Length == 0)
+            return false;
+        var n = Cidr.ToNumber(a);
+        int lo = 0, hi = sorted.Length - 1, found = -1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >>> 1;
+            if (sorted[mid].Start <= n)
+            {
+                found = mid;
+                lo = mid + 1;
+            }
+            else
+            {
+                hi = mid - 1;
+            }
+        }
+        return found >= 0 && n <= sorted[found].Last;
     }
 
     /// <summary>A service the list names: by its site, its host or any of its addresses.</summary>
@@ -147,8 +233,29 @@ public sealed class AutoNameList
     /// <summary>A flow the list names: by its name or its server's address.</summary>
     public bool Matches(AutoSample x) => !IsEmpty && (MatchesName(x.Host) || MatchesAddress(x.Server.Address));
 
+    /// <summary>A whole zone: <c>*.ru</c> or <c>.ru</c> (one label, which <see cref="IsDomain"/> does not take).</summary>
+    private static string? Zone(string e)
+    {
+        if (!(e.StartsWith("*.", StringComparison.Ordinal) || e.StartsWith('.')))
+            return null;
+        var z = e.TrimStart('*', '.');
+        return z.Length is > 0 and <= 63 && z.All(c => char.IsAsciiLetterOrDigit(c) || c == '-') ? z : null;
+    }
+
+    private static int? Asn(string e) =>
+        e.Length is > 2 and <= 12 && e.StartsWith("as", StringComparison.Ordinal)
+        && int.TryParse(e.AsSpan(2), NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n > 0 ? n : null;
+
+    /// <summary>A name pattern: letters, digits, '-', '.', '_' with at least one '*' or '?' and something besides them.</summary>
+    private static bool IsPattern(string e) => e.Length <= 253
+        && e.Any(c => c is '*' or '?') && e.Any(char.IsAsciiLetterOrDigit)
+        && e.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_' or '*' or '?');
+
     private static bool IsDomain(string e)
     {
+        // a leading '*' only as "*.": "*cdn.net" is a pattern (fastcdn.net), not the domain cdn.net
+        if (e.StartsWith('*') && !e.StartsWith("*.", StringComparison.Ordinal))
+            return false;
         var d = e.TrimStart('*', '.');
         if (d.Length is 0 or > 253 || !d.Contains('.', StringComparison.Ordinal))
             return false;
@@ -207,6 +314,18 @@ public sealed record AutoLists
 
     /// <summary>Never touched by any geneva bypass: a VPN or proxy server, a game, a bank.</summary>
     public IReadOnlyList<string> Excluded { get; init; } = [];
+
+    /// <summary>
+    /// Not searched for: a service these name is neither confirmed nor searched and leaves the list of problems (the
+    /// user does not need a bypass for <c>*.ru</c>). A strategy already applied stays. Masks and AS numbers work here.
+    /// </summary>
+    public IReadOnlyList<string> NoSearch { get; init; } = [];
+
+    /// <summary>The announced prefixes of the AS numbers in the lists, by number ("12389"), as RIPEstat gave them.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> AsnPrefixes { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
+
+    /// <summary>When <see cref="AsnPrefixes"/> were fetched (UTC), by number; they are fetched again after a week.</summary>
+    public IReadOnlyDictionary<string, DateTime> AsnFetched { get; init; } = new Dictionary<string, DateTime>();
 
     /// <summary>The well-known services (<see cref="AutoFamilies"/>) count as important.</summary>
     public bool KnownImportant { get; init; } = true;

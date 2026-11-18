@@ -227,7 +227,7 @@ public sealed record GenevaState
             Searches = [.. searches.Take(50)],
             Auto = Auto with { Enabled = Auto.Enabled || old.Auto.Enabled, Services = services },
             Active = Active ?? old.Active,
-            Lists = Lists.Important.Count + Lists.Unimportant.Count + Lists.Excluded.Count > 0 ? Lists : old.Lists,
+            Lists = Lists.Important.Count + Lists.Unimportant.Count + Lists.Excluded.Count + Lists.NoSearch.Count > 0 ? Lists : old.Lists,
         };
     }
 

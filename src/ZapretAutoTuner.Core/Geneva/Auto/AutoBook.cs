@@ -76,6 +76,12 @@ public sealed class AutoService
     /// <summary>When a paused service is looked at again (not blocked, address block, nothing found).</summary>
     public DateTime? NextCheck { get; set; }
 
+    /// <summary>
+    /// When the probe without a bypass last said "blocked". A search that starts long after it looks again first: a
+    /// site that opens by now is not searched (a known strategy would pass on it and be applied for nothing).
+    /// </summary>
+    public DateTime? BaselineAt { get; set; }
+
     /// <summary>Searches that found nothing in a row: the pause before the next one doubles.</summary>
     public int Attempts { get; set; }
 
@@ -175,6 +181,7 @@ public sealed class AutoBook
     private AutoNameList _important = AutoNameList.Empty;
     private AutoNameList _unimportant = AutoNameList.Empty;
     private AutoNameList _excluded = AutoNameList.Empty;
+    private AutoNameList _noSearch = AutoNameList.Empty;
 
     public AutoBook(IEnumerable<AutoService>? saved = null)
     {
@@ -210,13 +217,21 @@ public sealed class AutoBook
     /// Takes the user's lists: priorities are computed again, and services the exclusions now name leave the book (their
     /// strategies are no longer applied). Returns the names that left.
     /// </summary>
-    public List<string> SetLists(AutoLists lists)
+    public List<string> SetLists(AutoLists lists) => SetLists(lists, out _);
+
+    /// <summary>
+    /// <see cref="SetLists(AutoLists)"/>; <paramref name="skipped"/> gets the services that left because they are not to
+    /// be searched for (a service with a strategy applied stays: it already works).
+    /// </summary>
+    public List<string> SetLists(AutoLists lists, out List<string> skipped)
     {
         _lists = lists;
-        _important = new AutoNameList(lists.Important);
-        _unimportant = new AutoNameList(lists.Unimportant);
+        _important = new AutoNameList(lists.Important, lists.AsnPrefixes);
+        _unimportant = new AutoNameList(lists.Unimportant, lists.AsnPrefixes);
         _excluded = new AutoNameList(lists.Excluded);
+        _noSearch = new AutoNameList(lists.NoSearch, lists.AsnPrefixes);
         var gone = new List<string>();
+        skipped = [];
         foreach (var s in _services.Values.ToList())
         {
             if (_excluded.Matches(s))
@@ -225,10 +240,19 @@ public sealed class AutoBook
                 gone.Add(s.Name);
                 continue;
             }
+            if (!s.IsActive && s.Status != AutoStatus.Searching && _noSearch.Matches(s))
+            {
+                _services.Remove(s.Key);
+                skipped.Add(s.Name);
+                continue;
+            }
             s.Priority = AutoPriorities.Base(s, _important, _unimportant, _lists.KnownImportant);
         }
         return gone;
     }
+
+    /// <summary>The user does not want a bypass searched for this service (<see cref="AutoLists.NoSearch"/>).</summary>
+    public bool NotSearched(AutoService s) => _noSearch.Matches(s);
 
     public AutoService? Find(string key) => _services.GetValueOrDefault(key);
 
@@ -257,6 +281,9 @@ public sealed class AutoBook
                 continue;
             if (!_services.TryGetValue(x.Key, out var s))
             {
+                // not to be searched for: it does not even become a problem on the page
+                if (_noSearch.Matches(x))
+                    continue;
                 var fresh = new AutoService { Key = x.Key, Kind = x.Kind, Transport = x.Transport, Name = x.Name, App = x.App, Host = x.Host ?? "" };
                 fresh.Ports.Add(x.Server.Port);
                 var priority = AutoPriorities.Base(fresh, _important, _unimportant, _lists.KnownImportant);
@@ -565,7 +592,8 @@ public sealed class AutoBook
     /// broken bypass before a new suspicion, then the one used most recently and most.
     /// </summary>
     public AutoService? NextToConfirm(DateTime now) => Queue(_services.Values
-        .Where(s => s.Status is AutoStatus.Suspected or AutoStatus.Degraded && (s.NextCheck is null || now >= s.NextCheck)), now)
+        .Where(s => s.Status is AutoStatus.Suspected or AutoStatus.Degraded && (s.NextCheck is null || now >= s.NextCheck)
+            && (s.Status == AutoStatus.Degraded || !_noSearch.Matches(s))), now)
         .FirstOrDefault();
 
     /// <summary>
@@ -574,7 +602,7 @@ public sealed class AutoBook
     /// fail by the hundred.
     /// </summary>
     public AutoService? NextToSearch(DateTime now) => Queue(_services.Values
-        .Where(s => s.Status == AutoStatus.Blocked && (s.NextCheck is null || now >= s.NextCheck)), now)
+        .Where(s => s.Status == AutoStatus.Blocked && (s.NextCheck is null || now >= s.NextCheck) && !_noSearch.Matches(s)), now)
         .FirstOrDefault();
 
     private static IEnumerable<AutoService> Queue(IEnumerable<AutoService> list, DateTime now) => list
@@ -696,8 +724,14 @@ public sealed class AutoBook
                 s.Detected.Clear();
                 Move(s, AutoStatus.Applied, now, "закреплена; проверка с обходом не прошла");
                 return $"{s.Name}: проверка с обходом не прошла, но стратегия закреплена — оставляю";
+            case AutoConfirm.Blocked or AutoConfirm.Unknown when degraded && _noSearch.Matches(s):
+                // its bypass stopped working and the user does not want a new one searched: it leaves, as SetLists does
+                _services.Remove(s.Key);
+                return $"{s.Name}: обход перестал работать; в списке «не подбирать» — новый не ищу";
             default:
                 s.NextCheck = null;
+                if (!degraded && result == AutoConfirm.Blocked)
+                    s.BaselineAt = now;
                 Move(s, AutoStatus.Blocked, now, degraded ? "обход перестал работать: ищу новую стратегию" : "заблокирован");
                 return degraded ? $"{s.Name}: стратегия больше не работает, ищу новую" : $"{s.Name}: блокировка подтверждена, ищу обход";
         }
@@ -754,7 +788,14 @@ public sealed class AutoBook
     /// <summary>A search was interrupted (the mode was turned off, the program closed): it is blocked and waits again.</summary>
     public void Interrupted(string key, DateTime now)
     {
-        if (Find(key) is { Status: AutoStatus.Searching } s)
-            Move(s, AutoStatus.Blocked, now, "подбор прерван, продолжу");
+        if (Find(key) is not { Status: AutoStatus.Searching } s)
+            return;
+        // stopped because the user took it out of the search: it leaves the problems, as SetLists does
+        if (!s.IsActive && _noSearch.Matches(s))
+        {
+            _services.Remove(key);
+            return;
+        }
+        Move(s, AutoStatus.Blocked, now, "подбор прерван, продолжу");
     }
 }

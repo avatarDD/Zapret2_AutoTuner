@@ -89,6 +89,34 @@ public sealed class GenevaControllerTests
     }
 
     [Fact]
+    public async Task A_baseline_cut_only_when_padded_makes_every_strategy_padded()
+    {
+        var agent = new FakeGenevaAgent();
+        var store = new MemoryGenevaStore();
+        var asked = new List<ProbeCriteria>();
+        int calls = 0;
+        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), store, (host, port, tls, local, c, ct) =>
+        {
+            int n = Interlocked.Increment(ref calls) - 1;
+            lock (asked)
+                asked.Add(c);
+            // a small page opens; padded, the flow dies at the 16 KB cut-off — until a strategy (after the baseline) works
+            if (c.PadBytes > 0 && n < 2)
+                return Task.FromResult(new ProbeResult { Host = host, Address = "192.0.2.1", ConnectOk = true, TlsOk = true, Error = ProbeError.Stalled, StalledAt = 4_000, BytesIn = 4_000, BytesOut = 26_000 });
+            return Task.FromResult(Loaded(host) with { BodyBytes = 3_000 });
+        });
+        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3 }, default);
+        await Until(() => !g.SearchRunning);
+
+        // the baseline (plain, then padded) is blocked; the strategies are judged padded
+        Assert.Equal(-480, agent.Answers[0].Fitness);
+        Assert.Equal(0, asked[0].PadBytes);
+        Assert.All(asked.Skip(1), c => Assert.Equal(ProbeCriteria.VolumePad, c.PadBytes));
+        Assert.All(asked.Skip(1), c => Assert.Equal(128 * 1024, c.MinBytes));
+        Assert.Contains(g.Log, l => l.Contains("обрыв на 16 КБ", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Several_workers_are_probed_side_by_side_each_from_its_own_ports()
     {
         var agent = new FakeGenevaAgent();

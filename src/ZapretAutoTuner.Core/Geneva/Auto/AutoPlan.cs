@@ -555,6 +555,9 @@ public static class AutoCandidates
     {
         var classics = s.Kind == AutoKind.Dns ? [.. Dns, .. Udp] : s.Transport == L4Kind.Udp ? Udp : Tcp;
         IReadOnlyList<string> xs = XFor(s, ext, wide, blobs, round);
+        // a shared (or found) x-strategy may name a fake of zapret2 the Agent does not load: geneva would send nothing
+        var loaded = (blobs ?? []).ToHashSet(StringComparer.Ordinal);
+        bool Usable(string c) => GenevaStrategyText.Problem(c) is null && (ext || !GenevaStrategyText.NeedsExt(c)) && GenevaBlobs.Available(c, loaded);
         var sharedList = (shared ?? []).ToList();
         var named = sharedList.Where(x => GenevaShare.Names(x, s.Name, s.Host)).Select(x => x.Strategy);
         var others = sharedList.Select(x => x.Strategy).Where(x => Fits(s, x));
@@ -564,12 +567,12 @@ public static class AutoCandidates
             .Concat(running.Where(c => Fits(s, c)))
             .Concat(found.Where(c => Fits(s, c)))
             .Concat(s.Kind == AutoKind.Dns ? classics.Concat(others) : others.Concat(classics))
-            .Where(c => GenevaStrategyText.Problem(c) is null && (ext || !GenevaStrategyText.NeedsExt(c)))
+            .Where(Usable)
             .Distinct(StringComparer.Ordinal)
             .Take(max)
             .ToList();
         var rest = xs.Concat((extra ?? []).Where(c => Fits(s, c)))
-            .Where(c => GenevaStrategyText.Problem(c) is null && (ext || !GenevaStrategyText.NeedsExt(c)) && !head.Contains(c, StringComparer.Ordinal))
+            .Where(c => Usable(c) && !head.Contains(c, StringComparer.Ordinal))
             .Distinct(StringComparer.Ordinal)
             .Take(max + xs.Count - Math.Min(head.Count, max));
         return [.. head, .. rest];

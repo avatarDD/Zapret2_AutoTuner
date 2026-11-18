@@ -403,6 +403,10 @@ public class AutoPriorityTests
             File.WriteAllBytes(Path.Combine(dir, "stun.bin"), [1, 2]);
             File.WriteAllBytes(Path.Combine(dir, "empty.bin"), []);
             File.WriteAllText(Path.Combine(dir, "readme.txt"), "x");
+            // the same choice as zapret-gui: no empty name, no link, only *.bin in that case
+            File.WriteAllBytes(Path.Combine(dir, ".bin"), [1]);
+            File.WriteAllBytes(Path.Combine(dir, "UPPER.BIN"), [1]);
+            File.CreateSymbolicLink(Path.Combine(dir, "link.bin"), Path.Combine(dir, "stun.bin"));
             Assert.Equal(["--ext-blob", "z2_stun:@" + Path.Combine(dir, "stun.bin")], GenevaBlobs.Argv(dir));
             Assert.Empty(GenevaBlobs.Argv(Path.Combine(dir, "missing")));
             Assert.Empty(GenevaBlobs.Argv(null));

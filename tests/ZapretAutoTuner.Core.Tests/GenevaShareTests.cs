@@ -45,7 +45,7 @@ public sealed class GenevaShareTests
         var doc = JsonNode.Parse(json)!.AsObject();
         Assert.Equal(["format", "version", "exported_at", "items"], doc.Select(kv => kv.Key));
         Assert.Equal("zapret-gui/geneva-strategies", (string?)doc["format"]);
-        Assert.Equal(1, (int)doc["version"]!);
+        Assert.Equal(2, (int)doc["version"]!);
         Assert.Equal("2026-11-04T09:40:00Z", (string?)doc["exported_at"]);
         var items = doc["items"]!.AsArray();
         Assert.Equal(2, items.Count);
@@ -63,6 +63,67 @@ public sealed class GenevaShareTests
         Assert.Empty(errors);
         Assert.Equal([Overlap, Corrupt], back.Select(x => x.Strategy));
         Assert.Equal(["youtube.com", "googlevideo.com"], back[0].Services);
+    }
+
+    private const string XVk = @"[TCP:flags:PA]-xfake{blob=z2_tls_clienthello_vk_com;ttl=3}(xsplit{pos=2},)-| \/";
+    private const string XQuic = @"[UDP:dport:443]-xfake{blob=z2_quic_initial_vk_com;repeats=2}-| \/";
+    private const string XFlow = @"[FLOW:n:a]-xwhen{iff=L7:payload:tls_client_hello}(xfake{blob=fake_default_tls;ip_ttl=3},)-| \/";
+
+    [Fact]
+    public void A_version_2_file_of_zapret_gui_with_x_strategies_is_read()
+    {
+        // written by zapret-gui's build_export (core/geneva_share.py, geneva_c 2.0) itself
+        var (items, errors) = GenevaShare.Parse(File.ReadAllText(TestData("zapret-gui-export-v2.json")));
+        Assert.Empty(errors);
+        Assert.Equal([XVk, XQuic, XFlow, Fragment], items.Select(x => x.Strategy));
+        Assert.Equal(["vk.com"], items[0].Services);
+        Assert.Equal(396, items[0].Fitness);
+    }
+
+    [Fact]
+    public void The_export_marks_x_strategies_as_zapret_gui_does()
+    {
+        // the same file zapret-gui's tests read (tests/data/geneva/autotuner-export-v2.json there): one contract
+        var json = GenevaShare.Build(
+        [
+            new GenevaSharedStrategy { Strategy = XVk, Services = ["vk.com"], Fitness = 396 },
+            new GenevaSharedStrategy { Strategy = XQuic, Services = ["vk.com (QUIC)"] },
+            new GenevaSharedStrategy { Strategy = XFlow, Services = ["rutracker.org"] },
+            new GenevaSharedStrategy { Strategy = Fragment, Services = ["youtube.com"], Fitness = 389 },
+        ], new DateTimeOffset(2026, 11, 18, 5, 20, 0, TimeSpan.Zero));
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(File.ReadAllText(TestData("autotuner-export-v2.json"))), JsonNode.Parse(json)), json);
+        var items = JsonNode.Parse(json)!["items"]!.AsArray();
+        Assert.Equal(["strategy", "transport", "services", "fitness", "ext", "blobs"], items[0]!.AsObject().Select(kv => kv.Key));
+        Assert.Equal(["z2_tls_clienthello_vk_com"], items[0]!["blobs"]!.AsArray().Select(x => (string?)x));
+        Assert.True((bool)items[2]!["ext"]!);
+        Assert.Null(items[2]!["blobs"]);
+        Assert.Null(items[3]!["ext"]);
+        // and zapret-gui's own file of the same strategies is the same document
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(File.ReadAllText(TestData("zapret-gui-export-v2.json"))), JsonNode.Parse(json)));
+    }
+
+    [Fact]
+    public void Zapret2s_fake_names_are_the_same_as_zapret_guis()
+    {
+        // the same file is in zapret-gui (tests/data/geneva/z2-blob-names.json): core/geneva_ext.blob_name checks it
+        var names = JsonNode.Parse(File.ReadAllText(TestData("z2-blob-names.json")))!["names"]!.AsObject();
+        Assert.True(names.Count > 40);
+        foreach (var (file, name) in names)
+            Assert.Equal((string?)name, GenevaBlobs.NameOf(file));
+        Assert.Equal(["z2_tls_alert"], GenevaBlobs.Refs(@"[TCP:flags:PA]-xfake{blob=z2_tls_alert}(xsplit{pos=2;seqovl=#z2_tls_alert},)-| \/"));
+        Assert.Empty(GenevaBlobs.Refs(@"[TCP:flags:PA]-xfake{blob=xz2_a}-| \/"));
+    }
+
+    [Fact]
+    public void A_shared_x_strategy_naming_a_fake_the_agent_lacks_is_not_tried()
+    {
+        var site = new AutoService { Key = "web:vk.com", Kind = AutoKind.Web, Transport = L4Kind.Tcp, App = "tls", Name = "vk.com", Ports = [443] };
+        var shared = new[] { new GenevaSharedStrategy { Strategy = XVk, Services = ["vk.com"] } };
+        Assert.DoesNotContain(XVk, AutoCandidates.For(site, [], [], shared, ext: true, blobs: ["z2_tls_alert"]));
+        Assert.DoesNotContain(XVk, AutoCandidates.For(site, [], [], shared, ext: true));
+        Assert.Equal(XVk, AutoCandidates.For(site, [], [], shared, ext: true, blobs: ["z2_tls_clienthello_vk_com"])[0]);
+        // without geneva_c 2.0 no x-strategy at all
+        Assert.DoesNotContain(XVk, AutoCandidates.For(site, [], [], shared, ext: false, blobs: ["z2_tls_clienthello_vk_com"]));
     }
 
     [Fact]

@@ -121,7 +121,7 @@ public sealed class StandIntegrationTests(ITestOutputHelper output) : IAsyncLife
         var sni = runs.Single(r => r.c.Host == "sni.test").run.Verdict.Findings.Single(f => f.Label == BlockLabel.SniBlock);
         Assert.Contains(sni.Evidence, e => e.Contains("iana.org", StringComparison.Ordinal));
         var cut = runs.Single(r => r.c.Host == "cut.test").run.Observation.Addresses[0].Baseline[0];
-        Assert.InRange(cut.StalledAt ?? cut.BytesIn, Classifier.CutoffMin, Classifier.CutoffMax);
+        Assert.True(Classifier.IsVolumeStop(cut), $"stalled at {cut.StalledAt} B, {cut.WireBytesIn} B on the wire");
     }
 
     [Fact]

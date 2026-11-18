@@ -148,6 +148,18 @@ public sealed class ClassifierTests
     }
 
     [Fact]
+    public void Cutoff_inside_a_tls_record_is_the_cutoff()
+    {
+        // only the headers decrypted, the wire stopped at ~16 KB (the stand's cut.test on CI)
+        var v = Run(Addr() with { Baseline = [Fail(ProbeError.Stalled, tls: true, bytes: 176) with { WireBytesIn = 16_074 }] });
+        Assert.Equal(BlockLabel.Cutoff16K, v.Primary);
+        Assert.Contains(v.Findings.Single().Evidence, e => e.Contains("16074 B на проводе", StringComparison.Ordinal));
+        // a slow server: a few KB decrypted, the handshake makes up the rest of the wire count
+        var slow = Run(Addr() with { Baseline = [Fail(ProbeError.Stalled, tls: true, bytes: 3000) with { WireBytesIn = 9000 }] });
+        Assert.DoesNotContain(BlockLabel.Cutoff16K, slow.Labels);
+    }
+
+    [Fact]
     public void Stall_far_from_16k_is_not_the_cutoff()
     {
         var v = Run(Addr() with { Baseline = [Fail(ProbeError.Stalled, tls: true, bytes: 900_000)] });
@@ -182,6 +194,28 @@ public sealed class ClassifierTests
         Assert.Equal(BlockLabel.KyberMultiPkt, v.Primary);
         Assert.DoesNotContain(BlockLabel.Fingerprint, v.Labels);
         Assert.Equal(NextStep.SearchStrategy, v.Next);
+    }
+
+    [Theory]
+    [InlineData(1600, true)]   // OpenSSL 3.5+: the system hello carries kyber too (the stand's kyber.test on CI)
+    [InlineData(520, false)]   // a small system hello failing too is a real IP-range block
+    public void A_large_system_hello_is_explained_by_kyber(long systemHello, bool explained)
+    {
+        var big = Fail(ProbeError.TlsTimeout) with { BytesOut = systemHello };
+        var v = Run(Addr() with
+        {
+            Baseline = [big, big],
+            NeutralSni = big with { Sni = "iana.org" },
+            NeutralControl = Ok("192.0.2.10") with { Host = "iana.org" },
+            Tls12 = Ok() with { TlsVersion = "1.2" },
+            Tls13 = big,
+            Hellos = [Hello("chrome141", false, kyber: true), Hello("chrome141", true, kyber: false)],
+        });
+        Assert.Equal(explained ? BlockLabel.KyberMultiPkt : BlockLabel.PartialIp, v.Primary);
+        Assert.Equal(explained, !v.Labels.Contains(BlockLabel.PartialIp) && !v.Labels.Contains(BlockLabel.Tls13Block));
+        Assert.Contains(BlockLabel.KyberMultiPkt, v.Labels);
+        if (explained)
+            Assert.Contains(v.Findings.Single().Evidence, e => e.Contains("1600 B", StringComparison.Ordinal));
     }
 
     [Fact]

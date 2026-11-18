@@ -48,7 +48,8 @@ public class AutoTests
         Assert.Equal(AutoKind.Web, s.Kind);
         Assert.Equal(AutoHealth.Failed, s.Health);
         Assert.Equal("www.example.com", s.Host);
-        Assert.Empty(s.Replay);
+        // the browser's ClientHello is kept: the trial replays it besides the page load
+        Assert.Equal(hello, Assert.Single(s.Replay));
     }
 
     [Fact]

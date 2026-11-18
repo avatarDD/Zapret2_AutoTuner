@@ -93,6 +93,66 @@ public sealed class GenevaAutoTests
     }
 
     [Fact]
+    public async Task With_geneva_2_an_applied_site_also_goes_by_name_with_its_family()
+    {
+        var (controller, auto, agent, _, _) = Make((c, a) =>
+        {
+            a.AutoByName = true;
+            c.SaveAuto(new GenevaAutoState
+            {
+                Services =
+                [
+                    new AutoService
+                    {
+                        Key = "web:youtube.com", Kind = AutoKind.Web, Transport = Core.Model.L4Kind.Tcp, Name = "youtube.com", App = "tls",
+                        Addresses = [new AutoAddress("203.0.113.5", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc))],
+                        Ports = [443], Status = AutoStatus.Applied, Strategy = AutoCandidates.Tcp[0],
+                    },
+                ],
+            });
+        });
+        await using var _ = controller;
+        await using var __ = auto;
+        await auto.EnableAsync(default);
+        await Until(() => auto.View.ByName && auto.View.Groups.Any(g => g.ByName));
+        GenevaAutoApplyRequest last;
+        lock (agent.AutoApplied)
+            last = agent.AutoApplied[^1];
+        var h = Assert.Single(last.Hosts);
+        Assert.Equal(AutoCandidates.Tcp[0], h.Strategy);
+        Assert.Contains("youtube.com", h.Domains);
+        Assert.Contains("googlevideo.com", h.Domains);
+        Assert.Contains(auto.View.Groups.Single(g => g.ByName).Services, n => n.StartsWith("googlevideo.com", StringComparison.Ordinal));
+
+        // a VPN server the user excludes: the name-based process is told
+        controller.Lists = new AutoLists { Excluded = ["192.0.2.10", "vpn.example.org"] };
+        await Until(() => { lock (agent.AutoApplied) return agent.AutoApplied[^1].ExcludeDomains.Contains("vpn.example.org"); });
+        lock (agent.AutoApplied)
+            Assert.Contains("192.0.2.10/32", agent.AutoApplied[^1].ExcludeSubnets);
+    }
+
+    [Fact]
+    public async Task The_users_own_strategy_is_tried_like_a_found_one_and_pinned_when_it_works()
+    {
+        var (controller, auto, _, probes, _) = Make();
+        await using var _ = controller;
+        await using var __ = auto;
+        await auto.EnableAsync(default);
+        await Until(() => auto.View.Services.Any(s => s.Key == "dns:8.8.8.8" && s.Status == AutoStatus.Applied) && auto.View.Current is null);
+
+        Assert.False(await auto.TryStrategyAsync("dns:8.8.8.8", AutoCandidates.Udp[0], default));
+        Assert.Equal(AutoCandidates.Dns[1], auto.View.Services.Single(x => x.Key == "dns:8.8.8.8").Strategy);
+        await Assert.ThrowsAsync<GenevaRefusedException>(() => auto.TryStrategyAsync("dns:8.8.8.8", AutoCandidates.Tcp[0], default));
+
+        Assert.True(await auto.TryStrategyAsync("dns:8.8.8.8", AutoCandidates.Dns[1], default));
+        var s = auto.View.Services.Single(x => x.Key == "dns:8.8.8.8");
+        Assert.True(s.Pinned);
+        // a trial asks the probe twice in a row
+        lock (probes.Checks)
+            Assert.True(probes.Checks.Count(c => c.Applied == AutoCandidates.Dns[1]) >= 2);
+    }
+
+    [Fact]
     public async Task A_trial_whose_group_did_not_start_is_not_taken_for_a_working_strategy()
     {
         // a site's group runs; the group of the strategy that would "work" for the resolver never starts

@@ -82,7 +82,9 @@ public static class AutoObserver
         if (Judge(f, captureEnd, kind) is not { } judged)
             return null;
         var (health, why) = judged;
-        var replay = kind is AutoKind.Web or AutoKind.LocalPort || f.InitialPayloadsTruncated
+        // a site keeps its browser's ClientHello too: the trial replays it, so a strategy that passes the program's own
+        // page load but not the browser's (bigger, two-packet) handshake is not taken for working
+        var replay = kind == AutoKind.LocalPort || f.InitialPayloadsTruncated
             || !CanReplay(app, f.AppProtocol, f.InitialPayloadsOut)
             ? (IReadOnlyList<byte[]>)[]
             : f.InitialPayloadsOut.Select(p => p.ToArray()).ToList();

@@ -37,6 +37,9 @@ internal sealed class GenevaManager : IDisposable
     private readonly SemaphoreSlim _autoGate = new(1, 1);
     private readonly Dictionary<string, GenevaInstance> _auto = new(StringComparer.Ordinal);
     private readonly Dictionary<int, string> _autoFilters = [];
+    private GenevaInstance? _host;
+    private string _hostSignature = "";
+    private string _hostFilter = "";
     private readonly Lock _prepareLock = new();
     private readonly string _original;
     private string? _prepared;
@@ -159,16 +162,30 @@ internal sealed class GenevaManager : IDisposable
             throw new GenevaStartException("geneva уже работает: сначала остановите её / geneva already runs");
         if (_running.Values.Any(i => i.Mode == "auto" && !i.HasExited))
             throw new GenevaStartException("включён режим «Авто»: сначала выключите его / the \"Auto\" mode is on");
-        var settings = new GenevaRunSettings { Strategy = r.Strategy, Ports = string.IsNullOrWhiteSpace(r.Ports) ? "80,443" : r.Ports };
+        var settings = new GenevaRunSettings
+        {
+            Strategy = r.Strategy,
+            Ports = string.IsNullOrWhiteSpace(r.Ports) ? "80,443" : r.Ports,
+            ExcludeSubnets = [.. r.ExcludeSubnets],
+            ExcludeDomains = [.. r.ExcludeDomains],
+        };
         if (settings.Problems() is { Count: > 0 } bad)
             throw new GenevaStartException(string.Join("; ", bad));
-        var check = (await new GenevaBundle(Path.GetDirectoryName(geneva)!).CheckAsync([settings.Strategy], ct)) is { Count: > 0 } checks ? checks[0] : null;
+        var features = await FeaturesAsync(geneva, ct);
+        if (GenevaStrategyText.NeedsExt(settings.Strategy) && !features.Contains("ext_xact"))
+            throw new GenevaStartException("стратегия с x-действиями требует geneva_c 2.0 / x-actions need geneva_c 2.0");
+        bool lists = features.Contains("ext_lists");
+        // the user's "never touch" list (a VPN, a proxy) is a promise: without ext_lists it cannot be kept, so the
+        // run does not start rather than going over that traffic too
+        if (!lists && (settings.ExcludeSubnets.Count > 0 || settings.ExcludeDomains.Count > 0))
+            throw new GenevaStartException("исключения требуют geneva_c 2.0: обновите geneva или очистите список «Не трогать» / the exclusions need geneva_c 2.0");
+        var check = (await new GenevaBundle(Path.GetDirectoryName(geneva)!).CheckAsync([settings.Strategy], ct, features.Contains("ext_xact"))) is { Count: > 0 } checks ? checks[0] : null;
         if (check is not { Ok: true, Strategy: { } canonical })
             throw new GenevaStartException("стратегия не разбирается / the strategy does not parse: " + (check?.Error ?? "?"));
         settings = settings with { Strategy = canonical };
         int port = FreeLoopbackPort();
         var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
-        var argv = GenevaArgv.Run(settings, port);
+        var argv = GenevaArgv.Run(settings, port, lists);
         if (OperatingSystem.IsLinux())
             await FirewallDownAsync(geneva, GenevaArgv.RunQueue);
         var inst = Launch("run", geneva, argv, new Dictionary<string, string> { ["GENEVA_CONTROL_TOKEN"] = token }, supervise: true,
@@ -203,17 +220,30 @@ internal sealed class GenevaManager : IDisposable
         var checkpoint = Path.Combine(dir, "search.ckpt");
         if (settings.Resume && !File.Exists(checkpoint))
             settings = settings with { Resume = false };
+        // a search started with the extensions may hold x-actions in its checkpoint: it goes on with them
+        var extMark = Path.Combine(dir, "ext");
+        bool ext = (await FeaturesAsync(geneva, ct)).Contains("ext_xact");
+        settings = settings with { ResumeExt = ext && settings.Resume && File.Exists(extMark) };
         await File.WriteAllTextAsync(Path.Combine(dir, "target.txt"), settings.TargetKey, ct);
         string? seedsFile = null;
         if (settings.Seeds.Count > 0 && !settings.Resume)
         {
-            var good = (await new GenevaBundle(Path.GetDirectoryName(geneva)!).CheckAsync(settings.Seeds, ct)).Where(c => c.Ok).Select(c => c.Strategy!).ToList();
+            var good = (await new GenevaBundle(Path.GetDirectoryName(geneva)!).CheckAsync(settings.Seeds, ct, ext)).Where(c => c.Ok).Select(c => c.Strategy!).ToList();
+            settings = settings with { Seeds = good };
             if (good.Count > 0)
             {
                 seedsFile = Path.Combine(dir, "seeds.txt");
                 await File.WriteAllLinesAsync(seedsFile, good, ct);
             }
         }
+        else if (!settings.Resume)
+        {
+            settings = settings with { Seeds = [] };
+        }
+        if (settings.Ext)
+            await File.WriteAllTextAsync(extMark, "x-actions\n", ct);
+        else if (!settings.Resume && File.Exists(extMark))
+            File.Delete(extMark);
         var argv = GenevaArgv.Evolve(settings, checkpoint, DbPath, seedsFile);
         if (OperatingSystem.IsLinux())
             await FirewallDownAsync(geneva, GenevaArgv.EvalQueue);
@@ -221,9 +251,30 @@ internal sealed class GenevaManager : IDisposable
         return new GenevaStartReply { Id = inst.Id, Pid = inst.Pid };
     }
 
+    /// <summary>
+    /// Where zapret2's fakes are (files/fake of the verified zapret2 bundle, never the user's folder: geneva reads them
+    /// with the Agent's rights); null when there is none.
+    /// </summary>
+    public Func<string?>? FakeDir { get; set; }
+
+    /// <summary>
+    /// A geneva with extensions gets every fake of zapret2 as a blob (<c>--ext-blob z2_NAME:@FILE</c>,
+    /// <see cref="GenevaBlobs"/>): a strategy, a search resumed from its checkpoint or one the user wrote may name any.
+    /// </summary>
+    internal List<string> WithBlobs(List<string> argv)
+    {
+        int i = argv.IndexOf("--ext");
+        if (i < 0 || FakeDir?.Invoke() is not { } dir)
+            return argv;
+        var a = new List<string>(argv);
+        a.InsertRange(i + 1, GenevaBlobs.Argv(dir));
+        return a;
+    }
+
     private GenevaInstance Launch(string mode, string geneva, List<string> argv, Dictionary<string, string> env, bool supervise,
         int controlPort = 0, string token = "", string ports = "", int queue = 0)
     {
+        argv = WithBlobs(argv);
         var id = "g" + Interlocked.Increment(ref _seq).ToString(CultureInfo.InvariantCulture);
         var inst = GenevaInstance.Start(id, mode, geneva, argv, env, supervise, _job, controlPort, token, ports, queue);
         _running[id] = inst;
@@ -295,7 +346,7 @@ internal sealed class GenevaManager : IDisposable
             if (GenevaStrategyText.Problem(strategy) is { } bad)
                 throw new GenevaStartException(bad);
             // a new strategy passes geneva check like one at the start (AGENTS.md rule 4)
-            var check = (await new GenevaBundle(Path.GetDirectoryName(Prepare())!).CheckAsync([strategy!], ct)) is { Count: > 0 } checks ? checks[0] : null;
+            var check = (await new GenevaBundle(Path.GetDirectoryName(Prepare())!).CheckAsync([strategy!], ct, (await FeaturesAsync(Prepare(), ct)).Contains("ext_xact"))) is { Count: > 0 } checks ? checks[0] : null;
             if (check is not { Ok: true, Strategy: { } canonical })
                 throw new GenevaStartException("стратегия не разбирается / the strategy does not parse: " + (check?.Error ?? "?"));
             req["strategy"] = canonical;
@@ -371,6 +422,9 @@ internal sealed class GenevaManager : IDisposable
             await Task.WhenAll(_running.Keys.ToList().Select(StopAsync));
             _auto.Clear();
             _autoFilters.Clear();
+            _host = null;
+            _hostSignature = "";
+            _hostFilter = "";
             _firewall?.Replace(AutoOwner, new Dictionary<string, NftQueueRule>());
         }
         finally
@@ -461,7 +515,7 @@ internal sealed class GenevaManager : IDisposable
                 return reply;
             }
         }
-        else if (r.Groups.Count > 0 && _firewall is null)
+        else if ((r.Groups.Count > 0 || r.Hosts.Count > 0) && _firewall is null)
         {
             throw new GenevaStartException("нет firewall для правил очереди / no firewall for the queue rules");
         }
@@ -471,7 +525,7 @@ internal sealed class GenevaManager : IDisposable
         var spellings = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         if (r.Groups.Count > 0)
         {
-            var checks = await new GenevaBundle(Path.GetDirectoryName(geneva!)!).CheckAsync([.. r.Groups.Select(g => g.Strategy)], ct);
+            var checks = await new GenevaBundle(Path.GetDirectoryName(geneva!)!).CheckAsync([.. r.Groups.Select(g => g.Strategy)], ct, (await FeaturesAsync(geneva!, ct)).Contains("ext_xact"));
             for (int i = 0; i < r.Groups.Count; i++)
             {
                 var g = r.Groups[i];
@@ -544,11 +598,49 @@ internal sealed class GenevaManager : IDisposable
             state.Requested.AddRange(spellings[strategy]);
             reply.Groups.Add(state);
         }
+        // asked even for an empty request: the mode learns from it whether x-actions and by-name are there before
+        // anything is applied (an empty book would otherwise search without them)
+        IReadOnlySet<string> feats;
+        try
+        {
+            feats = await FeaturesAsync(geneva ?? Prepare(), ct);
+        }
+        catch (Exception e) when (e is GenevaStartException or IOException or UnauthorizedAccessException)
+        {
+            feats = new HashSet<string>();
+        }
+        reply.Ext = feats.Contains("ext_xact");
+        if (reply.Ext)
+            reply.Blobs.AddRange(GenevaBlobs.Files(FakeDir?.Invoke()).Select(f => f.Name));
+        reply.ByName = HostFeatures.All(feats.Contains) && (!windows || feats.Contains("filter"));
+        if (r.Hosts.Count > 0 && reply.ByName)
+        {
+            // the groups' addresses stay theirs: the name-based process leaves them alone (Windows hands a packet on to
+            // the next handle, and two strategies on one packet would judge neither)
+            var groupAddresses = wanted.Values.SelectMany(t => t).SelectMany(t => t.Addresses).Select(a => a.ToString()).Distinct(StringComparer.Ordinal);
+            try
+            {
+                await ApplyHostAsync((geneva ?? Prepare())!, r, [.. groupAddresses], reply, ct);
+            }
+            catch (Exception e) when (e is GenevaStartException or IOException or InvalidOperationException or UnauthorizedAccessException or global::System.ComponentModel.Win32Exception)
+            {
+                reply.Problems.Add("по имени / by name: " + e.Message);
+                await StopHostAsync();
+            }
+            if (_host is not null && !windows)
+                rules[$"{AutoOwner}~host"] = HostRule(r.Hosts.Any(h => h.Udp));
+        }
+        else
+        {
+            await StopHostAsync();
+        }
         if (_firewall is not null && !windows && _firewall.Replace(AutoOwner, rules) is { } err)
         {
             // without the rules nothing reaches geneva: better stopped than shown as working
             await StopAutoAsync(_auto.Keys.ToList());
+            await StopHostAsync();
             reply.Groups.Clear();
+            reply.Host = null;
             reply.Problems.Add("firewall: " + err);
         }
         return reply;
@@ -622,12 +714,15 @@ internal sealed class GenevaManager : IDisposable
         var q = queue.ToString(CultureInfo.InvariantCulture);
         // -p and --proto only name the traffic for geneva's events; what reaches it is decided by the rules (Linux) or
         // the filter (Windows)
-        var argv = new List<string>
+        var argv = new List<string> { "run" };
+        if (GenevaStrategyText.NeedsExt(strategy))
+            argv.Add("--ext");
+        argv.AddRange(new[]
         {
-            "run", "-s", strategy, "-p", "1-65535", "--proto", "tcp,udp",
+            "-s", strategy, "-p", "1-65535", "--proto", "tcp,udp",
             "-c", "tcp:" + port.ToString(CultureInfo.InvariantCulture),
             "-e", "-", "--stats-interval", "5", "--quiet",
-        };
+        });
         if (OperatingSystem.IsWindows())
         {
             var file = Path.Combine(StateDir, $"auto-{q}.filter");
@@ -643,6 +738,160 @@ internal sealed class GenevaManager : IDisposable
             argv.AddRange(["-q", q, "--firewall", "none"]);
         }
         return Launch("auto", geneva, argv, new Dictionary<string, string> { ["GENEVA_CONTROL_TOKEN"] = token }, supervise: true, port, token, "1-65535", queue);
+    }
+
+    /// <summary>What applying by name needs from geneva_c (2.0): profiles, host lists, the name from the ClientHello.</summary>
+    public static readonly IReadOnlyList<string> HostFeatures = ["ext", "ext_profile", "ext_lists", "ext_l7"];
+
+    /// <summary>
+    /// The name-based process (geneva_c 2.0, <c>run --ext</c>): one profile per strategy, each with a host list file.
+    /// New names in a list need no restart (geneva reads a changed list within a second, and <c>reload_lists</c> is
+    /// sent too); a new set of strategies starts the process again. Its traffic is the first packets of every TLS,
+    /// HTTP (and QUIC) connection except the groups' addresses and the user's exclusions; a connection to a name in no
+    /// list goes through untouched.
+    /// </summary>
+    private async Task ApplyHostAsync(string geneva, GenevaAutoApplyRequest r, IReadOnlyList<string> groupAddresses, GenevaAutoApplyReply reply, CancellationToken ct)
+    {
+        bool windows = OperatingSystem.IsWindows();
+        var feats = await FeaturesAsync(geneva, ct);
+        var hosts = r.Hosts.Where(h => h.Domains.Count > 0 && GenevaStrategyText.Problem(h.Strategy) is null).Take(AutoRules.MaxHostProfiles).ToList();
+        if (!feats.Contains("ext_crypto"))
+            hosts.RemoveAll(h => h.Udp);   // QUIC's name needs its Initial decrypted
+        var checks = await new GenevaBundle(Path.GetDirectoryName(geneva)!).CheckAsync([.. hosts.Select(h => h.Strategy)], ct, feats.Contains("ext_xact"));
+        var good = new List<(string Strategy, bool Udp, List<string> Domains)>();
+        for (int i = 0; i < hosts.Count; i++)
+        {
+            if (i < checks.Count && checks[i] is { Ok: true, Strategy: { } canonical })
+            {
+                var domains = hosts[i].Domains.Select(d => d.Trim().TrimEnd('.').ToLowerInvariant())
+                    .Where(d => AutoNameList.Problem(d) is null && d.Contains('.', StringComparison.Ordinal) && !d.Contains('/', StringComparison.Ordinal))
+                    .Distinct(StringComparer.Ordinal).ToList();
+                if (domains.Count > 0)
+                    good.Add((canonical, hosts[i].Udp, domains));
+            }
+            else
+            {
+                reply.Problems.Add("по имени, стратегия не разбирается / by name, the strategy does not parse: " + (i < checks.Count ? checks[i].Error : "?"));
+            }
+        }
+        if (good.Count == 0)
+        {
+            await StopHostAsync();
+            return;
+        }
+        var dir = Path.Combine(StateDir, "auto-host");
+        CreateOwnDir(dir);
+        // an empty host list would take every name (geneva, as zapret2): every list has at least one name, and each is
+        // written beside and moved over, so geneva never reads half a file
+        var exclude = groupAddresses.Concat(new AutoNameList(r.ExcludeSubnets).Subnets).Distinct(StringComparer.Ordinal).ToList();
+        await WriteAtomicAsync(Path.Combine(dir, "exclude-ip.txt"), "# geneva-auto: the groups' addresses and the user's exclusions\n" + string.Join("\n", exclude) + "\n", ct);
+        var excludeHosts = r.ExcludeDomains.Select(d => d.Trim().TrimEnd('.').ToLowerInvariant()).Where(d => d.Length > 0 && AutoNameList.Problem(d) is null).Distinct(StringComparer.Ordinal);
+        await WriteAtomicAsync(Path.Combine(dir, "exclude-hosts.txt"), "# geneva-auto: never touched\n" + string.Join("\n", excludeHosts) + "\n", ct);
+        var ini = new StringBuilder("# geneva-auto: strategies by the site's name, written by ZapretAutoTuner's Agent\n");
+        for (int i = 0; i < good.Count; i++)
+        {
+            var (strategy, udp, domains) = good[i];
+            var n = i.ToString(CultureInfo.InvariantCulture);
+            await WriteAtomicAsync(Path.Combine(dir, $"hosts-{n}.txt"), string.Join("\n", domains) + "\n", ct);
+            await WriteAtomicAsync(Path.Combine(dir, $"strategy-{n}.txt"), strategy + "\n", ct);
+            ini.Append($"[profile p{n}]\n");
+            ini.Append(udp ? $"filter-udp = {AutoRules.HostUdpPorts}\nfilter-l7 = quic\n" : $"filter-tcp = {AutoRules.HostTcpPorts}\nfilter-l7 = tls,http\n");
+            ini.Append($"hostlist = {Path.Combine(dir, $"hosts-{n}.txt")}\n");
+            ini.Append($"hostlist-exclude = {Path.Combine(dir, "exclude-hosts.txt")}\n");
+            ini.Append($"ipset-exclude = {Path.Combine(dir, "exclude-ip.txt")}\n");
+            ini.Append($"strategy-file = {Path.Combine(dir, $"strategy-{n}.txt")}\n");
+        }
+        var signature = string.Join("\n", good.Select(g => (g.Udp ? "udp " : "tcp ") + g.Strategy));
+        bool udpAny = good.Any(g => g.Udp);
+        var filter = HostFilter(udpAny);
+        if (_host is { HasExited: false } running && signature == _hostSignature && (!windows || filter == _hostFilter))
+        {
+            // the lists changed at most: geneva rereads them; the command makes it at once
+            try
+            {
+                await SendControlAsync(running, new JsonObject { ["id"] = 3, ["cmd"] = "reload_lists" }, ct);
+            }
+            catch (Exception e) when (e is IOException or SocketException or GenevaStartException || (e is OperationCanceledException && !ct.IsCancellationRequested))
+            {
+                Console.Error.WriteLine($"geneva reload_lists: {e.Message}");
+            }
+        }
+        else
+        {
+            await StopHostAsync();
+            var profiles = Path.Combine(dir, "profiles.ini");
+            await WriteAtomicAsync(profiles, ini.ToString(), ct);
+            int port = FreeLoopbackPort();
+            var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+            var q = AutoRules.HostQueue.ToString(CultureInfo.InvariantCulture);
+            var argv = new List<string>
+            {
+                "run", "--ext", "--ext-profile", profiles, "-p", udpAny ? "80,443" : AutoRules.HostTcpPorts, "--proto", udpAny ? "tcp,udp" : "tcp",
+                "-c", "tcp:" + port.ToString(CultureInfo.InvariantCulture),
+                "-e", "-", "--stats-interval", "5", "--quiet",
+                // a new connection to an address whose name an earlier one showed gets its profile from the first packet
+                "--ext-ipcache-hostname",
+            };
+            if (windows)
+            {
+                var file = Path.Combine(dir, "host.filter");
+                await File.WriteAllTextAsync(file, filter, ct);
+                // after the groups' handles: a packet a group handed on comes here, and its address is excluded
+                argv.AddRange(["--filter-file", file, "--priority", "-100"]);
+                if (feats.Contains("first"))
+                    argv.AddRange(["--first", AutoRules.OutPackets.ToString(CultureInfo.InvariantCulture)]);
+            }
+            else
+            {
+                argv.AddRange(["-q", q, "--firewall", "none"]);
+            }
+            _host = Launch("auto", geneva, argv, new Dictionary<string, string> { ["GENEVA_CONTROL_TOKEN"] = token }, supervise: true, port, token,
+                udpAny ? "80,443" : AutoRules.HostTcpPorts, AutoRules.HostQueue);
+            _hostSignature = signature;
+            _hostFilter = filter;
+        }
+        var state = new GenevaAutoGroupState { Strategy = "", Id = _host!.Id, Queue = _host.Queue, Pid = _host.Pid };
+        state.Requested.AddRange(r.Hosts.Select(h => h.Strategy));
+        reply.Host = state;
+    }
+
+    /// <summary>The WinDivert filter of the name-based process: TLS and HTTP (and QUIC) both ways.</summary>
+    public static string HostFilter(bool udp)
+    {
+        var outs = "(tcp and (tcp.DstPort == 80 or tcp.DstPort == 443))" + (udp ? " or (udp and udp.DstPort == 443)" : "");
+        var ins = "(tcp and (tcp.SrcPort == 80 or tcp.SrcPort == 443))" + (udp ? " or (udp and udp.SrcPort == 443)" : "");
+        return $"(outbound and ({outs})) or (inbound and ({ins}))";
+    }
+
+    /// <summary>The name-based process's rule (Linux): every address, after the groups' rules (its key sorts last).</summary>
+    public static NftQueueRule HostRule(bool udp) => new()
+    {
+        QueueNum = AutoRules.HostQueue,
+        TcpPorts = AutoRules.HostTcpPorts,
+        UdpPorts = udp ? AutoRules.HostUdpPorts : "",
+        Incoming = true,
+        SkipMark = GenevaMark,
+        TcpOutPackets = AutoRules.OutPackets,
+        UdpOutPackets = AutoRules.OutPackets,
+        TcpInPackets = AutoRules.InPackets,
+        UdpInPackets = AutoRules.InPackets,
+    };
+
+    private async Task StopHostAsync()
+    {
+        if (_host is not { } h)
+            return;
+        _host = null;
+        _hostSignature = "";
+        _hostFilter = "";
+        await StopAsync(h.Id);
+    }
+
+    private static async Task WriteAtomicAsync(string path, string text, CancellationToken ct)
+    {
+        var tmp = path + ".tmp";
+        await File.WriteAllTextAsync(tmp, text, new UTF8Encoding(false), ct);
+        File.Move(tmp, path, overwrite: true);
     }
 
     private async Task StopAutoAsync(IReadOnlyList<string> strategies)

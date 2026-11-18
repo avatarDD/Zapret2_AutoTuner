@@ -1384,5 +1384,130 @@
       ],
       "additionalProperties": false
     }
+  },
+  {
+    "name": "geneva_auto_check_now",
+    "scope": "control",
+    "confirms": false,
+    "description": "Checks one service of the \"Авто\" mode now, pauses included: an applied one with its bypass on (searched again if it fails), any other without a bypass (searched if blocked), one that found nothing is searched again.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The service's key from geneva_auto_status",
+          "maxLength": 300
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_auto_priority",
+    "scope": "control",
+    "confirms": false,
+    "description": "Sets how much a service matters to the \"Авто\" mode: important ones are confirmed and searched first and interrupt a search for less important ones; unimportant ones go last (background). auto: the program decides (sites and DNS normal, YouTube, Discord, Telegram, WhatsApp, Instagram, X important, bare peers background).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The service's key",
+          "maxLength": 300
+        },
+        "priority": {
+          "type": "string",
+          "description": "important, auto or unimportant",
+          "enum": [
+            "important",
+            "auto",
+            "unimportant"
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "priority"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_auto_pin",
+    "scope": "control",
+    "confirms": false,
+    "description": "Pins (or unpins) the strategy applied to a service: a pinned strategy stays even when the service fails again, and no new search replaces it.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The service's key",
+          "maxLength": 300
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "true pins, false unpins"
+        }
+      },
+      "required": [
+        "key",
+        "pinned"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "geneva_auto_lists",
+    "scope": "control",
+    "confirms": false,
+    "description": "Reads or replaces the user's lists for geneva (domains with subdomains, addresses, subnets): important and unimportant services of the \"Авто\" mode, and excluded — never touched by any geneva bypass (a VPN or proxy server). A list left out stays as it is. Also whether site strategies are applied by name (geneva_c 2.0).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "important": {
+          "type": "array",
+          "description": "Important services",
+          "items": {
+            "type": "string",
+            "description": "A domain, an address or a subnet",
+            "maxLength": 260
+          },
+          "maxItems": 200
+        },
+        "unimportant": {
+          "type": "array",
+          "description": "Unimportant services",
+          "items": {
+            "type": "string",
+            "description": "A domain, an address or a subnet",
+            "maxLength": 260
+          },
+          "maxItems": 200
+        },
+        "excluded": {
+          "type": "array",
+          "description": "Never touched by geneva",
+          "items": {
+            "type": "string",
+            "description": "A domain, an address or a subnet",
+            "maxLength": 260
+          },
+          "maxItems": 200
+        },
+        "known_important": {
+          "type": "boolean",
+          "description": "YouTube, Discord, Telegram, WhatsApp, Instagram and X count as important (default true)"
+        },
+        "by_name": {
+          "type": "boolean",
+          "description": "Apply site strategies by name too (geneva_c 2.0; default true)"
+        }
+      },
+      "additionalProperties": false
+    }
   }
 ]

@@ -143,7 +143,8 @@ public sealed partial class SchemaTests
         Assert.Equal(["target_add", "trial_run"], McpTools.All.Where(t => t.Scope == McpScope.Probes).Select(t => t.Name));
         Assert.Equal(["search_start", "search_status", "search_pause", "search_stop", "search_enqueue", "search_prune_family",
             "engine_select", "geneva_search_start", "geneva_search_stop", "geneva_run_start", "geneva_run_pause", "geneva_run_stop",
-            "geneva_auto_enable", "geneva_auto_disable", "geneva_auto_reset"], McpTools.All.Where(t => t.Scope == McpScope.Control).Select(t => t.Name));
+            "geneva_auto_enable", "geneva_auto_disable", "geneva_auto_reset", "geneva_auto_check_now", "geneva_auto_priority", "geneva_auto_pin",
+            "geneva_auto_lists"], McpTools.All.Where(t => t.Scope == McpScope.Control).Select(t => t.Name));
         // geneva's bypass and its "Авто" mode change this PC's live traffic: they wait for the user's yes (AGENTS.md rule 7)
         Assert.Equal(["geneva_run_start", "geneva_auto_enable"], McpTools.All.Where(t => t.Scope == McpScope.Control && t.Confirms).Select(t => t.Name));
         Assert.Equal(["strategy_experiment_start", "strategy_experiment_status", "strategy_experiment_result", "strategy_experiment_commit", "strategy_experiment_rollback"],

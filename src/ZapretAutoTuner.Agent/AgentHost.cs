@@ -42,9 +42,45 @@ internal sealed class AgentHost : IAsyncDisposable
                 return null;
             }
         };
-        Geneva = new Geneva.GenevaManager(options, State, Engines.Lua, Firewall);
+        Geneva = new Geneva.GenevaManager(options, State, Engines.Lua, Firewall)
+        {
+            // zapret2's fakes from its verified (protected) copy: geneva_c 2.0 strategies name them as z2_ blobs
+            FakeDir = FakeDirOf(engines),
+        };
         Captures = new CaptureManager();
         Hosts = new HostsManager(options.HostsFile ?? Core.Hosts.HostsFile.DefaultPath, options.DataDir!);
+    }
+
+    /// <summary>
+    /// The fake directory of the prepared zapret2, found once: a bundle that does not verify is asked again at most
+    /// every five minutes (each try copies and hashes it), and meanwhile geneva goes without zapret2's fakes.
+    /// </summary>
+    private static Func<string?> FakeDirOf(EngineManager engines)
+    {
+        string? found = null;
+        long failedAt = long.MinValue;
+        var gate = new Lock();
+        return () =>
+        {
+            lock (gate)
+            {
+                if (found is not null)
+                    return found;
+                if (failedAt != long.MinValue && Stopwatch.GetElapsedTime(failedAt) < TimeSpan.FromMinutes(5))
+                    return null;
+                try
+                {
+                    var dir = Path.Combine(Path.GetDirectoryName(engines.PrepareEngine())!, "files", "fake");
+                    if (Directory.Exists(dir))
+                        return found = dir;
+                }
+                catch (EngineStartException)
+                {
+                }
+                failedAt = Stopwatch.GetTimestamp();
+                return null;
+            }
+        };
     }
 
     public AgentOptions Options { get; }

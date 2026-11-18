@@ -42,8 +42,14 @@ public sealed class AppHost : IAsyncDisposable
             // the wider round of the "Авто" mode: Geneva's client-side library, best first
             Library = async ct => [.. (await GenevaBundle.LibraryAsync(ct).ConfigureAwait(false)).Where(l => !l.ServerSide && l.Rate > 0)
                 .OrderByDescending(l => l.Rate).Select(l => l.Strategy)],
+            // and zapret2's blockcheck2 methods as geneva_c 2.0 strategies, a sample spread over the whole grid
+            // (a wide slice each round: the rounds walk the whole grid)
+            Grid = (test, round, ct) => GenevaBundle.GridAsync(test, test == "http3" ? 13 : AutoGridSlice, ct, round),
         };
     }
+
+    /// <summary>Lines of zapret2's blockcheck grid a wider round of the "Авто" mode tries on a TCP service.</summary>
+    private const int AutoGridSlice = 48;
 
     /// <summary>The current solution on disk: restored at start (<see cref="SolutionStore.Restore"/>), saved on every change.</summary>
     public SolutionStore Solutions => _solutions;

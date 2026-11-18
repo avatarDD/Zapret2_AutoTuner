@@ -79,18 +79,46 @@
             <TextBlock Classes="h2" Text="{l:T auto.services}" />
             <v:HelpButton Text="{l:T help.statuses}" />
           </StackPanel>
+          <!-- the user's own strategy for one service -->
+          <Border Classes="card" IsVisible="{Binding TryRow, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <StackPanel Spacing="6">
+              <TextBlock FontWeight="SemiBold" Text="{Binding TryTitle}" TextWrapping="Wrap" />
+              <TextBlock Classes="muted" FontSize="12" Text="{l:T auto.try_about}" TextWrapping="Wrap" />
+              <TextBox Text="{Binding TryStrategy}" FontFamily="monospace" FontSize="12" AcceptsReturn="False" TextWrapping="Wrap"
+                       AutomationProperties.Name="{l:T auto.try_strategy}" />
+              <WrapPanel>
+                <Button Classes="accent" Margin="0,0,8,0" Content="{l:T auto.try_run}" Command="{Binding TryCommand}" IsEnabled="{Binding !TryBusy}" />
+                <Button Content="{l:T auto.try_cancel}" Command="{Binding CancelTryCommand}" />
+              </WrapPanel>
+            </StackPanel>
+          </Border>
           <ItemsControl ItemsSource="{Binding AutoServices}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:AutoRow">
                 <Grid ColumnDefinitions="220,140,*,Auto" Margin="0,2">
-                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                    <TextBlock Text="{Binding Tags}" FontSize="11" Classes="muted" IsVisible="{Binding Tags, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                  </StackPanel>
                   <TextBlock Grid.Column="1" Text="{Binding Status}" Foreground="{Binding Brush}" VerticalAlignment="Center" />
                   <StackPanel Grid.Column="2" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Detail}" FontSize="12" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                     <SelectableTextBlock Text="{Binding Strategy}" FontFamily="monospace" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding Strategy, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                   </StackPanel>
-                  <Button Grid.Column="3" Margin="8,0,0,0" Content="{l:T engine.auto_reset}" IsVisible="{Binding CanReset}" ToolTip.Tip="{l:T engine.auto_reset_tip}"
-                          Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).ResetAutoServiceCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="3" Margin="8,0,0,0" Content="⋯" ToolTip.Tip="{l:T auto.actions}" AutomationProperties.Name="{l:T auto.actions}">
+                    <Button.Flyout>
+                      <MenuFlyout>
+                        <MenuItem Header="{l:T auto.check_now}" Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).CheckNowCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="{l:T auto.mark_important}" Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).MarkImportantCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="{l:T auto.mark_auto}" Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).MarkAutoCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="{l:T auto.mark_unimportant}" Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).MarkUnimportantCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="{Binding PinText}" IsVisible="{Binding CanPin}" Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).TogglePinCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="{l:T auto.try_own}" Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).BeginTryCommand}" CommandParameter="{Binding}" />
+                        <MenuItem Header="{l:T engine.auto_reset}" IsVisible="{Binding CanReset}" ToolTip.Tip="{l:T engine.auto_reset_tip}"
+                                  Command="{Binding $parent[ItemsControl].((vm:AutoViewModel)DataContext).ResetAutoServiceCommand}" CommandParameter="{Binding}" />
+                      </MenuFlyout>
+                    </Button.Flyout>
+                  </Button>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -98,6 +126,30 @@
           <CheckBox Content="{l:T engine.auto_show_all}" IsChecked="{Binding AutoShowAll}" />
         </StackPanel>
       </Border>
+
+      <!-- what matters, what does not, what no bypass may touch -->
+      <Expander Header="{l:T auto.lists}">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="muted" Text="{l:T auto.lists_about}" TextWrapping="Wrap" />
+          <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto">
+            <TextBlock Text="{l:T auto.list_important}" FontWeight="SemiBold" Margin="0,0,8,4" TextWrapping="Wrap" />
+            <TextBlock Grid.Column="1" Text="{l:T auto.list_unimportant}" FontWeight="SemiBold" Margin="0,0,8,4" TextWrapping="Wrap" />
+            <TextBlock Grid.Column="2" Text="{l:T auto.list_excluded}" FontWeight="SemiBold" Margin="0,0,0,4" TextWrapping="Wrap" />
+            <TextBox Grid.Row="1" Margin="0,0,8,0" Text="{Binding ImportantText}" AcceptsReturn="True" Height="110" FontFamily="monospace" FontSize="12"
+                     Watermark="youtube.com" AutomationProperties.Name="{l:T auto.list_important}" />
+            <TextBox Grid.Row="1" Grid.Column="1" Margin="0,0,8,0" Text="{Binding UnimportantText}" AcceptsReturn="True" Height="110" FontFamily="monospace" FontSize="12"
+                     Watermark="203.0.113.0/24" AutomationProperties.Name="{l:T auto.list_unimportant}" />
+            <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding ExcludedText}" AcceptsReturn="True" Height="110" FontFamily="monospace" FontSize="12"
+                     Watermark="vpn.example.com" AutomationProperties.Name="{l:T auto.list_excluded}" />
+          </Grid>
+          <CheckBox Content="{l:T auto.known_important}" IsChecked="{Binding KnownImportant}" />
+          <CheckBox Content="{l:T auto.by_name_switch}" IsChecked="{Binding ByName}" ToolTip.Tip="{l:T auto.by_name_tip}" />
+          <WrapPanel>
+            <Button Margin="0,0,8,0" Content="{l:T auto.lists_save}" Command="{Binding SaveListsCommand}" />
+            <TextBlock VerticalAlignment="Center" Text="{Binding ListsStatus}" TextWrapping="Wrap" />
+          </WrapPanel>
+        </StackPanel>
+      </Expander>
 
       <!-- exchange with other users -->
       <Border Classes="card">

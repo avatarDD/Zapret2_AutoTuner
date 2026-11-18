@@ -391,9 +391,9 @@
   "SSH {0}: вход выполнен, ключ совпадает с запомненным ({1}).",
   "SSH {0}: logged in, the key matches the remembered one ({1})."
  ],
- "router.check_ssh_ok_new": [
-  "SSH {0}: вход выполнен. Ключ роутера {1} запомнится при первой установке после вашего «Да».",
-  "SSH {0}: logged in. The router's key {1} is remembered at the first install, after your Yes."
+ "router.check_ssh_new_key": [
+  "SSH {0} отвечает, ключ роутера новый: {1}. Пароль ему не отправлен: сверьте ключ с роутером. Он запомнится, а вход проверится при первой установке после вашего «Да».",
+  "SSH {0} answers with a new router key: {1}. The password was not sent to it: compare the key with the router's. It is remembered, and the login checked, at the first install after your Yes."
  ],
  "router.check_ssh_no_password": [
   "SSH {0} отвечает (ключ {1}). Введите пароль, чтобы проверить вход.",
@@ -514,5 +514,21 @@
  "resources.content": [
   "Содержимое",
   "Content"
+ ],
+ "engine.seed_zapret2": [
+  "Добавить методы zapret2 (geneva_c 2.0)",
+  "Add zapret2's methods (geneva_c 2.0)"
+ ],
+ "engine.seed_zapret2_tip": [
+  "Разрезы и фейки zapret2 в виде x-действий geneva_c 2.0, те же, что пробует «Авто-обход». Подбор скрещивает их с действиями Geneva. Нужна geneva_c 2.0, со старой версией пропускаются.",
+  "zapret2's splits and fakes as geneva_c 2.0 x-actions, the ones the Auto bypass tries. The search crosses them with Geneva's actions. Needs geneva_c 2.0; an older one skips them."
+ ],
+ "engine.library_zapret2_row": [
+  "Метод zapret2: {0}",
+  "zapret2 method: {0}"
+ ],
+ "engine.library_loaded_x": [
+  "Стратегий Geneva: {0}, методов zapret2 (geneva_c 2.0): {1}.",
+  "Geneva strategies: {0}, zapret2 methods (geneva_c 2.0): {1}."
  ]
 }

@@ -48,6 +48,7 @@
               </StackPanel>
             </WrapPanel>
             <CheckBox Content="{l:T engine.seed}" IsChecked="{Binding SeedLibrary}" />
+            <CheckBox Content="{l:T engine.seed_zapret2}" IsChecked="{Binding SeedZapret2}" ToolTip.Tip="{l:T engine.seed_zapret2_tip}" />
             <WrapPanel>
               <Button Classes="accent" Padding="18,8" Margin="0,0,8,0" Content="{l:T engine.search}" Command="{Binding SearchCommand}" IsVisible="{Binding !Searching}" />
               <Button Padding="18,8" Margin="0,0,8,0" Content="{l:T engine.resume}" Command="{Binding ResumeCommand}" IsVisible="{Binding CanResume}" />

@@ -430,6 +430,10 @@ public sealed class GenevaAuto : IAsyncDisposable
                 throw new GenevaRefusedException("нет такого сервиса / no such service");
             if (!AutoCandidates.Fits(found, strategy))
                 throw new GenevaRefusedException("стратегия не для этого транспорта (TCP/UDP) / the strategy does not fit the transport");
+            // only where the probe without a bypass saw the block (AGENTS.md rule 5): a service that opens anyway would
+            // pass any strategy, and the pin would keep it there for good
+            if (found.Status is not (AutoStatus.Blocked or AutoStatus.NotFound or AutoStatus.Degraded or AutoStatus.Applied))
+                throw new GenevaRefusedException("блокировка не подтверждена: сначала «Проверить сейчас» / the block is not confirmed: use \"Check now\" first");
             s = found.Clone();
             _current = s.Name;
             _currentKey = s.Key;

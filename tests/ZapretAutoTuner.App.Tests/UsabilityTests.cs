@@ -295,6 +295,23 @@ public sealed class UsabilityTests : IAsyncLifetime
     }
 
     [AvaloniaFact]
+    public async Task TheTraysCommonSwitchTurnsOnTheBypassItTurnedOffLast()
+    {
+        var main = new MainViewModel(Host);
+        main.Current = main.Auto;
+        SessionState.I.Last = null;
+        Assert.False(main.BypassOn);
+        Host.Settings.TrayBypass = "zapret2";
+        // zapret2 was the last one, but there is no strategy now: the protection page says why
+        Assert.False(await main.ToggleBypassAsync());
+        Assert.Same(main.Monitor, main.Current);
+        Assert.Equal(Loc.Loc.I["monitor.no_solution"], main.Monitor.Status);
+        Host.Kb.SetSetting("ui.tray_bypass", "something");
+        Assert.Null(Host.Settings.TrayBypass);
+        Host.Settings.TrayBypass = null;
+    }
+
+    [AvaloniaFact]
     public void TheStatusBarKeepsItsItemsWhileOnlyTheTextChanges()
     {
         var main = new MainViewModel(Host);

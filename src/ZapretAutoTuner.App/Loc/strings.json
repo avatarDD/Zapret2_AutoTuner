@@ -2167,6 +2167,14 @@
   "Выключить авто-обход",
   "Turn the Auto bypass off"
  ],
+ "tray.bypass_on": [
+  "Включить обход",
+  "Turn the bypass on"
+ ],
+ "tray.bypass_off": [
+  "Выключить обход (всё)",
+  "Turn the bypass off (all)"
+ ],
  "tray.protection_on": [
   "Включить защиту zapret2",
   "Turn zapret2 protection on"

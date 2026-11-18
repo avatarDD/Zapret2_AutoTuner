@@ -61,6 +61,13 @@ public enum ServerMode
 
     /// <summary>Sends the body up to <see cref="TestServer.CutAt"/> bytes, then RST.</summary>
     ResetAfter,
+
+    /// <summary>
+    /// Writes the headers and the body in one piece (full 16 KB TLS records, the headers inside the first) and lets
+    /// only <see cref="TestServer.CutAt"/> bytes reach the wire, handshake included, then goes silent: a volume DPI
+    /// that cuts inside the first TLS record of the response, so nothing of it decrypts.
+    /// </summary>
+    WireStallAfter,
 }
 
 /// <summary>A loopback HTTP(S) server with scripted failures, one connection at a time.</summary>
@@ -127,6 +134,56 @@ internal sealed class TestServer : IAsyncDisposable
         }
     }
 
+    /// <summary>Passes the first <c>limit</c> written bytes to the socket, then blocks the writer.</summary>
+    private sealed class WireCut(Stream inner, long limit, CancellationToken stop) : Stream
+    {
+        private long _left = limit;
+
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default)
+        {
+            int n = (int)Math.Min(buffer.Length, _left);
+            if (n > 0)
+            {
+                await inner.WriteAsync(buffer[..n], ct);
+                _left -= n;
+            }
+            if (n < buffer.Length)
+            {
+                await inner.FlushAsync(ct);
+                await Task.Delay(Timeout.Infinite, stop);
+            }
+        }
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken ct) =>
+            WriteAsync(buffer.AsMemory(offset, count), ct).AsTask();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException("async only");
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default) => inner.ReadAsync(buffer, ct);
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct) => inner.ReadAsync(buffer, offset, count, ct);
+
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+
+        public override Task FlushAsync(CancellationToken ct) => inner.FlushAsync(ct);
+
+        public override void Flush() => inner.Flush();
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+    }
+
     private static void Rst(Socket s)
     {
         s.LingerState = new LingerOption(true, 0);
@@ -151,10 +208,10 @@ internal sealed class TestServer : IAsyncDisposable
                 return;
             }
 
-            Stream stream = ns;
+            Stream stream = Mode == ServerMode.WireStallAfter ? new WireCut(ns, CutAt, _cts.Token) : ns;
             if (Cert is not null)
             {
-                var ssl = new SslStream(ns, false);
+                var ssl = new SslStream(stream, false);
                 await ssl.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
                 {
                     ServerCertificateSelectionCallback = (_, name) =>
@@ -187,6 +244,15 @@ internal sealed class TestServer : IAsyncDisposable
             else if (!CloseDelimited)
                 hdr.Append("Content-Length: ").Append(BodyBytes).Append("\r\n");
             hdr.Append("Connection: close\r\n\r\n");
+            if (Mode == ServerMode.WireStallAfter && !head)
+            {
+                // one write: the TLS layer packs the headers and the body into full 16 KB records
+                var all = new byte[hdr.Length + BodyBytes];
+                Encoding.ASCII.GetBytes(hdr.ToString(), all);
+                await stream.WriteAsync(all, _cts.Token);
+                await stream.FlushAsync(_cts.Token);
+                await Task.Delay(Timeout.Infinite, _cts.Token);
+            }
             await stream.WriteAsync(Encoding.ASCII.GetBytes(hdr.ToString()), _cts.Token);
             if (head)
             {

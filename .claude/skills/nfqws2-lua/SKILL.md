@@ -1,9 +1,9 @@
 ---
 name: nfqws2-lua
-description: Строгий справочник Lua-библиотеки zapret2 1.0.6 (zapret-lib, zapret-antidpi, zapret-auto, zapret-obfs, zapret-pcap) — все функции --lua-desync, их аргументы и умолчания, стандартные блоки fooling/ipid/ipfrag/rawsend/reconstruct, маркеры позиций, tls_mod, блобы, оркестраторы, написание своих функций. Читать перед генерацией, мутацией или проверкой любой стратегии.
+description: Строгий справочник Lua-библиотеки zapret2 1.0.7 (zapret-lib, zapret-antidpi, zapret-auto, zapret-obfs, zapret-pcap) — все функции --lua-desync, их аргументы и умолчания, стандартные блоки fooling/ipid/ipfrag/rawsend/reconstruct, маркеры позиций, tls_mod, блобы, оркестраторы, написание своих функций. Читать перед генерацией, мутацией или проверкой любой стратегии.
 ---
 
-# Lua-библиотека zapret2 (compat 6, v1.0.6)
+# Lua-библиотека zapret2 (compat 6, v1.0.7)
 
 Источник истины: `lua/zapret-antidpi.lua` (комментарии `-- arg :` над каждой
 функцией), `lua/zapret-auto.lua`, `docs/manual.en.md` (главы «zapret-antidpi»,
@@ -226,7 +226,10 @@ iff-функции: `cond_true`, `cond_false`, `cond_random` (`percent=50`),
 
 - `wgobfs` (`secret`, `padmin`=0, `padmax`=16), `ippxor` (`ippxor`, `dataxor`,
   `rebuild`), `udp2icmp` (`ctype`, `ccode`, `stype`, `scode`, `dataxor`,
-  `server`), `synhide` (`ghost`, `ghost6`, `synack`, `magic`, `x2`, `kind`,
+  `server`; с 1.0.7 `cgnat` — не полагаться на ICMP identifier, который
+  меняет CGNAT: клиент дописывает его в хвост пакета, +2 байта, может
+  превысить MTU; `id_lifetime` — жизнь сопоставления в секундах, 60),
+  `synhide` (`ghost`, `ghost6`, `synack`, `magic`, `x2`, `kind`,
   `opt`, `xorseq`). Двусторонние, нужна вторая сторона. AutoTuner их не
   предлагает.
 - `pcap:file=имя[:keep]` пишет pcap. Нужен `--writable`. Мы пишем pcap

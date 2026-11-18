@@ -80,13 +80,17 @@ public static class RouterTuning
         {
             var q = p.Clone();
             var name = p.Name.Length > 0 ? p.Name : "autotuner";
+            var lists = new List<IReadOnlyList<string>> { q.HostlistDomains };
             foreach (var h in q.Hostlists)
             {
                 if (s.Hostlists.TryGetValue(h.Name, out var domains))
-                    q.HostlistDomains.AddRange(domains.Where(d => !q.HostlistDomains.Contains(d, StringComparer.OrdinalIgnoreCase)));
+                    lists.Add(domains);
                 else
                     problems.Add($"{name}: список {h.Name} не найден / list {h.Name} not found");
             }
+            // one static list: "!" exemptions stay local to their list as in the engine (zapret2 1.0.7)
+            if (lists.Count > 1)
+                q.HostlistDomains = Core.Hosts.HostlistEntry.Merge(lists);
             foreach (var i in q.Ipsets)
             {
                 if (s.Ipsets.TryGetValue(i.Name, out var ips))

@@ -47,6 +47,12 @@ public sealed record AgentTrialOptions
 
     public EnginePlatform Platform { get; init; } = OperatingSystem.IsWindows() ? EnginePlatform.Windows : EnginePlatform.Linux;
 
+    /// <summary>
+    /// Windows <c>--wf-priority</c> of the instance (zapret2 1.0.7+): test instances outrank a winws2 that is already
+    /// running (the user's own or AutoTuner's protection); the long-lived protection instance passes null (default 0).
+    /// </summary>
+    public int? WinDivertPriority { get; init; } = EngineArgsBuilder.TrialWinDivertPriority;
+
     /// <summary>Linux: the NFQUEUE number of the trial instance.</summary>
     public int QueueNum { get; init; } = 300;
 
@@ -183,6 +189,7 @@ public sealed class AgentTrialExecutor(IEngineControl engine, TrialTarget target
             Profiles = [profile],
             QueueNum = options.QueueNum,
             TargetAddresses = target.Addresses,
+            WinDivertPriority = options.WinDivertPriority,
         };
         var argv = EngineArgsBuilder.Build(launch);
         if (options.Platform == EnginePlatform.Windows)

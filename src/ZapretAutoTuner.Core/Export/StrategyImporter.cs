@@ -279,7 +279,8 @@ public static partial class StrategyImporter
             foreach (var p in g.SkipLast(1))
                 p.Name = Identifiers.ToListName($"{p.Name}_{++n}");
         }
-        s.Meta.Targets = [.. s.Hostlists.Values.SelectMany(d => d).Distinct(StringComparer.Ordinal)];
+        // targets are what the lists include: "^" dropped, "!" exemptions are not something to unblock
+        s.Meta.Targets = [.. s.Hostlists.Values.SelectMany(Hosts.HostlistEntry.Included).Distinct(StringComparer.Ordinal)];
         return s;
     }
 

@@ -13,7 +13,9 @@
           <Button Content="{l:T expert.open}" Command="{Binding OpenCommand}" Margin="0,0,8,8" />
           <Button Classes="accent" Content="{l:T expert.parse}" Command="{Binding ImportCommand}" Margin="0,0,8,8" />
           <Button Content="{l:T expert.use}" Command="{Binding UseCommand}" IsEnabled="{Binding CanUse}" Margin="0,0,8,8" />
-          <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Classes="muted" />
+          <Button Content="{l:T expert.export}" Command="{Binding ExportCommand}" IsVisible="{Binding ImportNextStep}" Margin="0,0,8,8" />
+          <Button Content="{l:T expert.protect}" Command="{Binding ProtectCommand}" IsVisible="{Binding ImportNextStep}" Margin="0,0,8,8" />
+          <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" />
         </WrapPanel>
         <TextBlock Grid.Row="3" Text="{Binding ImportKind}" FontWeight="SemiBold" />
         <ScrollViewer Grid.Row="4">
@@ -41,8 +43,20 @@
         <TextBlock Classes="muted" Text="{l:T expert.strategy_hint}" />
         <TextBox Text="{Binding StrategyText}" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="monospace" Height="100"
                  Watermark="--lua-desync=fake:blob=fake_default_tls:tcp_md5 --lua-desync=multisplit:pos=1,midsld" />
-        <Button Classes="accent" Content="{l:T expert.check}" Command="{Binding CheckStrategyCommand}" />
+        <Button Content="{l:T expert.check}" Command="{Binding CheckStrategyCommand}" />
         <SelectableTextBlock Text="{Binding StrategyResult}" TextWrapping="Wrap" />
+        <TextBlock Text="{l:T expert.site}" FontWeight="SemiBold" Margin="0,8,0,0" />
+        <TextBlock Classes="muted" Text="{l:T expert.site_hint}" TextWrapping="Wrap" />
+        <TextBox Text="{Binding SiteText}" Watermark="youtube.com" AutomationProperties.Name="{l:T expert.site}" />
+        <WrapPanel>
+          <Button Classes="accent" Content="{l:T expert.check_site}" Command="{Binding CheckOnSiteCommand}" Margin="0,0,8,8" />
+          <Button Content="{l:T common.stop}" Command="{Binding StopCheckCommand}" IsVisible="{Binding Checking}" Margin="0,0,8,8" />
+          <Button Content="{l:T expert.use_site}" Command="{Binding UseStrategyCommand}" Margin="0,0,8,8" />
+          <Button Content="{l:T expert.export}" Command="{Binding ExportCommand}" IsVisible="{Binding StrategyNextStep}" Margin="0,0,8,8" />
+          <Button Content="{l:T expert.protect}" Command="{Binding ProtectCommand}" IsVisible="{Binding StrategyNextStep}" Margin="0,0,8,8" />
+        </WrapPanel>
+        <ProgressBar IsIndeterminate="True" IsVisible="{Binding Checking}" />
+        <SelectableTextBlock Text="{Binding SiteResult}" TextWrapping="Wrap" />
       </StackPanel>
     </TabItem>
   </TabControl>

@@ -215,6 +215,9 @@ public sealed partial class StrategyValidator
             declared[name] = size;
         }
 
+        if (_ctx.Platform == EnginePlatform.Windows)
+            CheckWinDivertOptions(argv, r);
+
         if (_ctx.Platform == EnginePlatform.Windows && !argv.Any(t => t.StartsWith("--wf-raw=", StringComparison.Ordinal)))
         {
             string Wf(string opt) => PortsOf(argv, opt);
@@ -250,6 +253,37 @@ public sealed partial class StrategyValidator
         return r;
     }
 
+    /// <summary>
+    /// winws2 1.0.7: <c>--wf-priority</c> is −30000..30000 (otherwise exit 1), and the WinDivert filter buffer is
+    /// 16384 bytes (was 64K). <c>--wf-raw</c> is the whole filter; <c>--wf-raw-filter</c> and <c>--wf-raw-part</c>
+    /// go inside the one winws2 builds (ports, loopback and the long LAN exclusion), so together they get half of it,
+    /// like our own target filter. Files (<c>@file</c>) are read by the engine and not checked here.
+    /// </summary>
+    private static void CheckWinDivertOptions(IReadOnlyList<string> argv, ValidationResult r)
+    {
+        int parts = 0;
+        foreach (var tok in argv)
+        {
+            if (!tok.StartsWith("--wf-", StringComparison.Ordinal))
+                continue;
+            var (name, value) = Model.ArgTokenizer.SplitOption(tok);
+            if (name == "--wf-priority"
+                && (value is null || !int.TryParse(value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var prio) || prio is < WinDivertMinPriority or > WinDivertMaxPriority))
+                r.Error("wf.priority", $"--wf-priority должен быть целым от {WinDivertMinPriority} до {WinDivertMaxPriority}", $"--wf-priority must be an integer {WinDivertMinPriority}..{WinDivertMaxPriority}", tok);
+            if (value is not { Length: > 0 } || value[0] == '@')
+                continue;
+            if (name == "--wf-raw" && value.Length >= Engine.EngineArgsBuilder.WinDivertMaxFilter)
+                r.Error("wf.filter_size", $"фильтр --wf-raw длиннее {Engine.EngineArgsBuilder.WinDivertMaxFilter - 1} символов: winws2 1.0.7 его не загрузит", $"--wf-raw exceeds {Engine.EngineArgsBuilder.WinDivertMaxFilter - 1} characters, winws2 1.0.7 cannot load it", name);
+            else if (name is "--wf-raw-filter" or "--wf-raw-part")
+                parts += value.Length;
+        }
+        if (parts > Engine.EngineArgsBuilder.WinDivertMaxFilter / 2)
+            r.Error("wf.filter_size", $"--wf-raw-filter и --wf-raw-part вместе длиннее {Engine.EngineArgsBuilder.WinDivertMaxFilter / 2} символов: с портами и исключением LAN фильтр winws2 1.0.7 не поместится в 16 KB", $"--wf-raw-filter and --wf-raw-part exceed {Engine.EngineArgsBuilder.WinDivertMaxFilter / 2} characters together: with the ports and the LAN exclusion the winws2 1.0.7 filter does not fit 16 KB", "--wf-raw-filter");
+    }
+
+    public const int WinDivertMinPriority = -30000;
+    public const int WinDivertMaxPriority = 30000;
+
     private static string PortsOf(IReadOnlyList<string> argv, string opt)
     {
         var values = argv.Where(t => t.StartsWith(opt + "=", StringComparison.Ordinal)).Select(t => t[(opt.Length + 1)..]);
@@ -274,6 +308,22 @@ public sealed partial class StrategyValidator
             r.Error("wf.uncovered", $"порты {PortList.Format(missing)} профиля не перехватываются: добавьте их в {opt}", $"profile ports {PortList.Format(missing)} are not intercepted, add them to {opt}", where.Length > 0 ? where : null);
     }
 
+    /// <summary>
+    /// zapret2 1.0.7: the same file twice in one list type of a profile stops the engine (<c>failed to register
+    /// hostlist</c>); <c>--hostlist</c> and <c>--hostlist-auto</c> are one type. <see cref="Profile.ToArgs"/> writes a
+    /// repeat once, so this is a warning about the source, not a launch failure.
+    /// </summary>
+    private static void CheckListRepeats(Profile p, ValidationResult r, string? where)
+    {
+        IEnumerable<ListRef> include = p.HostlistAuto is null ? p.Hostlists : [.. p.Hostlists, p.HostlistAuto];
+        foreach (var (refs, opt) in new[] { (include, "--hostlist"), (p.HostlistExcludes, "--hostlist-exclude"), (p.Ipsets, "--ipset"), (p.IpsetExcludes, "--ipset-exclude") })
+        {
+            foreach (var dup in refs.GroupBy(x => x.ToString(), StringComparer.Ordinal).Where(g => g.Count() > 1))
+                r.Warn("list.repeat", $"файл {dup.Key} указан в {opt} профиля дважды: zapret2 1.0.7 на повторе не запускается, повтор будет убран",
+                    $"{dup.Key} is given twice in {opt} of the profile: zapret2 1.0.7 refuses to start on a repeat, it will be dropped", where);
+        }
+    }
+
     private static string PlatformName(EnginePlatform p) => p switch
     {
         EnginePlatform.Windows => "Windows (winws2)",
@@ -292,6 +342,7 @@ public sealed partial class StrategyValidator
             r.Error("profile.name", $"имя профиля «{p.Name}» должно состоять из латиницы, цифр, _ и -", $"profile name '{p.Name}' must be [A-Za-z0-9_-]", where);
         CheckPorts(p.TcpPorts, "--filter-tcp", r, where);
         CheckPorts(p.UdpPorts, "--filter-udp", r, where);
+        CheckListRepeats(p, r, where);
         if (p.TcpPorts is null && p.UdpPorts is null && !p.ExtraOptions.Any(o => o.StartsWith("--filter-", StringComparison.Ordinal)))
             r.Warn("profile.nofilter", "у профиля нет фильтра портов: он поймает весь трафик", "the profile has no port filter and matches all traffic", where);
 

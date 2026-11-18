@@ -1,3 +1,4 @@
+using ZapretAutoTuner.Core.Hosts;
 using ZapretAutoTuner.Core.Model;
 using ZapretAutoTuner.Core.Search;
 using ZapretAutoTuner.Protocol;
@@ -35,6 +36,8 @@ public static class Protection
             QueueNum = queueNum,
             Blobs = s.Blobs.ToDictionary(b => b.Key, b => "0x" + Convert.ToHexString(b.Value), StringComparer.Ordinal),
             UserLua = userLua ?? new Dictionary<string, string>(),
+            // the long-lived instance keeps the default priority, so test instances (2000) see packets first
+            WinDivertPriority = null,
         });
 
     /// <summary>Every domain the solution filters by name.</summary>
@@ -46,7 +49,7 @@ public static class Protection
     {
         foreach (var p in s.Profiles)
         {
-            if (DomainsOf(s, p).Any(d => Covers(d, domain)))
+            if (Serves(s, p, domain))
                 return new StrategyCandidate(p.Strategy, "current", 0, [], p.L4Kinds.FirstOrDefault());
         }
         return null;
@@ -60,11 +63,11 @@ public static class Protection
     public static Solution ReplaceDomain(Solution s, string domain, StrategyCandidate? strategy)
     {
         var copy = Copy(s);
-        var ports = s.Profiles.FirstOrDefault(p => DomainsOf(s, p).Any(d => Covers(d, domain)));
+        var ports = s.Profiles.FirstOrDefault(p => Serves(s, p, domain));
         foreach (var list in copy.Hostlists.Values)
-            list.RemoveAll(d => string.Equals(d, domain, StringComparison.OrdinalIgnoreCase));
+            list.RemoveAll(d => IsEntryFor(d, domain));
         foreach (var p in copy.Profiles)
-            p.HostlistDomains.RemoveAll(d => string.Equals(d, domain, StringComparison.OrdinalIgnoreCase));
+            p.HostlistDomains.RemoveAll(d => IsEntryFor(d, domain));
         copy.Profiles.RemoveAll(p => WasByName(s, p.Name) && !DomainsOf(copy, p).Any());
         if (strategy is not null)
         {
@@ -88,11 +91,19 @@ public static class Protection
         s.Profiles.FirstOrDefault(o => o.Name == name) is { } p && DomainsOf(s, p).Any() && p.HostlistAuto is null
         && p.Hostlists.All(l => s.Hostlists.ContainsKey(l.Name));
 
-    private static IEnumerable<string> DomainsOf(Solution s, Profile p) =>
-        p.HostlistDomains.Concat(p.Hostlists.SelectMany(l => s.Hostlists.TryGetValue(l.Name, out var d) ? d : []));
+    /// <summary>Included domains of the profile's lists; <c>^</c>/<c>!</c> prefixes dropped, exemptions left out.</summary>
+    private static IEnumerable<string> DomainsOf(Solution s, Profile p) => ListsOf(s, p).SelectMany(HostlistEntry.Included);
 
-    private static bool Covers(string listed, string domain) =>
-        string.Equals(listed, domain, StringComparison.OrdinalIgnoreCase) || domain.EndsWith("." + listed, StringComparison.OrdinalIgnoreCase);
+    /// <summary>The profile's include lists, each matched on its own like the engine does.</summary>
+    private static IEnumerable<IReadOnlyList<string>> ListsOf(Solution s, Profile p) =>
+        new[] { (IReadOnlyList<string>)p.HostlistDomains }.Concat(p.Hostlists.Select(l => s.Hostlists.TryGetValue(l.Name, out var d) ? (IReadOnlyList<string>)d : []));
+
+    /// <summary>Does the profile's hostlist filter take <paramref name="domain"/> (nfqws2 1.0.7 rules, <c>^</c> and <c>!</c>)?</summary>
+    private static bool Serves(Solution s, Profile p, string domain) => ListsOf(s, p).Any(l => HostlistEntry.Matches(l, domain));
+
+    /// <summary>An include entry (plain or <c>^</c>) for exactly this domain; exemptions stay.</summary>
+    private static bool IsEntryFor(string entry, string domain) =>
+        HostlistEntry.Parse(entry.Trim()) is { Exempt: false } e && string.Equals(e.Domain, domain, StringComparison.OrdinalIgnoreCase);
 
     private static Solution Copy(Solution s) => new()
     {

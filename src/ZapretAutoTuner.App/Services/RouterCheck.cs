@@ -5,8 +5,9 @@ namespace ZapretAutoTuner.App.Services;
 /// <summary>
 /// "Проверить подключение" in Settings: reaches zapret-gui and the router's SSH with what the user typed, before any
 /// install or trial needs them (UX audit P1: an error was only seen after "Установить"). Read-only: it lists one
-/// resource kind of zapret-gui, opens its MCP session and logs in over SSH, and changes nothing on the router. A new SSH
-/// key is only shown here; it is remembered where the user says yes to a delivery (AGENTS.md rule 7).
+/// resource kind of zapret-gui, opens its MCP session and logs in over SSH (only with a key the user accepted before: the password never goes to a key seen for the first
+/// time), and changes nothing on the router. A new SSH key is only shown here; it is remembered where the user says yes
+/// to a delivery (AGENTS.md rule 7).
 /// </summary>
 public static class RouterCheck
 {
@@ -85,8 +86,11 @@ public static class RouterCheck
                 return "✖ " + L.F("router.check_ssh_mismatch", host, seen);
             if (target.Password is null)
                 return "· " + L.F("router.check_ssh_no_password", host, seen);
+            // a key nobody accepted yet gets no password: whoever answers at that address would get it
+            if (check == HostKeyCheck.FirstUse)
+                return "· " + L.F("router.check_ssh_new_key", host, seen);
             using var sh = await SshRemoteShell.ConnectAsync(target with { TrustHostKey = fp => fp == seen }, ct).ConfigureAwait(false);
-            return "✓ " + L.F(check == HostKeyCheck.FirstUse ? "router.check_ssh_ok_new" : "router.check_ssh_ok", host, seen);
+            return "✓ " + L.F("router.check_ssh_ok", host, seen);
         }
         catch (Exception e) when (e is Renci.SshNet.Common.SshException or IOException or System.Net.Sockets.SocketException or OperationCanceledException
             or ArgumentException or InvalidOperationException)

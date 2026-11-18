@@ -155,6 +155,12 @@ public sealed partial class MonitorViewModel : PageViewModel
             Status = L["monitor.geneva_running"];
             return;
         }
+        // «Эксперт» checks a strategy with its own engine: a second engine on the same flows would decide its verdict
+        if (_host.ExpertCheckRunning)
+        {
+            Status = L["engine.busy_expert"];
+            return;
+        }
         _cts = new CancellationTokenSource();
         try
         {

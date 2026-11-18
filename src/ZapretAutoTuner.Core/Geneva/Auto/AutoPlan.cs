@@ -577,12 +577,30 @@ public static class AutoCandidates
 
     /// <summary>A strategy that can act on the service's packets: TCP trees for TCP, UDP (or DNS, IP) trees for UDP.</summary>
     /// <para>geneva_c 2.0's flow, L7 and meta triggers (<c>[FLOW:n:a]</c>, the blockcheck grid's form) match either
-    /// transport: the actions under them decide, and a trial shows whether they act.</para>
-    public static bool Fits(AutoService s, string strategy) =>
-        strategy.Contains("[FLOW:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[L7:", StringComparison.OrdinalIgnoreCase)
-        || strategy.Contains("[META:", StringComparison.OrdinalIgnoreCase) || (s.Transport == L4Kind.Udp
-        ? strategy.Contains("[UDP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[IP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[DNS", StringComparison.OrdinalIgnoreCase)
-        : strategy.Contains("[TCP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[IP:", StringComparison.OrdinalIgnoreCase));
+    /// transport: the actions under them decide. An x-action or an L7 payload of one transport only (a TCP split or
+    /// OOB, a QUIC Initial) keeps such a strategy to that transport.</para>
+    public static bool Fits(AutoService s, string strategy)
+    {
+        if (strategy.Contains("[FLOW:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[L7:", StringComparison.OrdinalIgnoreCase)
+            || strategy.Contains("[META:", StringComparison.OrdinalIgnoreCase))
+        {
+            bool tcp = TcpOnly.IsMatch(strategy), udp = UdpOnly.IsMatch(strategy);
+            return s.Transport == L4Kind.Udp ? !tcp : !udp;
+        }
+        return s.Transport == L4Kind.Udp
+            ? strategy.Contains("[UDP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[IP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[DNS", StringComparison.OrdinalIgnoreCase)
+            : strategy.Contains("[TCP:", StringComparison.OrdinalIgnoreCase) || strategy.Contains("[IP:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>geneva_c 2.0's x-actions and L7 payloads that exist for TCP only (docs/EXT.md: X5a, X5b, X8).</summary>
+    private static readonly System.Text.RegularExpressions.Regex TcpOnly = new(
+        @"(?:^|[-(,])x(?:split|disorder|tcpseg|hostfake|fakedsplit|fakeddisorder|synack|synacksplit|wsize|wssize|syndata|rst|http|oob|tlsrec|drip|tlsclone|synhide)(?=[{(,)-]|$)"
+        + @"|payload[:=](?:tls_client_hello|http_req)\b|\[TCP:", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>geneva_c 2.0's x-actions and L7 payloads that exist for UDP only.</summary>
+    private static readonly System.Text.RegularExpressions.Regex UdpOnly = new(
+        @"(?:^|[-(,])x(?:udplen|dhtdn|wgobfs|udp2icmp)(?=[{(,)-]|$)|payload[:=](?:quic_initial|dht|wireguard\w*|stun|discord_ip_discovery|dtls\w*)\b|\[UDP:",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     /// <summary>
     /// geneva's search space for the service (<c>--protos</c>). <paramref name="wide"/>: the wider search after the

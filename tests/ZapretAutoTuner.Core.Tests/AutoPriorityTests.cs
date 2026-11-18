@@ -380,6 +380,12 @@ public class AutoPriorityTests
         // geneva_c 2.0's flow triggers fit either transport (the blockcheck grid's form)
         Assert.True(AutoCandidates.Fits(site, @"[FLOW:n:a]-xoob{urp=b}-| \/"));
         Assert.True(AutoCandidates.Fits(services[1], @"[FLOW:n:a]-xwhen{iff=L7:payload:quic_initial}(xfake{blob=fake_default_quic},)-| \/"));
+        // ...unless an action or a payload of one transport keeps them to it: no OOB for QUIC, no QUIC Initial for a site
+        Assert.False(AutoCandidates.Fits(services[1], @"[FLOW:n:a]-xoob{urp=b}-| \/"));
+        Assert.False(AutoCandidates.Fits(services[1], @"[FLOW:n:a]-xwhen{iff=L7:payload:tls_client_hello}(xfake{blob=fake_default_tls}(xsplit{pos=2},),)-| \/"));
+        Assert.False(AutoCandidates.Fits(site, @"[FLOW:n:a]-xwhen{iff=L7:payload:quic_initial}(xfake{blob=fake_default_quic},)-| \/"));
+        Assert.False(AutoCandidates.Fits(site, @"[FLOW:n:a]-xudplen{increment=2}-| \/"));
+        Assert.True(AutoCandidates.Fits(services[1], @"[FLOW:n:a]-xfake{blob=fake_default_quic;repeats=6}-| \/"));
         Assert.Empty(AutoCandidates.XFor(site, false, true, blobs));
         // a fake fits its protocol: no QUIC Initial on a TLS site, no ClientHello on WireGuard
         Assert.DoesNotContain(AutoCandidates.XFor(site, true, true, blobs), c => c.Contains("z2_quic_initial", StringComparison.Ordinal));

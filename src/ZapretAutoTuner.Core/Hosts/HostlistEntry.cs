@@ -66,8 +66,9 @@ public readonly record struct HostlistEntry(string Domain, bool Strict, bool Exe
 
     /// <summary>
     /// Several lists of one profile as one static list (<c>--hostlist-domains</c>) that matches what the lists match
-    /// together. A list matches by itself (an exemption is local to it), so an exemption that another list would
-    /// cover — the name, or for a non-strict one anything under it — is dropped; of two includes for one name the
+    /// together. A list matches by itself (an exemption is local to it), so an exemption that another list
+    /// covers whole — the name and, for a non-strict one, the names under it — is dropped, and one whose names under
+    /// it another list covers keeps only the name (<c>!^</c>); of two includes for one name the
     /// one without <c>^</c> stays, since it matches more. Without exemptions this is a plain ordered union.
     /// </summary>
     public static List<string> Merge(IReadOnlyList<IReadOnlyList<string>> lists)
@@ -85,10 +86,18 @@ public readonly record struct HostlistEntry(string Domain, bool Strict, bool Exe
                     continue;
                 if (e.Exempt)
                 {
+                    // what the exemption leaves out, another list may take: the name, and for a non-strict one the
+                    // names under it. All of it: the exemption goes. Only the names under it: it keeps the name alone
+                    // (strict). Only the name or nothing: it stays, else a wider include would bring the names under
+                    // it back.
                     int self = i;
-                    bool covered = lists.Where((_, j) => j != self).Any(l => Matches(l, e.Domain) || (!e.Strict && Matches(l, "*." + e.Domain)));
-                    if (covered)
+                    var others = lists.Where((_, j) => j != self).ToList();
+                    bool name = others.Any(l => Matches(l, e.Domain));
+                    bool below = !e.Strict && others.Any(l => Matches(l, "sub." + e.Domain));
+                    if (name && (e.Strict || below))
                         continue;
+                    if (below)
+                        e = new HostlistEntry(e.Domain, Strict: true, Exempt: true);
                 }
                 if (!merged.TryGetValue(e.Domain, out var cur))
                 {

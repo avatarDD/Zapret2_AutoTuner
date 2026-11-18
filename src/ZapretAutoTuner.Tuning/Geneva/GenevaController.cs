@@ -777,15 +777,41 @@ public sealed class GenevaController : IAsyncDisposable
     /// <summary>Saves the "Авто" mode's state with the rest (one settings key).</summary>
     public void SaveAuto(GenevaAutoState auto) => Update(s => s with { Auto = auto });
 
-    /// <summary>The user's lists (important, unimportant, never touched); a change reaches the "Авто" mode at once.</summary>
+    /// <summary>
+    /// The user's lists (important, unimportant, never touched); a change reaches the "Авто" mode at once, and a new
+    /// "never touch" list restarts the single-strategy bypass with it (its exclusions are fixed at start).
+    /// </summary>
     public AutoLists Lists
     {
         get => State.Lists;
         set
         {
+            bool exclusions = !State.Lists.Excluded.SequenceEqual(value.Excluded, StringComparer.Ordinal);
             Update(s => s with { Lists = value });
             ListsChanged?.Invoke();
+            if (exclusions && RunRunning)
+                ListsRestart = RestartRunAsync();
         }
+    }
+
+    /// <summary>The last restart of the bypass for a new "never touch" list (tests wait for it).</summary>
+    public Task? ListsRestart { get; private set; }
+
+    private async Task RestartRunAsync()
+    {
+        if (State.Active is not { } a)
+            return;
+        try
+        {
+            await StopRunAsync(forget: false).ConfigureAwait(false);
+            await StartRunAsync(a.Strategy, a.Ports, a.AutoStart, _dispose.Token).ConfigureAwait(false);
+            AddLog("Список «Не трогать» изменился: обход geneva перезапущен с ним / the \"never touch\" list changed: the bypass restarted with it");
+        }
+        catch (Exception e) when (e is GenevaRefusedException or AgentStartException or InvalidOperationException or Grpc.Core.RpcException or IOException or OperationCanceledException)
+        {
+            AddLog("Обход geneva не перезапустился с новым списком «Не трогать» / the bypass did not restart with the new list: " + e.Message);
+        }
+        Changed?.Invoke();
     }
 
     /// <summary>The "Авто" mode applies site strategies by name too (geneva_c 2.0).</summary>

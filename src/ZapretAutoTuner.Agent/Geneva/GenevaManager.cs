@@ -220,6 +220,10 @@ internal sealed class GenevaManager : IDisposable
         var checkpoint = Path.Combine(dir, "search.ckpt");
         if (settings.Resume && !File.Exists(checkpoint))
             settings = settings with { Resume = false };
+        // a resumed search takes its population from the checkpoint: seeds are not used and, unchecked, must not ask
+        // for --ext (only the checkpoint's own mark below does)
+        if (settings.Resume)
+            settings = settings with { Seeds = [] };
         // a search started with the extensions may hold x-actions in its checkpoint: it goes on with them
         var extMark = Path.Combine(dir, "ext");
         bool ext = (await FeaturesAsync(geneva, ct)).Contains("ext_xact");
@@ -781,6 +785,14 @@ internal sealed class GenevaManager : IDisposable
         }
         var dir = Path.Combine(StateDir, "auto-host");
         CreateOwnDir(dir);
+        var signature = string.Join("\n", good.Select(g => (g.Udp ? "udp " : "tcp ") + g.Strategy));
+        bool udpAny = good.Any(g => g.Udp);
+        var filter = HostFilter(udpAny);
+        bool reload = _host is { HasExited: false } && signature == _hostSignature && (!windows || filter == _hostFilter);
+        // other profiles: the running process stops before its files change, else it rereads profile N's new list
+        // with N's old strategy and applies it to the wrong sites until the restart
+        if (!reload)
+            await StopHostAsync();
         // an empty host list would take every name (geneva, as zapret2): every list has at least one name, and each is
         // written beside and moved over, so geneva never reads half a file
         var exclude = groupAddresses.Concat(new AutoNameList(r.ExcludeSubnets).Subnets).Distinct(StringComparer.Ordinal).ToList();
@@ -801,10 +813,7 @@ internal sealed class GenevaManager : IDisposable
             ini.Append($"ipset-exclude = {Path.Combine(dir, "exclude-ip.txt")}\n");
             ini.Append($"strategy-file = {Path.Combine(dir, $"strategy-{n}.txt")}\n");
         }
-        var signature = string.Join("\n", good.Select(g => (g.Udp ? "udp " : "tcp ") + g.Strategy));
-        bool udpAny = good.Any(g => g.Udp);
-        var filter = HostFilter(udpAny);
-        if (_host is { HasExited: false } running && signature == _hostSignature && (!windows || filter == _hostFilter))
+        if (reload && _host is { } running)
         {
             // the lists changed at most: geneva rereads them; the command makes it at once
             try
@@ -818,7 +827,6 @@ internal sealed class GenevaManager : IDisposable
         }
         else
         {
-            await StopHostAsync();
             var profiles = Path.Combine(dir, "profiles.ini");
             await WriteAtomicAsync(profiles, ini.ToString(), ct);
             int port = FreeLoopbackPort();

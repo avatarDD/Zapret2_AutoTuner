@@ -153,6 +153,25 @@ public sealed class GenevaAutoTests
     }
 
     [Fact]
+    public async Task The_users_own_strategy_needs_a_confirmed_block()
+    {
+        // a site the probe without a bypass found open: any strategy would "work" there (AGENTS.md rule 5)
+        var open = new AutoService
+        {
+            Key = "web:open.example", Kind = AutoKind.Web, Transport = ZapretAutoTuner.Core.Model.L4Kind.Tcp, Name = "open.example", Host = "open.example", App = "tls",
+            Ports = [443], Status = AutoStatus.NotBlocked,
+        };
+        var (controller, auto, _, probes, _) = Make(saved: new GenevaState { Auto = new GenevaAutoState { Services = [open] } });
+        await using var _ = controller;
+        await using var __ = auto;
+        await auto.EnableAsync(default);
+        await Assert.ThrowsAsync<GenevaRefusedException>(() => auto.TryStrategyAsync("web:open.example", AutoCandidates.Tcp[0], default));
+        lock (probes.Checks)
+            Assert.DoesNotContain(probes.Checks, c => c.Key == "web:open.example");
+        Assert.False(auto.View.Services.Single(x => x.Key == "web:open.example").Pinned);
+    }
+
+    [Fact]
     public async Task A_trial_whose_group_did_not_start_is_not_taken_for_a_working_strategy()
     {
         // a site's group runs; the group of the strategy that would "work" for the resolver never starts

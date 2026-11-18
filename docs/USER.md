@@ -308,7 +308,10 @@ zapret-gui на роутере (например, 192.168.2.1).
 
 **Трей.** В Windows свёрнутое окно по умолчанию уходит в трей. В настройках
 можно включить и закрытие окна в трей; тогда программа завершается только
-через «Выход» в меню значка.
+через «Выход» в меню значка. В меню значка также можно включить и выключить
+защиту zapret2 и авто-обход geneva, не открывая окно; если защиту включить
+нельзя (стратегии ещё нет, работает обход geneva), откроется «Защита zapret2»
+с причиной.
 
 **Телеметрия.** Её нет. Настройки, база знаний и журнал хранятся только
 локально (путь показан в настройках).
@@ -513,5 +516,7 @@ Stop on the banner cuts the bridge too.
   a user can swap it.
 - **Tray:** on Windows a minimized window goes to the tray by default; Settings
   can also make closing the window go to the tray, and then Exit in the tray
-  menu closes the program.
+  menu closes the program. The tray menu also turns zapret2 protection and the
+  geneva Auto bypass on and off; when the protection cannot start (no strategy
+  yet, geneva bypasses), zapret2 protection opens with the reason.
 - **No telemetry.** All data stays local.

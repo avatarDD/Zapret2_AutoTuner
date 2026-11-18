@@ -276,6 +276,24 @@ public sealed partial class MainViewModel : ObservableObject
         await StopEverythingAsync();
     }
 
+    /// <summary>
+    /// The tray's "Включить/Выключить защиту zapret2": what the button of «Защита zapret2» does. False when it could
+    /// not start (no strategy yet, geneva bypasses, the Agent refused): that page is made current, where the reason and
+    /// the way out are shown, and the window is to be opened.
+    /// </summary>
+    public async Task<bool> ToggleProtectionAsync()
+    {
+        if (Monitor.ToggleCommand.IsRunning)
+            return true;
+        var wasActive = Monitor.Active;
+        await Monitor.ToggleCommand.ExecuteAsync(null);
+        if (wasActive || Monitor.Active)
+            return true;
+        Monitor.OnShown();
+        Current = Monitor;
+        return false;
+    }
+
     /// <summary>How long "Остановить всё" waits for a search to wind down before it goes on.</summary>
     private static readonly TimeSpan SearchStopWait = TimeSpan.FromSeconds(20);
 

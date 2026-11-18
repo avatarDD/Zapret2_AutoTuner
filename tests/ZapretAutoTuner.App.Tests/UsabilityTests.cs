@@ -283,6 +283,18 @@ public sealed class UsabilityTests : IAsyncLifetime
     }
 
     [AvaloniaFact]
+    public async Task TheTrayOpensTheProtectionWhenItCannotStart()
+    {
+        var main = new MainViewModel(Host);
+        main.Current = main.Auto;
+        SessionState.I.Last = null;
+        Assert.False(await main.ToggleProtectionAsync());
+        Assert.False(main.Monitor.Active);
+        Assert.Same(main.Monitor, main.Current);
+        Assert.Equal(Loc.Loc.I["monitor.no_solution"], main.Monitor.Status);
+    }
+
+    [AvaloniaFact]
     public void TheStatusBarKeepsItsItemsWhileOnlyTheTextChanges()
     {
         var main = new MainViewModel(Host);

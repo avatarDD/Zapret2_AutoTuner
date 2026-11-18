@@ -8,8 +8,9 @@ using ZapretAutoTuner.App.ViewModels;
 namespace ZapretAutoTuner.App.Services;
 
 /// <summary>
-/// The tray icon: a click opens the window, the menu turns the Auto bypass on or off and exits. The window hides to the
-/// tray on minimize (and, if the user chose so, on close): the bypass keeps working while the program runs.
+/// The tray icon: a click opens the window, the menu turns zapret2's protection and the Auto bypass on or off and
+/// exits. The window hides to the tray on minimize (and, if the user chose so, on close): the bypass keeps working
+/// while the program runs.
 /// </summary>
 public sealed class Tray : IDisposable
 {
@@ -19,6 +20,7 @@ public sealed class Tray : IDisposable
     private readonly MainViewModel _main;
     private readonly TrayIcon _icon;
     private readonly NativeMenuItem _toggle;
+    private readonly NativeMenuItem _protection;
     private bool _exiting;
 
     public Tray(Application app, IClassicDesktopStyleApplicationLifetime desktop, MainWindow window, AppHost host, MainViewModel main)
@@ -35,9 +37,11 @@ public sealed class Tray : IDisposable
             if (_main.Auto.ToggleAutoCommand.CanExecute(null))
                 _main.Auto.ToggleAutoCommand.Execute(null);
         };
+        _protection = new NativeMenuItem(Loc.Loc.I["tray.protection_on"]);
+        _protection.Click += async (_, _) => await ToggleProtectionAsync();
         var exit = new NativeMenuItem(Loc.Loc.I["tray.exit"]);
         exit.Click += (_, _) => Exit();
-        var menu = new NativeMenu { open, _toggle, new NativeMenuItemSeparator(), exit };
+        var menu = new NativeMenu { open, _protection, _toggle, new NativeMenuItemSeparator(), exit };
         menu.NeedsUpdate += (_, _) => UpdateTexts();
         _icon = new TrayIcon
         {
@@ -49,6 +53,11 @@ public sealed class Tray : IDisposable
         _icon.Clicked += (_, _) => Show();
         TrayIcon.SetIcons(app, [_icon]);
         host.GenevaAuto.Changed += () => Dispatcher.UIThread.Post(UpdateTexts);
+        main.Monitor.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MonitorViewModel.Active))
+                Dispatcher.UIThread.Post(UpdateTexts);
+        };
         Loc.Loc.I.PropertyChanged += (_, _) => Dispatcher.UIThread.Post(UpdateTexts);
         window.PropertyChanged += (_, e) =>
         {
@@ -74,10 +83,18 @@ public sealed class Tray : IDisposable
         bool running = auto.Running;
         var p = auto.CurrentPhase;
         _toggle.Header = Loc.Loc.I[running ? "tray.auto_off" : "tray.auto_on"];
+        _protection.Header = Loc.Loc.I[_main.Monitor.Active ? "tray.protection_off" : "tray.protection_on"];
         var phase = running ? (Loc.Loc.I.English ? p.En : p.Ru) : Loc.Loc.I["engine.auto_off"];
         // the tooltip has a short limit on Windows (127 characters)
         var tip = "Zapret2 AutoTuner — " + phase;
         _icon.ToolTipText = tip.Length > 120 ? tip[..120] : tip;
+    }
+
+    private async Task ToggleProtectionAsync()
+    {
+        if (!await _main.ToggleProtectionAsync())
+            Show();
+        UpdateTexts();
     }
 
     private void Show()

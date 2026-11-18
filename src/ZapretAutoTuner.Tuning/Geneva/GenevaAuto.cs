@@ -104,6 +104,7 @@ public sealed class GenevaAuto : IAsyncDisposable
     private bool _byName;
     private bool _ext;
     private bool _hostUp;
+    private string? _observerId;
     private IReadOnlyList<string> _blobs = [];
     private List<AutoGroupView> _groups = [];
     private List<string> _problems = [];
@@ -552,6 +553,7 @@ public sealed class GenevaAuto : IAsyncDisposable
                 StartSearchIfDue(ct);
                 await ApplyAsync(ct).ConfigureAwait(false);
                 await PollStatsAsync(ct).ConfigureAwait(false);
+                await PollDetectorAsync(ct).ConfigureAwait(false);
                 Save();
                 failures = 0;
             }
@@ -1011,7 +1013,8 @@ public sealed class GenevaAuto : IAsyncDisposable
                 groups = AutoPlan.Groups(_book.Services, trial, covered);
                 excluded = _book.Excluded;
             }
-            var req = new GenevaAutoApplyRequest();
+            // geneva's detector beside the groups (geneva_c 2.0, ext_auto): a shaper and a freeze the slices miss
+            var req = new GenevaAutoApplyRequest { Observe = true };
             foreach (var h in hosts)
             {
                 var ph = new GenevaAutoHost { Strategy = h.Strategy, Udp = h.Udp };
@@ -1042,6 +1045,7 @@ public sealed class GenevaAuto : IAsyncDisposable
                 // the first answer tells what this geneva_c can do: a change means the plan differs, so it goes again
                 learned = _byName != reply.ByName || _ext != reply.Ext || _hostUp != (reply.Host is not null);
                 _hostUp = reply.Host is not null;
+                _observerId = reply.Observer?.Id;
                 _byName = reply.ByName;
                 _ext = reply.Ext;
                 // the fakes the Agent really loads: a candidate never names one geneva does not have
@@ -1088,6 +1092,57 @@ public sealed class GenevaAuto : IAsyncDisposable
         {
             _applyGate.Release();
         }
+    }
+
+    /// <summary>
+    /// geneva's detector (<c>ext_status</c>): names and addresses it holds impaired with a shaper or a freeze become
+    /// suspicions (the probe without a bypass decides, <see cref="AutoBook.Detect"/>), and its link capacity feeds the
+    /// shaper check of every probe (<see cref="LinkCapacity"/>).
+    /// </summary>
+    private async Task PollDetectorAsync(CancellationToken ct)
+    {
+        string? id;
+        lock (_lock)
+            id = _observerId;
+        if (id is null)
+            return;
+        JsonObject? o;
+        try
+        {
+            var agent = await _agent(ct).ConfigureAwait(false);
+            var r = await agent.ControlAsync(id, "ext_status", null, ct).ConfigureAwait(false);
+            o = r.Ok ? JsonNode.Parse(r.Json) as JsonObject : null;
+        }
+        catch (Exception e) when (e is GenevaRefusedException or Grpc.Core.RpcException or JsonException)
+        {
+            return;
+        }
+        if (o is null)
+            return;
+        foreach (var line in Detected(o, _book, _lock, _now()))
+            AddLog(line);
+    }
+
+    /// <summary>Feeds an <c>ext_status</c> answer into the book; returns the log lines.</summary>
+    internal static List<string> Detected(JsonObject status, AutoBook book, Lock gate, DateTime now)
+    {
+        var log = new List<string>();
+        if (status["capacity"] is JsonValue cv && cv.TryGetValue(out double capacity) && capacity > 0)
+            Core.Diagnostics.LinkCapacity.Shared.Observe(capacity);
+        if (status["impaired"] is not JsonArray impaired)
+            return log;
+        lock (gate)
+        {
+            foreach (var k in impaired.OfType<JsonObject>())
+            {
+                if ((bool?)k["impaired"] == false)
+                    continue;
+                var hit = book.Detect((string?)k["level"] ?? "", (string?)k["key"] ?? "", (string?)k["class"] ?? "", now);
+                if (hit.Count > 0)
+                    log.Add($"Детектор geneva: {(string?)k["key"]} — {(string?)k["class"]}: проверяю {string.Join(", ", hit)}");
+            }
+        }
+        return log;
     }
 
     /// <summary>The groups' counters (geneva's <c>stats</c>): the page's telemetry.</summary>

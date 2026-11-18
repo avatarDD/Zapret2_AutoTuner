@@ -64,6 +64,15 @@ public sealed class AutoService
 
     public List<DateTime> NoConnections { get; set; } = [];
 
+    /// <summary>
+    /// When geneva's detector (<c>--ext-auto observe</c>) held the service's name or address impaired with a class the
+    /// slices cannot see (a shaper, a freeze): enough to suspect it even though its flows look fine.
+    /// </summary>
+    public List<DateTime> Detected { get; set; } = [];
+
+    /// <summary>The detector's class of the last <see cref="Detected"/>, in words.</summary>
+    public string DetectedWhy { get; set; } = "";
+
     /// <summary>When a paused service is looked at again (not blocked, address block, nothing found).</summary>
     public DateTime? NextCheck { get; set; }
 
@@ -132,6 +141,7 @@ public sealed class AutoService
         c.Fails = [.. Fails];
         c.Oks = [.. Oks];
         c.NoConnections = [.. NoConnections];
+        c.Detected = [.. Detected];
         return c;
     }
 }
@@ -335,7 +345,7 @@ public sealed class AutoBook
     private static void Trim(AutoService s, DateTime now)
     {
         var from = now - AutoRules.Window;
-        foreach (var list in new[] { s.Fails, s.Oks, s.NoConnections })
+        foreach (var list in new[] { s.Fails, s.Oks, s.NoConnections, s.Detected })
         {
             list.RemoveAll(t => t < from);
             if (list.Count > 200)
@@ -455,6 +465,12 @@ public sealed class AutoBook
     public static bool Suspicious(AutoService s, out string why)
     {
         why = s.Why;
+        // geneva's detector saw a shaper or a freeze: its flows look fine to the slices, the probe decides
+        if (s.Detected.Count > 0)
+        {
+            why = s.DetectedWhy;
+            return true;
+        }
         if (s.Oks.Count > 0)
             return false;
         int fails = s.Fails.Count + s.NoConnections.Count;
@@ -489,6 +505,43 @@ public sealed class AutoBook
     /// A suspected or degraded service whose probe is due: the most important first (issue 28), within a level a
     /// broken bypass before a new suspicion, then the one used most recently and most.
     /// </summary>
+    /// <summary>
+    /// A key geneva's detector holds impaired (<c>ext_status</c>, <c>impaired</c>): a name (<paramref name="level"/>
+    /// <c>host</c>) or an address (<c>ip</c>) with a class of <see cref="AutoRules.DetectorClasses"/>. The services it
+    /// names — a site by its name or a subdomain of it, any service by an address it was seen at — are suspected unless
+    /// they are already handled (applied, searched, paused after a probe). Returns the names of the newly suspected.
+    /// </summary>
+    public List<string> Detect(string level, string key, string cls, DateTime now)
+    {
+        var hit = new List<string>();
+        if (!AutoRules.DetectorClasses.Contains(cls) || key.Length == 0)
+            return hit;
+        key = key.TrimEnd('.').ToLowerInvariant();
+        foreach (var s in _services.Values)
+        {
+            bool match = level switch
+            {
+                "host" => s.Kind is AutoKind.Web or AutoKind.Quic && (key == s.Host.ToLowerInvariant() || SiteOf(s) is { Length: > 0 } site && (key == site || key.EndsWith("." + site, StringComparison.Ordinal))),
+                "ip" => s.Addresses.Any(a => string.Equals(a.Ip, key, StringComparison.OrdinalIgnoreCase)),
+                _ => false,
+            };
+            if (!match || s.Status is not (AutoStatus.Watching or AutoStatus.Fallback or AutoStatus.Suspected)
+                && !(s.Status is AutoStatus.NotBlocked && (s.NextCheck is null || now >= s.NextCheck)))
+                continue;
+            // one mark a minute keeps the suspicion alive; only a new one is reported
+            bool fresh = s.Detected.Count == 0;
+            if (fresh || now - s.Detected[^1] >= TimeSpan.FromMinutes(1))
+                s.Detected.Add(now);
+            s.DetectedWhy = cls == "THROTTLE" ? "детектор geneva: замедление (шейпер)" : "детектор geneva: заморозка на 8–64 КБ";
+            if (fresh)
+                hit.Add(s.Name);
+        }
+        return hit;
+    }
+
+    private static string SiteOf(AutoService s) => s.Key.StartsWith("web:", StringComparison.Ordinal) ? s.Key[4..]
+        : s.Key.StartsWith("quic:", StringComparison.Ordinal) ? s.Key[5..] : "";
+
     public AutoService? NextToConfirm(DateTime now) => Queue(_services.Values
         .Where(s => s.Status is AutoStatus.Suspected or AutoStatus.Degraded && (s.NextCheck is null || now >= s.NextCheck)), now)
         .FirstOrDefault();

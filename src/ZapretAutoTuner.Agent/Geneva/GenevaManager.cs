@@ -38,6 +38,7 @@ internal sealed class GenevaManager : IDisposable
     private readonly Dictionary<string, GenevaInstance> _auto = new(StringComparer.Ordinal);
     private readonly Dictionary<int, string> _autoFilters = [];
     private GenevaInstance? _host;
+    private GenevaInstance? _observer;
     private string _hostSignature = "";
     private string _hostFilter = "";
     private readonly Lock _prepareLock = new();
@@ -334,10 +335,10 @@ internal sealed class GenevaManager : IDisposable
     }
 
     /// <summary>The commands the UI may send to a run (the control socket also has stop and log_level: those are the Agent's).</summary>
-    public static readonly IReadOnlySet<string> ControlCommands = new HashSet<string>(StringComparer.Ordinal) { "status", "stats", "pause", "resume", "reset_stats", "set_strategy" };
+    public static readonly IReadOnlySet<string> ControlCommands = new HashSet<string>(StringComparer.Ordinal) { "status", "stats", "pause", "resume", "reset_stats", "set_strategy", "ext_status" };
 
     /// <summary>What may be asked of a group of the "Авто" mode: its counters only.</summary>
-    public static readonly IReadOnlySet<string> AutoControlCommands = new HashSet<string>(StringComparer.Ordinal) { "status", "stats" };
+    public static readonly IReadOnlySet<string> AutoControlCommands = new HashSet<string>(StringComparer.Ordinal) { "status", "stats", "ext_status" };
 
     public async Task<(bool Ok, string Json)> ControlAsync(string id, string cmd, string? strategy, CancellationToken ct)
     {
@@ -433,6 +434,7 @@ internal sealed class GenevaManager : IDisposable
             _auto.Clear();
             _autoFilters.Clear();
             _host = null;
+            _observer = null;
             _hostSignature = "";
             _hostFilter = "";
             _firewall?.Replace(AutoOwner, new Dictionary<string, NftQueueRule>());
@@ -643,6 +645,22 @@ internal sealed class GenevaManager : IDisposable
         else
         {
             await StopHostAsync();
+        }
+        if (r.Observe && feats.Contains(ObserveFeature) && feats.Contains("ext"))
+        {
+            try
+            {
+                reply.Observer = await EnsureObserverAsync((geneva ?? Prepare())!, ct);
+            }
+            catch (Exception e) when (e is GenevaStartException or IOException or InvalidOperationException or UnauthorizedAccessException or global::System.ComponentModel.Win32Exception)
+            {
+                reply.Problems.Add("детектор geneva / geneva's detector: " + e.Message);
+                await StopObserverAsync();
+            }
+        }
+        else
+        {
+            await StopObserverAsync();
         }
         if (_firewall is not null && !windows && _firewall.Replace(AutoOwner, rules) is { } err)
         {
@@ -869,6 +887,52 @@ internal sealed class GenevaManager : IDisposable
         var state = new GenevaAutoGroupState { Strategy = "", Id = _host!.Id, Queue = _host.Queue, Pid = _host.Pid };
         state.Requested.AddRange(r.Hosts.Select(h => h.Strategy));
         reply.Host = state;
+    }
+
+    /// <summary>geneva_c's detector: <c>--ext-auto observe</c> (Linux, Windows).</summary>
+    public const string ObserveFeature = "ext_auto";
+
+    /// <summary>
+    /// geneva's detector (<c>docs/EXT.md</c>, X9a–X9c): a <c>run</c> that changes no traffic. Its engine takes only the
+    /// discard port; the detector watches every flow (Linux: NFLOG copies and conntrack counters, rules of geneva's own
+    /// removed on exit; Windows: a SNIFF handle) and finds what a 15 s capture misses — a shaper's shelf (THROTTLE) and a
+    /// freeze at 8–64 KB (FREEZE_N). The mode reads it with <c>ext_status</c>.
+    /// </summary>
+    public static List<string> ObserverArgv(int controlPort, bool windows)
+    {
+        var argv = new List<string>
+        {
+            "run", "--ext", "--ext-auto", "observe", "-s", "\\/", "-p", AutoRules.ObservePort, "--proto", "tcp",
+            "-c", "tcp:" + controlPort.ToString(CultureInfo.InvariantCulture),
+            "-e", "-", "--stats-interval", "60", "--quiet",
+        };
+        if (windows)
+            // the sniffing handle sits one above the engine's: above every group, it sees packets before any strategy
+            argv.AddRange(["--priority", "1000"]);
+        else
+            argv.AddRange(["-q", AutoRules.ObserveQueue.ToString(CultureInfo.InvariantCulture)]);
+        return argv;
+    }
+
+    private Task<GenevaAutoGroupState> EnsureObserverAsync(string geneva, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (_observer is not { HasExited: false })
+        {
+            int port = FreeLoopbackPort();
+            var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+            _observer = Launch("auto", geneva, ObserverArgv(port, OperatingSystem.IsWindows()),
+                new Dictionary<string, string> { ["GENEVA_CONTROL_TOKEN"] = token }, supervise: true, port, token, AutoRules.ObservePort, AutoRules.ObserveQueue);
+        }
+        return Task.FromResult(new GenevaAutoGroupState { Strategy = "", Id = _observer.Id, Queue = _observer.Queue, Pid = _observer.Pid });
+    }
+
+    private async Task StopObserverAsync()
+    {
+        if (_observer is not { } o)
+            return;
+        _observer = null;
+        await StopAsync(o.Id);
     }
 
     /// <summary>The WinDivert filter of the name-based process: TLS and HTTP (and QUIC) both ways.</summary>

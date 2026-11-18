@@ -227,4 +227,16 @@ public static class AutoRules
     public const string HostTcpPorts = "80,443";
 
     public const string HostUdpPorts = "443";
+
+    /// <summary>
+    /// The queue of geneva's detector (<c>run --ext --ext-auto observe</c>, geneva_c 2.0 with <c>ext_auto</c>): it
+    /// changes no traffic, its engine takes only <see cref="ObservePort"/>, and its NFLOG group has the same number.
+    /// </summary>
+    public const int ObserveQueue = 349;
+
+    /// <summary>The port the detector's engine nominally takes (discard): nothing real goes through its queue.</summary>
+    public const string ObservePort = "9";
+
+    /// <summary>The detector's classes the program's own observation cannot see in a 15 s slice: a shaper and a freeze.</summary>
+    public static IReadOnlySet<string> DetectorClasses { get; } = new HashSet<string>(StringComparer.Ordinal) { "THROTTLE", "FREEZE_N" };
 }

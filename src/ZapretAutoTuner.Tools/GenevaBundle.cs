@@ -32,6 +32,9 @@ public sealed class GenevaBundle
     /// <summary>The <c>features</c> name of geneva_c 1.2: <c>--probe external</c> with several workers.</summary>
     public const string ExternalWorkersFeature = "external_workers";
 
+    /// <summary><c>evolve --ext</c> makes x-actions and mutates their parameters (geneva_c after 2.0.0).</summary>
+    public const string XGenFeature = "ext_xgen";
+
     public string EnginePath => Path.Combine(Root, FileName);
 
     public string ManifestPath => Path.Combine(Root, "bundle.json");

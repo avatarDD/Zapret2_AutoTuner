@@ -57,8 +57,11 @@ action   := name ["{" params "}"] ["(" [left] "," [right] ")"]
 триггер `[L7:|FLOW:|META:` (`GenevaStrategyText.NeedsExt`) или заданы
 исключения пользователя (`GenevaRunSettings.ExcludeSubnets/ExcludeDomains`:
 VPN, прокси, банк — их трафик ручной обход не трогает). `evolve --ext`
-ставится сразу после `evolve`, если семена требуют расширений; продолжение
-подбора помнит это в файле `<dir>/ext`. `geneva check --ext` — для x-строк
+ставится сразу после `evolve`, если семена требуют расширений, и всегда,
+если у geneva_c есть фича `ext_xgen` (`GenevaSearchSettings.XGen`): тогда
+подбор сам делает x-действия и мутирует их параметры (`docs/EVOLVE.md`
+geneva_c, «x-действия»), без неё x-действия семян только скрещиваются;
+продолжение подбора помнит это в файле `<dir>/ext`. `geneva check --ext` — для x-строк
 (`GenevaBundle.CheckAsync` делит список на обычные и расширенные). Сетка
 zapret2-методов: `blockcheck --ext --print-grid --test tls12|http3 --level
 quick` (`GenevaBundle.GridAsync`, равномерная выборка колонки geneva).

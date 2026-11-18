@@ -210,20 +210,26 @@ internal sealed class LocalDnsServer : IAsyncDisposable
         _cts.Dispose();
     }
 
+    /// <summary>
+    /// A UDP and a TCP socket on the same loopback port. The port is drawn at random below the dynamic range: Windows
+    /// hands out UDP ephemeral ports one after another, and Hyper-V (GitHub's runners) reserves whole blocks of the
+    /// dynamic range for TCP, so twenty neighbouring ephemeral ports could all be refused (WSAEACCES).
+    /// </summary>
     private static (UdpClient, TcpListener) BindPair()
     {
         for (int i = 0; ; i++)
         {
-            var u = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-            var t = new TcpListener(IPAddress.Loopback, ((IPEndPoint)u.Client.LocalEndPoint!).Port);
+            UdpClient? u = null;
             try
             {
+                u = new UdpClient(new IPEndPoint(IPAddress.Loopback, Random.Shared.Next(20_000, 45_000)));
+                var t = new TcpListener(IPAddress.Loopback, ((IPEndPoint)u.Client.LocalEndPoint!).Port);
                 t.Start();
                 return (u, t);
             }
-            catch (SocketException) when (i < 20)
+            catch (SocketException) when (i < 200)
             {
-                u.Dispose();
+                u?.Dispose();
             }
         }
     }

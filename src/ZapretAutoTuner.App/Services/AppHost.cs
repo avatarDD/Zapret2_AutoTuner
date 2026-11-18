@@ -252,6 +252,16 @@ public sealed class AppSettings
     }
 
     /// <summary>"ask" (default) or "auto": whether the monitor applies a repaired strategy by itself (PLAN 7.3).</summary>
+    /// <summary>
+    /// Which bypass the tray's common switch turned off last ("zapret2" or "auto"), so that it turns the same one on
+    /// again; null before the first time.
+    /// </summary>
+    public string? TrayBypass
+    {
+        get => kb.GetSetting("ui.tray_bypass") is "zapret2" or "auto" ? kb.GetSetting("ui.tray_bypass") : null;
+        set => kb.SetSetting("ui.tray_bypass", value ?? "");
+    }
+
     public string ApplyPolicy
     {
         get => kb.GetSetting("monitor.apply") ?? "ask";

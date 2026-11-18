@@ -201,7 +201,12 @@ geneva не идёт. Если обход перестал работать, с�
    стратегии с живыми счётчиками пакетов и срабатываний. Прогресс подбора,
    найденное и включённый обход сохраняются: остановленный подбор
    продолжается кнопкой «Продолжить», а обход с галочкой «Включать при
-   запуске» возвращается после перезапуска программы. Одновременно работает
+   запуске» возвращается после перезапуска программы. С geneva_c 2.0 галочка
+   «Добавить методы zapret2» начинает подбор и с разрезов и фейков zapret2
+   (тех же, что пробует «Авто»), а в «Библиотеке» рядом со стратегиями Geneva
+   есть все TCP-методы zapret2: любую можно взять для обхода. Список «Не
+   трогать» со страницы «Авто» действует и здесь: при его изменении
+   включённый обход перезапускается. Одновременно работает
    только один движок: geneva (авто или вручную) или zapret2.
 
    ![Ручной подбор geneva](img/manual-geneva.png)
@@ -313,7 +318,14 @@ zapret-gui на роутере (например, 192.168.2.1).
 
 **Трей.** В Windows свёрнутое окно по умолчанию уходит в трей. В настройках
 можно включить и закрытие окна в трей; тогда программа завершается только
-через «Выход» в меню значка.
+через «Выход» в меню значка. В меню значка есть общий тумблер «Включить
+обход / Выключить обход (всё)»: выключение останавливает любой работающий
+обход (защиту zapret2, авто-обход geneva, обход geneva для сайта), подборы
+продолжаются. Два движка не могут обрабатывать трафик одновременно, поэтому
+включение запускает один — тот, что тумблер выключил последним; в первый раз —
+защиту zapret2, если стратегия уже есть, иначе авто-обход geneva. Ниже — пункты
+для каждого обхода отдельно. Если обход включить или выключить не удалось,
+откроется его страница с причиной.
 
 **Телеметрия.** Её нет. Настройки, база знаний и журнал хранятся только
 локально (путь показан в настройках).
@@ -445,8 +457,12 @@ geneva_c 1.1 or newer.
    site loaded with) and Bypass (turns the chosen strategy on, with live packet
    and trigger counters). Search progress, found strategies and the bypass are
    saved: Continue resumes a stopped search, and a bypass with "Turn on at
-   start" comes back after the program restarts. Only one engine runs at a
-   time: geneva (auto or manual) or zapret2.
+   start" comes back after the program restarts. With geneva_c 2.0 the "Add
+   zapret2's methods" box also starts the search from zapret2's splits and
+   fakes (the ones Auto tries), and the Library lists every TCP method of
+   zapret2 next to Geneva's strategies, ready for the bypass. Auto's "never
+   touch" list applies here too: a change restarts a running bypass. Only one
+   engine runs at a time: geneva (auto or manual) or zapret2.
 
 Every menu item says what it is for. Closing the program ends every process it
 started (the check's browser and others); the agent stops the engine and
@@ -522,5 +538,11 @@ Stop on the banner cuts the bridge too.
   a user can swap it.
 - **Tray:** on Windows a minimized window goes to the tray by default; Settings
   can also make closing the window go to the tray, and then Exit in the tray
-  menu closes the program.
+  menu closes the program. The tray menu has a common switch "Turn the bypass
+  on / off (all)": off stops every bypass (zapret2 protection, geneva Auto,
+  geneva's bypass of one site; searches go on). The two engines cannot share
+  the traffic, so on starts one: the one the switch turned off last, the first
+  time zapret2 protection if there is a strategy, else geneva Auto. Items for
+  each bypass follow. When a bypass cannot be switched, its page opens with
+  the reason.
 - **No telemetry.** All data stays local.

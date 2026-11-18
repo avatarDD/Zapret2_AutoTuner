@@ -57,10 +57,16 @@ public sealed class Zapret2v107Tests
             ["bank.ru", "shop.ru", "!mail.ru"],
             ["com", "!^x.com"],
             ["com", "!x.com", "!y.com"],
+            ["!b.ru"],
+            ["^b.ru"],
         ];
         var merged = HostlistEntry.Merge(lists);
-        foreach (var host in new[] { "ru", "bank.ru", "m.bank.ru", "shop.ru", "a.shop.ru", "mail.ru", "m.mail.ru", "x.com", "m.x.com", "y.com", "m.y.com", "z.com", "org" })
+        foreach (var host in new[] { "ru", "bank.ru", "m.bank.ru", "shop.ru", "a.shop.ru", "mail.ru", "m.mail.ru", "x.com", "m.x.com", "y.com", "m.y.com", "z.com", "org", "b.ru", "m.b.ru" })
             Assert.True(lists.Any(l => HostlistEntry.Matches(l, host)) == HostlistEntry.Matches(merged, host), host);
+        // a list that takes only the exempted name (strict) does not bring the names under it back
+        IReadOnlyList<string>[] narrow = [["google.com", "!mail.google.com"], ["^mail.google.com"]];
+        Assert.False(HostlistEntry.Matches(HostlistEntry.Merge(narrow), "x.mail.google.com"));
+        Assert.True(HostlistEntry.Matches(HostlistEntry.Merge(narrow), "www.google.com"));
         // no exemptions: a plain ordered union
         Assert.Equal(["a.com", "b.com", "c.com"], HostlistEntry.Merge([["a.com", "b.com"], ["b.com", "c.com"]]));
     }

@@ -276,6 +276,77 @@ public sealed partial class MainViewModel : ObservableObject
         await StopEverythingAsync();
     }
 
+    /// <summary>
+    /// The tray's "Включить/Выключить защиту zapret2": what the button of «Защита zapret2» does. False when it could
+    /// not start (no strategy yet, geneva bypasses, the Agent refused): that page is made current, where the reason and
+    /// the way out are shown, and the window is to be opened.
+    /// </summary>
+    public async Task<bool> ToggleProtectionAsync()
+    {
+        if (Monitor.ToggleCommand.IsRunning)
+            return true;
+        var wasActive = Monitor.Active;
+        await Monitor.ToggleCommand.ExecuteAsync(null);
+        if (wasActive || Monitor.Active)
+            return true;
+        Monitor.OnShown();
+        Current = Monitor;
+        return false;
+    }
+
+    /// <summary>A bypass works now: zapret2's protection, geneva's "Авто" or geneva's bypass of one site.</summary>
+    public bool BypassOn => Monitor.Active || _host.GenevaAuto.Running || _host.Geneva.RunRunning;
+
+    /// <summary>
+    /// The tray's common switch "Включить/Выключить обход". Off: every bypass of both engines stops (searches go on:
+    /// they are not a bypass), and which one ran is remembered. On: the two engines cannot share the traffic, so one
+    /// starts: the one the switch turned off last, else zapret2's protection when there is a strategy, else geneva's
+    /// "Авто", which needs none. False when it could not start: its page is made current, where the reason is shown,
+    /// and the window is to be opened.
+    /// </summary>
+    public async Task<bool> ToggleBypassAsync()
+    {
+        if (Monitor.ToggleCommand.IsRunning || Auto.ToggleAutoCommand.IsRunning)
+            return true;
+        if (BypassOn)
+        {
+            if (Monitor.Active)
+                _host.Settings.TrayBypass = "zapret2";
+            else if (_host.GenevaAuto.Running)
+                _host.Settings.TrayBypass = "auto";
+            if (Monitor.Active)
+                await Monitor.StopAsync();
+            if (_host.GenevaAuto.Running)
+                await Auto.ToggleAutoCommand.ExecuteAsync(null);
+            if (_host.Geneva.RunRunning)
+            {
+                try
+                {
+                    await _host.Geneva.StopRunAsync(forget: true);
+                }
+                catch (Exception e) when (e is Tuning.Geneva.GenevaRefusedException or Grpc.Core.RpcException or InvalidOperationException or IOException)
+                {
+                    Engine.Status = Loc.Loc.I.F("engine.failed", e.Message);
+                }
+            }
+            RefreshStatus();
+            if (!BypassOn)
+                return true;
+            // something did not stop: its page shows why (the Auto page and the engine page keep the error)
+            Current = Monitor.Active ? Monitor : _host.GenevaAuto.Running ? Auto : Engine;
+            return false;
+        }
+        var which = _host.Settings.TrayBypass ?? (SessionState.I.Last?.Solution is not null ? "zapret2" : "auto");
+        if (which == "zapret2")
+            return await ToggleProtectionAsync();
+        await Auto.ToggleAutoCommand.ExecuteAsync(null);
+        RefreshStatus();
+        if (_host.GenevaAuto.Running)
+            return true;
+        Current = Auto;
+        return false;
+    }
+
     /// <summary>How long "Остановить всё" waits for a search to wind down before it goes on.</summary>
     private static readonly TimeSpan SearchStopWait = TimeSpan.FromSeconds(20);
 

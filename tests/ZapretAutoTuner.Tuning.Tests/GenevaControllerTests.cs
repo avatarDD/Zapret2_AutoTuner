@@ -303,6 +303,29 @@ public sealed class GenevaControllerTests
     }
 
     [Fact]
+    public async Task A_new_never_touch_list_restarts_the_running_bypass_with_it()
+    {
+        var rig = new Rig();
+        await using var g = rig.Make();
+        await g.StartRunAsync("[TCP:flags:PA]-fragment{tcp:8:True}-| \\/", "443", autoStart: true, default);
+        await Until(() => g.RunRunning);
+        Assert.Empty(rig.Agent.Started[0].ExcludeSubnets);
+        // the important list changes nothing for the bypass
+        g.Lists = g.Lists with { Important = ["youtube.com"] };
+        Assert.Null(g.ListsRestart);
+        g.Lists = g.Lists with { Excluded = ["203.0.113.0/24", "vpn.example"] };
+        Assert.NotNull(g.ListsRestart);
+        await g.ListsRestart!;
+        Assert.Equal(["g1"], rig.Agent.Stopped);
+        var again = rig.Agent.Started[^1];
+        Assert.Equal("run", again.Mode);
+        Assert.Equal(["203.0.113.0/24"], again.ExcludeSubnets);
+        Assert.Equal(["vpn.example"], again.ExcludeDomains);
+        Assert.True(g.RunRunning);
+        Assert.True(g.State.Active?.AutoStart);
+    }
+
+    [Fact]
     public void A_damaged_state_starts_fresh_and_found_strategies_merge()
     {
         // geneva (its "Авто" mode) is the default engine; a saved choice is kept as it was

@@ -316,7 +316,7 @@ public sealed partial class ExpertViewModel : PageViewModel
     private bool CanUseStrategy() => !Checking && StrategyText.Trim().Length > 0 && SiteText.Trim().Length > 0;
 
     /// <summary>
-    /// «Использовать для сайта»: the strategy for the site as the current solution (one TCP 80,443 profile limited
+    /// «Использовать для сайта»: the strategy for the site as the current solution (one TCP 443 profile limited
     /// to the site), which «Экспортировать» and «Включить на этом компьютере» then take.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanUseStrategy))]

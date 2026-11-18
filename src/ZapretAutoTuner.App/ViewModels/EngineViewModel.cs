@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ZapretAutoTuner.App.Services;
 using ZapretAutoTuner.Core.Geneva;
+using ZapretAutoTuner.Core.Geneva.Auto;
 using ZapretAutoTuner.Tools;
 using ZapretAutoTuner.Tuning.Geneva;
 
@@ -135,6 +136,10 @@ public sealed partial class EngineViewModel : PageViewModel
     [ObservableProperty]
     private bool _seedLibrary = true;
 
+    /// <summary>zapret2's methods as geneva_c 2.0 x-actions among the seeds (the "Авто" mode's quick round).</summary>
+    [ObservableProperty]
+    private bool _seedZapret2 = true;
+
     [ObservableProperty]
     private bool _searching;
 
@@ -203,9 +208,13 @@ public sealed partial class EngineViewModel : PageViewModel
             return;
         var seeds = new List<string>();
         if (SeedLibrary && !resume)
-        {
-            // the found strategies of this site first, then the library's best: geneva starts from them
             seeds.AddRange(_host.Geneva.State.Found.Where(f => string.Equals(f.Host, t.Host, StringComparison.OrdinalIgnoreCase)).Select(f => f.Strategy).Take(20));
+        // then zapret2's methods (geneva_c 2.0): the search crosses them with Geneva's own actions
+        if (SeedZapret2 && !resume && await HasXActionsAsync())
+            seeds.AddRange(Zapret2Methods(t.Port));
+        if (SeedLibrary && !resume)
+        {
+            // and the library's best: geneva starts from them
             try
             {
                 seeds.AddRange((await _host.GenevaBundle.LibraryAsync()).Where(l => !l.ServerSide && l.Rate > 0).OrderByDescending(l => l.Rate).Select(l => l.Strategy).Take(GenevaArgv.MaxSeeds - seeds.Count));
@@ -356,13 +365,64 @@ public sealed partial class EngineViewModel : PageViewModel
             Library.Clear();
             foreach (var l in all.Where(l => !l.ServerSide).OrderByDescending(l => l.Rate))
                 Library.Add(new LibraryRow(l.Strategy, l.Rate.ToString(CultureInfo.InvariantCulture) + "%", $"{l.Country} / {l.Test}", l.Description));
-            LibraryStatus = L.F("engine.library_loaded", Library.Count);
+            int geneva = Library.Count;
+            // zapret2's methods as geneva_c 2.0 x-actions: the ones the "Авто" mode tries, to take for the bypass by hand
+            if (await HasXActionsAsync())
+            {
+                foreach (var (strategy, where) in Zapret2Library())
+                    Library.Add(new LibraryRow(strategy, "—", where, L.F("engine.library_zapret2_row", XActions(strategy))));
+            }
+            LibraryStatus = Library.Count > geneva ? L.F("engine.library_loaded_x", geneva, Library.Count - geneva) : L.F("engine.library_loaded", geneva);
         }
         catch (Exception e) when (e is InvalidOperationException or IOException or FormatException or System.ComponentModel.Win32Exception)
         {
             LibraryStatus = L.F("engine.failed", e.Message);
         }
     }
+
+    private bool? _xActions;
+
+    /// <summary>
+    /// The bundled geneva knows geneva_c 2.0's x-actions (<c>ext_xact</c>), asked once; false when it cannot be asked
+    /// (asked again next time).
+    /// </summary>
+    private async Task<bool> HasXActionsAsync()
+    {
+        if (_xActions is { } known)
+            return known;
+        if (!_host.GenevaBundle.Exists)
+            return false;
+        try
+        {
+            return (_xActions = (await _host.GenevaBundle.GetVersionAsync()).Features.Contains("ext_xact")).Value;
+        }
+        catch (Exception e) when (e is InvalidOperationException or IOException or FormatException or System.Text.Json.JsonException or System.ComponentModel.Win32Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The seeds of zapret2's methods for a site search: the "Авто" mode's quick round for TLS, the HTTP ones for a site
+    /// on port 80 (xhttp acts there; the TLS splits find no ClientHello).
+    /// </summary>
+    internal static IReadOnlyList<string> Zapret2Methods(int port) => port == 80 ? AutoCandidates.XHttp : AutoCandidates.XTcp;
+
+    /// <summary>
+    /// Every TCP method of zapret2 the "Авто" mode tries, with where it acts: what the single-strategy bypass (TCP
+    /// ports) can take. The QUIC and UDP ones stay with the "Авто" mode.
+    /// </summary>
+    internal static IEnumerable<(string Strategy, string Where)> Zapret2Library() =>
+        AutoCandidates.XTcp.Select(x => (x, "zapret2 / TLS"))
+            .Concat(AutoCandidates.XTcpWide.Select(x => (x, "zapret2 / TLS")))
+            .Concat(AutoCandidates.XHttp.Select(x => (x, "zapret2 / HTTP")))
+            .Concat(AutoCandidates.XTcpAny.Select(x => (x, "zapret2 / TCP")))
+            .DistinctBy(x => x.Item1, StringComparer.Ordinal);
+
+    /// <summary>The x-actions a strategy uses, in order: what the library row says about it.</summary>
+    internal static string XActions(string strategy) =>
+        string.Join(", ", System.Text.RegularExpressions.Regex.Matches(strategy, @"(?<![a-z0-9_])x[a-z0-9]+(?=[{(,)-]|$)")
+            .Select(m => m.Value).Distinct(StringComparer.Ordinal));
 
     [RelayCommand]
     private void UseLibrary(LibraryRow row)

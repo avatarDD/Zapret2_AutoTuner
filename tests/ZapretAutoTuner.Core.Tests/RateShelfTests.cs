@@ -72,7 +72,8 @@ public class RateShelfTests
     [Fact]
     public void A_download_too_short_for_windows_gives_its_average_and_is_never_a_shelf()
     {
-        Assert.Null(RateShelf.Burst(500_000, TimeSpan.FromSeconds(0.2)));
+        Assert.Null(RateShelf.Burst(500_000, TimeSpan.FromSeconds(0.5)));
+        Assert.Null(RateShelf.Burst(4_000_000, TimeSpan.FromSeconds(0.05)));
         var r = RateShelf.Burst(4_000_000, TimeSpan.FromSeconds(0.5));
         Assert.Equal(8_000_000, r!.Rate);
         Assert.False(RateShelf.IsShelf(r, 100_000_000));

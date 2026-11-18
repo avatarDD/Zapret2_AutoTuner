@@ -147,13 +147,12 @@ public static class ClassifierRunner
 
         // the link's capacity for the shaper check: the fastest download seen lately, this run's included
         var capacity = o.Capacity ?? LinkCapacity.Shared;
-        double cap = capacity.Current();
         foreach (var a in observations)
         {
             foreach (var r in a.Baseline.Append(a.Speed))
                 capacity.Judge(r?.Rate);
         }
-        cap = capacity.Current();
+        double cap = capacity.Current();
         var target = new TargetObservation
         {
             Host = host,

@@ -165,6 +165,12 @@ public sealed class AutoBook
 {
     private readonly Dictionary<string, AutoService> _services = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTime> _dnsPoisoned = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The sites the running name-based process covers (<see cref="AutoPlan.ByNameCovers"/>, set after each apply): its
+    /// strategy reaches them on any address, so a failure on a new one counts against the strategy.
+    /// </summary>
+    public IReadOnlySet<string> ByName { get; set; } = new HashSet<string>();
     private AutoLists _lists = new();
     private AutoNameList _important = AutoNameList.Empty;
     private AutoNameList _unimportant = AutoNameList.Empty;
@@ -273,7 +279,8 @@ public sealed class AutoBook
             }
             // an address the applied strategy did not cover yet (a new CDN host): this flow went without the bypass,
             // and its failure says nothing about the strategy; the address joins the set now
-            bool uncovered = s.IsActive && x.Kind != AutoKind.LocalPort && !s.Addresses.Any(a => a.Ip == Norm(x.Server.Address));
+            bool uncovered = s.IsActive && x.Kind != AutoKind.LocalPort && !ByName.Contains(s.Key)
+                && !s.Addresses.Any(a => a.Ip == Norm(x.Server.Address));
             s.LastSeen = x.Time > s.LastSeen ? x.Time : s.LastSeen;
             if (!string.IsNullOrEmpty(x.Host))
                 s.Host = x.Host;
@@ -333,7 +340,7 @@ public sealed class AutoBook
 
     private static void AddAddress(AutoService s, IPAddress a, DateTime seen)
     {
-        var ip = a.ToString();
+        var ip = Norm(a);
         int i = s.Addresses.FindIndex(x => x.Ip == ip);
         if (i >= 0)
             s.Addresses[i] = s.Addresses[i] with { Seen = seen > s.Addresses[i].Seen ? seen : s.Addresses[i].Seen };

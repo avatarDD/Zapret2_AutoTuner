@@ -140,7 +140,7 @@ public sealed class GenevaAuto : IAsyncDisposable
         lock (_lock)
             gone = _book.SetLists(_controller.State.Lists);
         foreach (var name in gone)
-            AddLog($"{name}: в списке «не трогать», обход к нему больше не применяется");
+            AddLog($"{name}: в списке «не трогать», обход к нему больше не применяется / on the \"do not touch\" list, no bypass for it any more");
         Save(force: true);
         CancellationToken loop;
         lock (_lock)
@@ -658,7 +658,7 @@ public sealed class GenevaAuto : IAsyncDisposable
             if (_book.Preempting(key, _now()) is not { } next)
                 return;
             cts = _searchCts;
-            line = $"Прерываю подбор для {_current} ради более важного: {next.Name} (продолжу позже)";
+            line = $"Прерываю подбор для {_current} ради более важного: {next.Name} (продолжу позже) / pausing the search for {_current} for a more important {next.Name} (to go on later)";
         }
         AddLog(line);
         try
@@ -1046,6 +1046,7 @@ public sealed class GenevaAuto : IAsyncDisposable
                 // the first answer tells what this geneva_c can do: a change means the plan differs, so it goes again
                 learned = _byName != reply.ByName || _ext != reply.Ext || _hostUp != (reply.Host is not null);
                 _hostUp = reply.Host is not null;
+                _book.ByName = _hostUp ? AutoPlan.ByNameCovers(_book.Services, hosts) : new HashSet<string>();
                 _observerId = reply.Observer?.Id;
                 _byName = reply.ByName;
                 _ext = reply.Ext;
@@ -1141,12 +1142,12 @@ public sealed class GenevaAuto : IAsyncDisposable
                 if ((string?)k["class"] == "DNS_POISON" && (string?)k["level"] == "host")
                 {
                     if (book.DnsPoisoned((string?)k["key"] ?? "", now))
-                        log.Add($"Детектор geneva: DNS подменяет ответ для {(string?)k["key"]} — стратегия тут не поможет, включите DoH (DNS через HTTPS) в браузере или системе");
+                        log.Add($"Детектор geneva: DNS подменяет ответ для {(string?)k["key"]} — стратегия тут не поможет, включите DoH (DNS через HTTPS) в браузере или системе / geneva's detector: DNS answers for {(string?)k["key"]} are forged — no strategy helps, turn on DoH (DNS over HTTPS) in the browser or the system");
                     continue;
                 }
                 var hit = book.Detect((string?)k["level"] ?? "", (string?)k["key"] ?? "", (string?)k["class"] ?? "", now);
                 if (hit.Count > 0)
-                    log.Add($"Детектор geneva: {(string?)k["key"]} — {(string?)k["class"]}: проверяю {string.Join(", ", hit)}");
+                    log.Add($"Детектор geneva: {(string?)k["key"]} — {(string?)k["class"]}: проверяю {string.Join(", ", hit)} / geneva's detector: {(string?)k["key"]} — {(string?)k["class"]}: checking {string.Join(", ", hit)}");
             }
         }
         return log;

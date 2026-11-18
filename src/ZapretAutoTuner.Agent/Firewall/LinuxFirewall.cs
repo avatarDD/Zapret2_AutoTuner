@@ -108,6 +108,8 @@ internal sealed class FirewallManager
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<string, NftQueueRule> _rules = [];
+    private readonly Dictionary<string, long> _since = [];
+    private long _seq;
     private readonly List<IFirewallBackend> _candidates;
     private readonly AgentStateStore _state;
     private readonly Sysctl _sysctl;
@@ -218,9 +220,14 @@ internal sealed class FirewallManager
         }
         if (_candidates.Count == 0)
             return "не найден ни nft, ни iptables: установите пакет nftables";
-        // in the order of their owners: the "Авто" mode's catch-all rule by name ("geneva-auto/~host") comes after its
-        // groups' rules by address, so a group's packet never reaches it (nft takes the first queue rule that matches)
-        var rules = _rules.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => r.Value).ToList();
+        // in the order the owners first came (an engine started earlier sees its packets first, as before), except a
+        // catch-all owner ("geneva-auto/~host", by name) after every other rule: a group's packet never reaches it
+        // (nft takes the first queue rule that matches)
+        foreach (var k in _since.Keys.Where(k => !_rules.ContainsKey(k)).ToList())
+            _since.Remove(k);
+        foreach (var k in _rules.Keys.Where(k => !_since.ContainsKey(k)).ToList())
+            _since[k] = ++_seq;
+        var rules = _rules.OrderBy(r => r.Key.Contains("/~", StringComparison.Ordinal)).ThenBy(r => _since[r.Key]).Select(r => r.Value).ToList();
         if (_active is not null)
             return _active.Apply(rules, _fwmark);
         var errors = new List<string>();

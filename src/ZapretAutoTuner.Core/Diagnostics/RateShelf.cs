@@ -40,9 +40,12 @@ public static class RateShelf
     /// </summary>
     public const double TrustRate = 4 * FloorRate;
 
-    /// <summary>A download too short for windows (a fast link): only its average, never a shelf (cv 1).</summary>
+    /// <summary>
+    /// A download too short for windows (a fast link): only its average, never a shelf (cv 1). At least 512 KB over
+    /// 200 ms: a shorter one measures the socket buffers, not the link.
+    /// </summary>
     public static RateReading? Burst(long bytes, TimeSpan elapsed) =>
-        bytes >= 1024 * 1024 && elapsed > TimeSpan.Zero
+        bytes >= 512 * 1024 && elapsed >= TimeSpan.FromMilliseconds(200)
             ? new RateReading(bytes / elapsed.TotalSeconds, 1, bytes / elapsed.TotalSeconds, 0, bytes)
             : null;
 

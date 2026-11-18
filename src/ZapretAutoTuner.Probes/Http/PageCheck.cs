@@ -40,8 +40,11 @@ public static class PageCheck
 
         if (c.PadBytes <= 0 && r.Complete && r.BodyBytes < 128 * 1024)
         {
-            var padded = await probe(c with { PadBytes = ProbeCriteria.VolumePad, MinBytes = 128 * 1024 }, ct).ConfigureAwait(false);
-            if (!padded.Passes(ProbeLevel.L2Body, 128 * 1024) && Classifier.IsPaddedCutoff(padded))
+            var pc = c with { PadBytes = ProbeCriteria.VolumePad, MinBytes = 128 * 1024 };
+            var padded = await probe(pc, ct).ConfigureAwait(false);
+            // a server may refuse a 24 KB request by itself (a reset or silence, no answer): only a cut inside the
+            // answer counts, and only when it happens again, so a page that is not blocked is never searched (rule 5)
+            if (CutInsideAnswer(padded) && CutInsideAnswer(padded = await probe(pc, ct).ConfigureAwait(false)))
             {
                 var learned = c with { MinBytes = 128 * 1024, PadBytes = ProbeCriteria.VolumePad };
                 return new PageCheckResult(padded, learned, $"обрыв на 16 КБ: раздутый запрос ({padded.BytesOut} B) обрывается");
@@ -49,6 +52,10 @@ public static class PageCheck
         }
         return new PageCheckResult(r, c, null);
     }
+
+    private static bool CutInsideAnswer(ProbeResult p) =>
+        !p.Passes(ProbeLevel.L2Body, 128 * 1024) && Classifier.IsPaddedCutoff(p)
+        && (p.Error is ProbeError.Stalled or ProbeError.Truncated || p.BytesIn > 0);
 
     /// <summary>The probe options with the criterion.</summary>
     public static HttpProbeOptions Apply(HttpProbeOptions o, ProbeCriteria c) => o with

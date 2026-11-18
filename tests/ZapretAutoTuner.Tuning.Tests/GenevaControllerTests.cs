@@ -101,7 +101,7 @@ public sealed class GenevaControllerTests
             lock (asked)
                 asked.Add(c);
             // a small page opens; padded, the flow dies at the 16 KB cut-off — until a strategy (after the baseline) works
-            if (c.PadBytes > 0 && n < 2)
+            if (c.PadBytes > 0 && n < 3)
                 return Task.FromResult(new ProbeResult { Host = host, Address = "192.0.2.1", ConnectOk = true, TlsOk = true, Error = ProbeError.Stalled, StalledAt = 4_000, BytesIn = 4_000, BytesOut = 26_000 });
             return Task.FromResult(Loaded(host) with { BodyBytes = 3_000 });
         });

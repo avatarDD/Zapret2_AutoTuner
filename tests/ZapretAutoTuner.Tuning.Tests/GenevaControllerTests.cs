@@ -415,4 +415,67 @@ public sealed class GenevaControllerTests
         Assert.Equal(BypassEngine.Geneva, round.Engine);
         Assert.Single(round.Found);
     }
+
+    [Fact]
+    public async Task A_finished_search_opens_what_it_found_in_the_programs_browser_through_a_short_bypass()
+    {
+        var rig = new Rig();
+        await using var g = rig.Make();
+        var opened = new List<(string Host, int Port, bool Ready)>();
+        g.Browser = new GenevaBrowser(() => true, (host, port, address, ct) =>
+        {
+            // the strategy runs while the page opens
+            lock (opened)
+                opened.Add((host, port, rig.Agent.Started.Count(r => r.Mode == "run") > rig.Agent.Stopped.Count(id => rig.Agent.Started[int.Parse(id[1..], System.Globalization.CultureInfo.InvariantCulture) - 1].Mode == "run")));
+            Assert.Null(address);
+            return Task.FromResult<PageLoad?>(new PageLoad { Url = GenevaBrowserCheck.Url(host, port), LoadFired = true });
+        });
+        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3 }, default);
+        await Until(() => !g.SearchRunning);
+
+        var run = Assert.Single(rig.Agent.Started, r => r.Mode == "run");
+        Assert.Equal("[TCP:flags:PA]-fragment{tcp:8:True}-| \\/", run.Strategy);
+        Assert.Equal("443", run.Ports);
+        Assert.StartsWith("geneva-check:", run.Tag, StringComparison.Ordinal);
+        Assert.Equal([("blocked.example", 443, true)], opened);
+        // the short bypass is gone, the verdict is kept with the strategy, and the page's own bypass never came up
+        Assert.Contains("g2", rig.Agent.Stopped);
+        Assert.False(g.Run.Running);
+        Assert.True(Assert.Single(GenevaState.Parse(rig.Store.Json).Found).Browser);
+        Assert.Equal("finished", g.Search.Ended?.En);
+    }
+
+    [Fact]
+    public async Task A_found_strategy_that_does_not_open_in_the_browser_is_marked()
+    {
+        var rig = new Rig();
+        await using var g = rig.Make();
+        g.Browser = new GenevaBrowser(() => true, (host, port, _, _) => Task.FromResult<PageLoad?>(new PageLoad { Url = GenevaBrowserCheck.Url(host, port), Error = "net::ERR_CONNECTION_RESET" }));
+        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3 }, default);
+        await Until(() => !g.SearchRunning);
+        Assert.False(Assert.Single(GenevaState.Parse(rig.Store.Json).Found).Browser);
+        Assert.Contains(g.Log, l => l.Contains("не открылся во встроенном браузере", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Without_the_switch_or_the_browser_there_is_no_final_check()
+    {
+        foreach (var (on, has) in new[] { (false, true), (true, false) })
+        {
+            var rig = new Rig();
+            await using var g = rig.Make();
+            int opens = 0;
+            g.BrowserCheck = on;
+            g.Browser = new GenevaBrowser(() => has, (_, _, _, _) =>
+            {
+                Interlocked.Increment(ref opens);
+                return Task.FromResult<PageLoad?>(null);
+            });
+            await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3 }, default);
+            await Until(() => !g.SearchRunning);
+            Assert.DoesNotContain(rig.Agent.Started, r => r.Mode == "run");
+            Assert.Equal(0, opens);
+            Assert.Null(Assert.Single(GenevaState.Parse(rig.Store.Json).Found).Browser);
+        }
+    }
 }

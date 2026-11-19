@@ -407,14 +407,13 @@ public sealed class ExportTests
         Assert.Equal(2, s.Profiles.Count);               // the disabled QUIC profile stays out
         Assert.Contains(s.Hostlists.Values, l => l.SequenceEqual(["youtube.com", "googlevideo.com"]));
         Assert.Equal(Encoding.ASCII.GetBytes("\u0016\u0003\u0001\0\u0005hello"), s.Blobs["my_tls"]);
-        // a catalog name of the GUI (here an init_vars pattern) comes with the file behind it, an inline
-        // --blob declaration with its bytes (the declaration itself is dropped from the args)
-        Assert.True(s.Blobs.ContainsKey("tls_google"));
+        // a catalog name of the GUI comes with the file behind it, an inline --blob declaration with its
+        // bytes (the declaration itself is dropped from the args)
+        Assert.True(s.Blobs.ContainsKey("fake_tls_1"));
         Assert.Equal(Convert.FromHexString("1603010000"), s.Blobs["my_hex"]);
-        // the user's script and the GUI's own ones it loads by function (fakemultisplit) and value (init_vars)
+        // the user's script and the GUI's own one it loads by function (fakemultisplit)
         Assert.True(s.LuaFiles.ContainsKey("my-twice.lua"));
         Assert.True(s.LuaFiles.ContainsKey("fakemultisplit.lua"));
-        Assert.True(s.LuaFiles.ContainsKey("init_vars.lua"));
         Assert.Equal("Моя: YouTube", s.Meta.Title);
         // lists/other.txt is the GUI's built-in list: not in the bundle, so a warning, not a failure
         Assert.Contains(r.Warnings, w => w.Contains("lists/other.txt", StringComparison.Ordinal));

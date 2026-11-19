@@ -209,7 +209,8 @@ public static partial class StrategyImporter
     /// <summary>
     /// Blob names a profile takes from the GUI's registry. tls_client_hello_clone writes its clone into the desync
     /// variable named by blob= and reads the blob named by fallback=; later calls of the same profile use the clone
-    /// by that variable name, which is not a blob.
+    /// by that variable name, which is not a blob. fake_blob= (the GUI's fakemultisplit/fakemultidisorder) and
+    /// dataxor= (ippxor) name blobs too, as in zapret-gui's bundle_import.desync_blob_refs.
     /// </summary>
     private static IEnumerable<string> RegistryBlobRefs(Profile p)
     {
@@ -222,7 +223,7 @@ public static partial class StrategyImporter
             {
                 if (a.Value is null)
                     continue;
-                if (clone ? a.Name == "fallback" : (a.Name is "blob" or "pattern" or "seqovl_pattern") && !produced.Contains(a.Value))
+                if (clone ? a.Name == "fallback" : (a.Name is "blob" or "pattern" or "seqovl_pattern" or "fake_blob" or "dataxor") && !produced.Contains(a.Value))
                     yield return a.Value;
             }
         }

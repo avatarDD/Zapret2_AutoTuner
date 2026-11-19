@@ -439,11 +439,13 @@ public sealed class ExportTests
         const string bundle = """
             {"format":"zapret-autotuner-bundle","format_version":1,
              "strategy":{"id":"x","name":"x","profiles":[{"id":"p1","name":"p1","enabled":true,
-               "args":"--filter-tcp=443 --lua-desync=tls_client_hello_clone:blob=ch:fallback=fb --lua-desync=fake:blob=ch"}]},
+               "args":"--filter-tcp=443 --lua-desync=tls_client_hello_clone:blob=ch:fallback=fb --lua-desync=fake:blob=ch --lua-desync=fakemultisplit:pos=1:fake_blob=gone"}]},
              "blobs":[{"name":"fb","base64":"FgMB"}]}
             """;
         var r = StrategyImporter.Import(bundle);
         Assert.DoesNotContain(r.Warnings, w => w.Contains("ch.bin", StringComparison.Ordinal));
+        // fake_blob= names a blob of the GUI's registry: a missing one is reported
+        Assert.Contains(r.Warnings, w => w.Contains("gone", StringComparison.Ordinal));
         Assert.Equal(new byte[] { 0x16, 0x03, 0x01 }, r.Solution.Blobs["fb"]);
     }
 

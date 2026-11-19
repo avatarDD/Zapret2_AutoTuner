@@ -531,7 +531,7 @@ public static class HttpProbe
         public int Port;
         public bool Tls;
         public string? Sni;
-        public bool ConnectOk, TlsOk, Complete, RstSeen, CertValid, Head;
+        public bool ConnectOk, TlsOk, Complete, RstSeen, CertValid, CertNameOk, Head;
         public int? HttpStatus;
         public long BytesIn, BodyBytes;
         public long? ContentLength, StalledAt;
@@ -571,6 +571,7 @@ public static class HttpProbe
             }
             bool nameOk = c.MatchesHostname(o.Host, allowWildcards: true, allowCommonName: false);
             CertValid = chainOk && nameOk;
+            CertNameOk = nameOk;
             if (!chainOk)
                 CertError = "цепочка сертификата не доверенная";
             else if (!nameOk)
@@ -636,6 +637,7 @@ public static class HttpProbe
             Alpn = Alpn,
             TlsVersion = TlsVersion,
             CertValid = CertValid,
+            CertNameOk = CertNameOk,
             CertSubject = CertSubject,
             CertIssuer = CertIssuer,
             CertNames = CertNames,

@@ -83,11 +83,12 @@ public sealed class GenevaTools(McpSession session)
             "Pins (or unpins) the strategy applied to a service: a pinned strategy stays even when the service fails again, and no new search replaces it.",
             S.Obj([("key", S.Str("The service's key", 300)), ("pinned", S.Bool("true pins, false unpins"))], "key", "pinned")),
         new("geneva_auto_lists", McpScope.Control,
-            "Reads or replaces the user's lists for geneva (domains with subdomains, addresses, subnets): important and unimportant services of the \"Авто\" mode, and excluded — never touched by any geneva bypass (a VPN or proxy server). A list left out stays as it is. Also whether site strategies are applied by name (geneva_c 2.0).",
+            "Reads or replaces the user's lists for geneva: important and unimportant services of the \"Авто\" mode, no_search — services no bypass is looked for (they leave the problems; an applied strategy stays), and excluded — never touched by any geneva bypass (a VPN or proxy server). important, unimportant and no_search take domains (with subdomains), zones (*.ru), patterns (*google*), addresses, subnets and AS numbers (AS12389, its announced prefixes are fetched from RIPEstat, only the number is sent); excluded takes domains, addresses and subnets only. A list left out stays as it is. Also whether site strategies are applied by name (geneva_c 2.0).",
             S.Obj([
                 ("important", S.Arr("Important services", S.Str("A domain, an address or a subnet", 260), 200)),
                 ("unimportant", S.Arr("Unimportant services", S.Str("A domain, an address or a subnet", 260), 200)),
                 ("excluded", S.Arr("Never touched by geneva", S.Str("A domain, an address or a subnet", 260), 200)),
+                ("no_search", S.Arr("Not searched for", S.Str("A domain, a zone, a pattern, an address, a subnet or an AS", 260), 200)),
                 ("known_important", S.Bool("YouTube, Discord, Telegram, WhatsApp, Instagram and X count as important (default true)")),
                 ("by_name", S.Bool("Apply site strategies by name too (geneva_c 2.0; default true)")),
             ])),
@@ -156,7 +157,7 @@ public sealed class GenevaTools(McpSession session)
                     ? new JsonObject { ["ok"] = true, ["key"] = key, ["pinned"] = pinned }
                     : McpErrors.Error("the service has no applied strategy to pin / у сервиса нет применённой стратегии");
             })),
-            ["geneva_auto_lists"] = (a, ct) => Task.FromResult(Lists(a)),
+            ["geneva_auto_lists"] = (a, ct) => ListsAsync(a, ct),
             ["geneva_auto_reset"] = async (a, ct) =>
             {
                 if (session.Host.GenevaAuto is not { } auto)
@@ -212,6 +213,7 @@ public sealed class GenevaTools(McpSession session)
                 ["triggered"] = g.Stats?.Triggered,
                 ["rate"] = Math.Round(g.Rate, 1),
                 ["by_name"] = g.ByName ? true : null,
+                ["trial"] = g.Trial ? true : null,
             });
         }
         return new JsonObject
@@ -245,7 +247,7 @@ public sealed class GenevaTools(McpSession session)
         return act(auto, key);
     }
 
-    private JsonObject Lists(JsonObject a)
+    private async Task<JsonObject> ListsAsync(JsonObject a, CancellationToken ct)
     {
         if (session.Host.Geneva is not { } g)
             return NoGeneva();
@@ -255,18 +257,21 @@ public sealed class GenevaTools(McpSession session)
                 return null;
             return [.. arr.Select(x => ((string?)x ?? "").Trim()).Where(x => x.Length > 0)];
         }
-        var lists = g.Lists;
+        var before = g.Lists;
+        var lists = before;
         var changed = false;
-        foreach (var (name, apply) in new (string, Func<List<string>, Core.Geneva.Auto.AutoLists>)[]
+        foreach (var (name, apply, masks) in new (string, Func<List<string>, Core.Geneva.Auto.AutoLists>, bool)[]
         {
-            ("important", l => lists with { Important = l }),
-            ("unimportant", l => lists with { Unimportant = l }),
-            ("excluded", l => lists with { Excluded = l }),
+            ("important", l => lists with { Important = l }, true),
+            ("unimportant", l => lists with { Unimportant = l }, true),
+            ("excluded", l => lists with { Excluded = l }, false),
+            ("no_search", l => lists with { NoSearch = l }, true),
         })
         {
             if (Read(name) is not { } l)
                 continue;
-            if (l.Select(Core.Geneva.Auto.AutoNameList.Problem).FirstOrDefault(p => p is not null) is { } bad)
+            Func<string, string?> check = masks ? Core.Geneva.Auto.AutoNameList.MaskProblem : Core.Geneva.Auto.AutoNameList.Problem;
+            if (l.Select(check).FirstOrDefault(p => p is not null) is { } bad)
                 return McpErrors.Error($"{name}: {bad}");
             lists = apply(l);
             changed = true;
@@ -276,8 +281,14 @@ public sealed class GenevaTools(McpSession session)
             lists = lists with { KnownImportant = known };
             changed = true;
         }
+        var problems = new List<string>();
         if (changed)
+        {
+            (lists, problems) = await Tuning.Geneva.AsnPrefixes.RefreshAsync(lists, Tuning.Geneva.AsnPrefixes.DefaultGet, DateTime.UtcNow, ct).ConfigureAwait(false);
+            // the fetch takes a while: what the page saved meanwhile is kept
+            lists = Tuning.Geneva.AsnPrefixes.Merge(lists, before, g.Lists);
             g.Lists = lists;
+        }
         if ((bool?)a["by_name"] is { } byName)
             g.ByName = byName;
         return new JsonObject
@@ -286,6 +297,9 @@ public sealed class GenevaTools(McpSession session)
             ["important"] = new JsonArray([.. lists.Important.Select(x => (JsonNode)x)]),
             ["unimportant"] = new JsonArray([.. lists.Unimportant.Select(x => (JsonNode)x)]),
             ["excluded"] = new JsonArray([.. lists.Excluded.Select(x => (JsonNode)x)]),
+            ["no_search"] = new JsonArray([.. lists.NoSearch.Select(x => (JsonNode)x)]),
+            ["asn_networks"] = lists.AsnPrefixes.Count == 0 ? null : new JsonObject(lists.AsnPrefixes.Select(kv => KeyValuePair.Create("AS" + kv.Key, (JsonNode?)kv.Value.Count))),
+            ["problems"] = problems.Count == 0 ? null : new JsonArray([.. problems.Select(x => (JsonNode)x)]),
             ["known_important"] = lists.KnownImportant,
             ["by_name"] = g.ByName,
         };

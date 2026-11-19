@@ -91,16 +91,33 @@ geneva не идёт. Если обход перестал работать, с�
   умолчанию» / «Не важно», «Закрепить стратегию» (обход не снимается при единичных ошибках, а
   программа не ищет ему замену), «Проверить свою стратегию…» (строка Geneva
   проверяется на трафике сервиса и, если работает, применяется и
-  закрепляется) и «Сбросить».
+  закрепляется), «Не подбирать для этого сервиса» (сайт попадает в список
+  «Не подбирать») и «Сбросить». Строки не прыгают, пока идёт подбор: сервис
+  остаётся на своём месте, меняются только его тексты; порядок обновляется,
+  когда вы открываете страницу или меняете фильтр. Поле над списком
+  фильтрует его по имени, адресу или протоколу.
 - **Важность.** Первыми проверяются и подбираются важные сервисы: известные
   (YouTube, Discord, Telegram, WhatsApp, Instagram, X) и ваш список
   «Важно»; их подбор прерывает подбор для менее важного. Сайты идут
   раньше серверов, а торрент-пиры и список «Не важно» — в фоне (через
   30 минут ожидания они всё же поднимаются в очереди).
-- **«Важные сервисы и исключения».** Списки «Важно», «Не важно» и «Не
-  трогать»: по одному домену (с
-  поддоменами), адресу или подсети на строку. «Не трогать» (сервер VPN
-  или прокси, игра, банк) не трогает ни «Авто», ни ручной обход geneva.
+- **«Важные сервисы и исключения».** Списки «Важно», «Не важно», «Не
+  подбирать» и «Не трогать», по одной записи на строку. В первые три можно
+  писать домен (с поддоменами), зону (`*.ru` или `.ru`), маску (`*google*`,
+  `?` — один символ), адрес, подсеть или сеть провайдера по номеру AS
+  (`AS12389`): её адреса программа берёт из RIPEstat при сохранении (уходит
+  только номер AS) и обновляет раз в неделю. «Не подбирать» — для чего обход
+  не ищется вообще: такие сервисы не появляются в списке проблем, а уже
+  найденная и применённая стратегия остаётся. «Не трогать» (сервер VPN
+  или прокси, игра, банк) не трогает ни «Авто», ни ручной обход geneva; в
+  нём только домены, адреса и подсети.
+- **Ложные блокировки.** Сайт считается заблокированным, только если
+  проверка без обхода не прошла дважды подряд. Сайт с сертификатом от
+  корня, которого нет в системе (например, Минцифры у многих .ru), но с
+  правильным именем, блокировкой не считается. Если подбор начинается
+  позже чем через 5 минут после проверки (повтор через несколько часов,
+  после перезапуска, сломавшийся обход), сайт сначала проверяется без
+  обхода ещё раз, и открывающийся сайт не подбирается.
 - **По имени (geneva_c 2.0).** Найденная для сайта стратегия применяется
   ещё и по имени сайта: новые адреса CDN работают сразу, без нового
   подбора, а сервисы из нескольких доменов (YouTube — это и
@@ -127,7 +144,7 @@ geneva не идёт. Если обход перестал работать, с�
 
 Режим остаётся включённым после перезапуска. Окно можно свернуть в трей
 (значок у часов): обход работает, пока программа запущена, а «Выход» в меню
-значка закрывает программу и снимает обход. На Windows для применения
+значка («Закрыть») закрывает программу и снимает обход. На Windows для применения
 найденных стратегий нужна geneva_c 1.1 или новее.
 
 ### Вручную
@@ -326,13 +343,12 @@ zapret-gui на роутере (например, 192.168.2.1).
 
 **Трей.** В Windows свёрнутое окно по умолчанию уходит в трей. В настройках
 можно включить и закрытие окна в трей; тогда программа завершается только
-через «Выход» в меню значка. В меню значка есть общий тумблер «Включить
-обход / Выключить обход (всё)»: выключение останавливает любой работающий
+через «Закрыть» в меню значка. В меню значка три пункта: «Открыть окно»,
+общий тумблер «Включить обход / Выключить обход» и «Закрыть». Выключение останавливает любой работающий
 обход (защиту zapret2, авто-обход geneva, обход geneva для сайта), подборы
 продолжаются. Два движка не могут обрабатывать трафик одновременно, поэтому
 включение запускает один — тот, что тумблер выключил последним; в первый раз —
-защиту zapret2, если стратегия уже есть, иначе авто-обход geneva. Ниже — пункты
-для каждого обхода отдельно. Если обход включить или выключить не удалось,
+защиту zapret2, если стратегия уже есть, иначе авто-обход geneva. Если обход включить или выключить не удалось,
 откроется его страница с причиной.
 
 **Телеметрия.** Её нет. Настройки, база знаний и журнал хранятся только
@@ -403,7 +419,21 @@ helps there.
 - **Working strategies.** One strategy often suits many sites, so they are
   grouped: one row is one strategy with all its services. New services try
   these strategies first.
-- **Services** shows each service with a problem and a Reset button.
+- **Services** shows each service with a problem; its "⋯" menu checks it now,
+  sets its importance, pins its strategy, tries your own strategy, adds it to
+  "Do not search" and resets it. Rows keep their places while the search goes
+  on; the order is refreshed when you open the page or change the filter
+  above the list (by name, address or protocol).
+- **Lists.** "Important", "Not important" and "Do not search" take a domain
+  (with subdomains), a zone (`*.ru`), a pattern (`*google*`), an address, a
+  subnet or a provider's network by its AS number (`AS12389`, its addresses
+  come from RIPEstat on saving; only the number is sent). "Do not search"
+  services never become problems; a strategy already applied stays. "Never
+  touch" takes domains, addresses and subnets only.
+- **False blocks.** A site counts as blocked only when the check without a
+  bypass fails twice in a row; a certificate with the right name from a root
+  your system lacks (the national CA of many .ru sites) is not a block; a
+  search that starts more than 5 minutes after the check looks again first.
 - **Search threads** sets how many strategies are tried at once (1–8). More
   threads search faster but open more connections to the site. This needs
   geneva_c 1.2 or newer; with an older one the search runs in one thread and
@@ -421,7 +451,7 @@ helps there.
   strategy that needs a fake your zapret2 lacks is kept but not tried.
 
 The mode stays on across restarts. The window can be minimized to the tray: the
-bypass works while the program runs, and Exit in the tray menu closes the
+bypass works while the program runs, and Close in the tray menu closes the
 program and removes the bypass. On Windows, applying the strategies needs
 geneva_c 1.1 or newer.
 
@@ -552,12 +582,11 @@ Stop on the banner cuts the bridge too.
   `/var/lib/zapret-autotuner`): what runs with admin rights must not live where
   a user can swap it.
 - **Tray:** on Windows a minimized window goes to the tray by default; Settings
-  can also make closing the window go to the tray, and then Exit in the tray
-  menu closes the program. The tray menu has a common switch "Turn the bypass
-  on / off (all)": off stops every bypass (zapret2 protection, geneva Auto,
+  can also make closing the window go to the tray, and then Close in the tray
+  menu closes the program. The tray menu has three items: Open the window, a
+  common switch "Turn the bypass on / off" and Close. Off stops every bypass (zapret2 protection, geneva Auto,
   geneva's bypass of one site; searches go on). The two engines cannot share
   the traffic, so on starts one: the one the switch turned off last, the first
-  time zapret2 protection if there is a strategy, else geneva Auto. Items for
-  each bypass follow. When a bypass cannot be switched, its page opens with
+  time zapret2 protection if there is a strategy, else geneva Auto. When a bypass cannot be switched, its page opens with
   the reason.
 - **No telemetry.** All data stays local.

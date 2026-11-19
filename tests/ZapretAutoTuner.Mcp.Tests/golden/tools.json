@@ -1464,7 +1464,7 @@
     "name": "geneva_auto_lists",
     "scope": "control",
     "confirms": false,
-    "description": "Reads or replaces the user's lists for geneva (domains with subdomains, addresses, subnets): important and unimportant services of the \"Авто\" mode, and excluded — never touched by any geneva bypass (a VPN or proxy server). A list left out stays as it is. Also whether site strategies are applied by name (geneva_c 2.0).",
+    "description": "Reads or replaces the user's lists for geneva: important and unimportant services of the \"Авто\" mode, no_search — services no bypass is looked for (they leave the problems; an applied strategy stays), and excluded — never touched by any geneva bypass (a VPN or proxy server). important, unimportant and no_search take domains (with subdomains), zones (*.ru), patterns (*google*), addresses, subnets and AS numbers (AS12389, its announced prefixes are fetched from RIPEstat, only the number is sent); excluded takes domains, addresses and subnets only. A list left out stays as it is. Also whether site strategies are applied by name (geneva_c 2.0).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1494,6 +1494,16 @@
           "items": {
             "type": "string",
             "description": "A domain, an address or a subnet",
+            "maxLength": 260
+          },
+          "maxItems": 200
+        },
+        "no_search": {
+          "type": "array",
+          "description": "Not searched for",
+          "items": {
+            "type": "string",
+            "description": "A domain, a zone, a pattern, an address, a subnet or an AS",
             "maxLength": 260
           },
           "maxItems": 200

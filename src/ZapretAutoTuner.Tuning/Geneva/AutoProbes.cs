@@ -50,6 +50,15 @@ public sealed class AutoProbes : IAutoProbes
 {
     public static TimeSpan PageTime { get; } = TimeSpan.FromSeconds(12);
 
+    /// <summary>The pause before the second look at a site that failed without a bypass.</summary>
+    public TimeSpan Recheck { get; init; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// The page loaded under its criterion; a certificate with the right name whose only fault is the national root this
+    /// system lacks (Минцифры, many .ru sites) counts: the browser that has the root opens the site.
+    /// </summary>
+    private static bool Passes(PageCheckResult c) => c.Probe.PassesNameOnly(ProbeLevel.L2Body, c.Criteria.MinBytes);
+
     public async Task<AutoConfirm> CheckAsync(AutoService s, CancellationToken ct)
     {
         if (s.Address is not { } address)
@@ -61,10 +70,29 @@ public sealed class AutoProbes : IAutoProbes
             // without a bypass, and again when geneva's detector raised the suspicion; trials only judge
             bool learn = s.Status == AutoStatus.Suspected && (s.Criteria is null || s.Detected.Count > 0);
             var check = await PageCheck.RunAsync(PageOptions(s, address, 0), s.Criteria ?? ProbeCriteria.Default, learn, ct).ConfigureAwait(false);
-            if (learn)
-                s.Criteria = check.Criteria;
-            if (check.Passes)
+            if (Passes(check))
                 return AutoConfirm.NotBlocked;
+            // without a bypass a block is said only when a second look agrees: one slow load, one lost connection or one
+            // flat stretch of a slow server is not DPI, and a working site must never be searched (rule 5)
+            if (s.Status == AutoStatus.Suspected)
+            {
+                await Task.Delay(Recheck, ct).ConfigureAwait(false);
+                var again = await PageCheck.RunAsync(PageOptions(s, address, 0), s.Criteria ?? ProbeCriteria.Default, learn, ct).ConfigureAwait(false);
+                if (Passes(again))
+                {
+                    if (learn)
+                        s.Criteria = again.Criteria;
+                    return AutoConfirm.NotBlocked;
+                }
+                // what both saw: a shaper or a cut-off only when the second found it too
+                if (learn)
+                    s.Criteria = again.Finding is not null && check.Finding is not null ? again.Criteria : check.Finding is null ? check.Criteria : again.Criteria;
+                check = again;
+            }
+            else if (learn)
+            {
+                s.Criteria = check.Criteria;
+            }
             return check.Probe.Error is ProbeError.ConnectTimeout or ProbeError.Unreachable ? AutoConfirm.IpBlocked : AutoConfirm.Blocked;
         }
         if (!s.CanReplay)

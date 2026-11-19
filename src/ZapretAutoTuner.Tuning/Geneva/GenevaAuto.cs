@@ -27,6 +27,9 @@ public sealed record AutoGroupView
 
     /// <summary>The name-based process (geneva_c 2.0): its strategies, one per line, apply to the sites by name.</summary>
     public bool ByName { get; init; }
+
+    /// <summary>Only a strategy being tried on one service: not a working one yet, the page does not list it.</summary>
+    public bool Trial { get; init; }
 }
 
 /// <summary>The "Авто" mode as the page and MCP see it.</summary>
@@ -136,11 +139,29 @@ public sealed class GenevaAuto : IAsyncDisposable
     /// <summary>The user changed the lists: priorities again, excluded services leave, the groups follow.</summary>
     private void OnListsChanged()
     {
-        List<string> gone;
+        List<string> gone, skipped;
+        CancellationTokenSource? stop = null;
         lock (_lock)
-            gone = _book.SetLists(_controller.State.Lists);
+        {
+            gone = _book.SetLists(_controller.State.Lists, out skipped);
+            // the service searched now is no longer wanted: its search stops (geneva keeps its progress)
+            if (_currentKey is { } key && _searchCts is { } cts && (_book.Find(key) is not { } cur || _book.NotSearched(cur)))
+                stop = cts;
+        }
         foreach (var name in gone)
             AddLog($"{name}: в списке «не трогать», обход к нему больше не применяется / on the \"do not touch\" list, no bypass for it any more");
+        foreach (var name in skipped)
+            AddLog($"{name}: в списке «не подбирать», убран из списка проблем / on the \"do not search\" list, removed from the problems");
+        if (stop is not null)
+        {
+            try
+            {
+                stop.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
         Save(force: true);
         CancellationToken loop;
         lock (_lock)
@@ -683,23 +704,26 @@ public sealed class GenevaAuto : IAsyncDisposable
             // the user's own search on the page has the search slot: wait for it
             if (_controller.SearchRunning)
                 return;
+            bool fresh = s.BaselineAt is { } b && _now() - b < BaselineFresh;
             _book.Searching(s.Key, _now());
             _current = s.Name;
             _currentKey = s.Key;
             s = s.Clone();
             var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             _searchCts = cts;
-            _work = Task.Run(() => SearchAsync(s, cts, ct));
+            _work = Task.Run(() => SearchAsync(s, cts, ct, fresh));
         }
     }
 
     // ---- finding a strategy for one service
 
-    private async Task SearchAsync(AutoService s, CancellationTokenSource search, CancellationToken loop)
+    private async Task SearchAsync(AutoService s, CancellationTokenSource search, CancellationToken loop, bool fresh = true)
     {
         var ct = search.Token;
         try
         {
+            if (!fresh && await OpensNowAsync(s, ct).ConfigureAwait(false))
+                return;
             await FindAsync(s, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -748,6 +772,44 @@ public sealed class GenevaAuto : IAsyncDisposable
             Changed?.Invoke();
         }
     }
+
+    /// <summary>
+    /// The probe without a bypass before a search whose block was seen long ago (a retry after hours, a search
+    /// continued after a restart, a bypass that stopped working): a service that opens now is not searched, and one
+    /// blocked by address is left to a tunnel. True when the search is not needed.
+    /// </summary>
+    private async Task<bool> OpensNowAsync(AutoService s, CancellationToken ct)
+    {
+        if (!s.Probeable)
+            return false;
+        var probe = s.Clone();
+        probe.Status = AutoStatus.Suspected;
+        var result = await _probes.CheckAsync(probe, ct).ConfigureAwait(false);
+        // no probe could judge it (no address yet): the search goes on as before, without a new baseline mark
+        if (result == AutoConfirm.Unknown)
+            return false;
+        if (result == AutoConfirm.Blocked)
+        {
+            s.Criteria = probe.Criteria;
+            lock (_lock)
+            {
+                if (_book.Find(s.Key) is { } kept)
+                {
+                    kept.BaselineAt = _now();
+                    kept.Criteria = probe.Criteria;
+                }
+            }
+            return false;
+        }
+        string line;
+        lock (_lock)
+            line = _book.Confirmed(s.Key, result, _now());
+        AddLog(line);
+        return true;
+    }
+
+    /// <summary>How long a "blocked" from the probe without a bypass holds before a search looks again.</summary>
+    public TimeSpan BaselineFresh { get; init; } = TimeSpan.FromMinutes(5);
 
     private async Task FindAsync(AutoService s, CancellationToken ct)
     {
@@ -1002,9 +1064,11 @@ public sealed class GenevaAuto : IAsyncDisposable
             List<AutoGroup> groups;
             List<AutoHostProfile> hosts;
             AutoNameList excluded;
+            string? trialKey;
             bool byName = _controller.ByName;
             lock (_lock)
             {
+                trialKey = _trial?.Key;
                 (AutoService, string)? trial = _trial is { } t && _book.Find(t.Key) is { } ts ? (ts, t.Strategy) : null;
                 // asked for while geneva may still say it cannot (the first apply learns it): the Agent then ignores them
                 hosts = byName ? AutoPlan.HostProfiles(_book.Services, _trial?.Key, quic: true) : [];
@@ -1059,11 +1123,16 @@ public sealed class GenevaAuto : IAsyncDisposable
                 _groups = [.. reply.Groups.Select(rg =>
                 {
                     // the Agent names a group by its canonical form and lists the texts it serves
-                    var names = groups.Where(x => rg.Requested.Contains(x.Strategy) || x.Strategy == rg.Strategy)
-                        .SelectMany(x => x.Services).Distinct(StringComparer.Ordinal)
-                        .Select(k => _book.Find(k)?.Name ?? k).ToList();
+                    var keys = groups.Where(x => rg.Requested.Contains(x.Strategy) || x.Strategy == rg.Strategy)
+                        .SelectMany(x => x.Services).Distinct(StringComparer.Ordinal).ToList();
+                    // the service on trial is not served yet: its strategy is only being checked
+                    var names = keys.Where(k => k != trialKey).Select(k => _book.Find(k)?.Name ?? k).ToList();
                     var old = _groups.FirstOrDefault(x => x.Id == rg.Id);
-                    return new AutoGroupView { Strategy = rg.Strategy, Id = rg.Id, Queue = rg.Queue, Services = names, Stats = old?.Stats, Rate = old?.Rate ?? 0 };
+                    return new AutoGroupView
+                    {
+                        Strategy = rg.Strategy, Id = rg.Id, Queue = rg.Queue, Services = names, Stats = old?.Stats, Rate = old?.Rate ?? 0,
+                        Trial = trialKey is not null && keys.Contains(trialKey) && names.Count == 0,
+                    };
                 })];
                 if (reply.Host is { } rh)
                 {

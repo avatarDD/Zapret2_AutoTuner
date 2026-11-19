@@ -216,7 +216,7 @@ Golden-тест — `tests/testdata/geneva-share/zapret-gui-export.json`,
 `geneva_auto_enable` (ждёт «Да»), `geneva_auto_disable`, `geneva_auto_reset`,
 `geneva_auto_check_now`, `geneva_auto_priority` (important/auto/unimportant),
 `geneva_auto_pin`, `geneva_auto_lists` (важные, неважные, исключения,
-known_important, by_name).
+no_search, known_important, by_name).
 
 ## 9. Режим «Авто»
 
@@ -380,3 +380,33 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
     очереди; «Своя стратегия» (`TryStrategyAsync`) — пробуется как найденная
     и закрепляется. Список «исключения» (адреса, подсети, домены) убирает
     сервисы из «Авто» и передаётся ручному обходу.
+11. **«Не подбирать»** (`AutoLists.NoSearch`). Сервис из списка не
+    попадает в книгу (`Feed`), при смене списков уходит из неё, если на нём
+    нет применённой стратегии (`SetLists(…, out skipped)`), и никогда не
+    берётся `NextToSearch`; идущий подбор такого сервиса отменяется, а
+    `Interrupted` его удаляет. Маски (`AutoNameList.MaskProblem`): зона
+    `*.ru`/`.ru`, шаблон с `*`/`?`, `AS<номер>`. Сети AS —
+    `Tuning/Geneva/AsnPrefixes.cs` (RIPEstat `announced-prefixes`, раз в 7
+    дней: при сохранении списков и сама раз в 6 ч проверки на странице,
+    параллельно, объединённые сети, не больше 5000 на AS;
+    `AutoLists.AsnPrefixes/AsnFetched`), матч — бинарным поиском. Сохранение
+    после загрузки сетей сливается (`AsnPrefixes.Merge`) с тем, что за это
+    время добавили в списки меню строки или MCP. Маски и AS — только для списков, которые читает App
+    (важные, неважные, «не подбирать»); «не трогать» уходит в geneva и
+    firewall и принимает лишь домены, адреса и подсети (`Problem`).
+12. **Ложные блокировки.** Без обхода `AutoProbes.CheckAsync` для сайта
+    смотрит дважды (пауза `Recheck`, 2 с): `Blocked` только если оба раза не
+    прошло. Сертификат с верным именем от национального корня, которого нет
+    в системе (Минцифры: `ProbeResult.NationalRoot`), проходит
+    (`PassesNameOnly`, `CertNameOk`); любой другой недоверенный — нет (MITM
+    может выписать сертификат на любое имя). Подбор,
+    начатый позже `BaselineFresh` (5 мин) после последнего «заблокирован»
+    без обхода (`AutoService.BaselineAt`), сначала проверяет сервис без
+    обхода (`GenevaAuto.OpensNowAsync`): открывается — `NotBlocked`, без
+    подбора.
+13. **Пробная группа.** Группа, которая есть только ради пробы стратегии на
+    сервисе (`AutoGroupView.Trial`), не попадает в «Работающие стратегии»;
+    имя пробуемого сервиса не пишется и в группах, где оно рядом с
+    рабочими. Процессы групп «Авто» и детектор получают только те
+    `--ext-blob`, что названы в их стратегии (`GenevaManager.WithBlobs(…,
+    only)`); подбор и ручной `run` (`set_strategy` на лету) — все фейки.

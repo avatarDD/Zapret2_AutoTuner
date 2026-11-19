@@ -27,6 +27,14 @@ public class GenevaBlobTests
                 "--ext-blob", "z2_wireguard_initiation:@" + Path.Combine(fakes, "wireguard_initiation.bin"),
                 "-s", "S",
             ], argv);
+            // a process with a fixed strategy (an "Авто" group, the detector) gets only the fakes it names
+            Assert.Equal(
+            [
+                "run", "--ext",
+                "--ext-blob", "z2_wireguard_initiation:@" + Path.Combine(fakes, "wireguard_initiation.bin"),
+                "-s", "S",
+            ], m.WithBlobs(["run", "--ext", "-s", "S"], ["z2_wireguard_initiation"]));
+            Assert.Equal(["run", "--ext", "-s", "S"], m.WithBlobs(["run", "--ext", "-s", "S"], []));
             // without the extensions geneva does not know --ext-blob; without zapret2 there is nothing to hand
             Assert.Equal(["run", "-s", "S"], m.WithBlobs(["run", "-s", "S"]));
             m.FakeDir = () => null;

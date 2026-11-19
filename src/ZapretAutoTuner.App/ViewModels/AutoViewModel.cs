@@ -12,17 +12,72 @@ using ZapretAutoTuner.Tuning.Geneva;
 
 namespace ZapretAutoTuner.App.ViewModels;
 
-/// <summary>A service of the "Авто" mode: what it is, where it stands, the strategy applied to it.</summary>
-public sealed record AutoRow(string Key, string Name, string Status, string Detail, string Strategy, string Brush, bool CanReset)
+/// <summary>What a service row shows, computed on each refresh.</summary>
+internal sealed record AutoRowData(string Key, string Name, string Status, string Detail, string Strategy, string Brush, bool CanReset,
+    string Tags, bool CanPin, bool Pinned, string PinText);
+
+/// <summary>
+/// A service of the "Авто" mode: what it is, where it stands, the strategy applied to it. One object per service for
+/// as long as it is listed: a refresh changes its texts in place, so its row, its "⋯" button and an open menu stay
+/// where they are while the search moves on.
+/// </summary>
+public sealed partial class AutoRow : ObservableObject
 {
+    public AutoRow(AutoViewModel owner, string key)
+    {
+        Owner = owner;
+        Key = key;
+    }
+
+    /// <summary>The page: the menu's commands are bound through it (a menu is a popup, outside the list's tree).</summary>
+    public AutoViewModel Owner { get; }
+
+    public string Key { get; }
+
+    [ObservableProperty]
+    private string _name = "";
+
+    [ObservableProperty]
+    private string _status = "";
+
+    [ObservableProperty]
+    private string _detail = "";
+
+    [ObservableProperty]
+    private string _strategy = "";
+
+    [ObservableProperty]
+    private string _brush = "";
+
+    [ObservableProperty]
+    private bool _canReset;
+
     /// <summary>Importance and pin as words: "важно · закреплена".</summary>
-    public string Tags { get; init; } = "";
+    [ObservableProperty]
+    private string _tags = "";
 
-    public bool CanPin { get; init; }
+    [ObservableProperty]
+    private bool _canPin;
 
-    public bool Pinned { get; init; }
+    [ObservableProperty]
+    private bool _pinned;
 
-    public string PinText { get; init; } = "";
+    [ObservableProperty]
+    private string _pinText = "";
+
+    internal void Set(AutoRowData d)
+    {
+        Name = d.Name;
+        Status = d.Status;
+        Detail = d.Detail;
+        Strategy = d.Strategy;
+        Brush = d.Brush;
+        CanReset = d.CanReset;
+        Tags = d.Tags;
+        CanPin = d.CanPin;
+        Pinned = d.Pinned;
+        PinText = d.PinText;
+    }
 }
 
 /// <summary>
@@ -69,6 +124,7 @@ public sealed partial class AutoViewModel : PageViewModel
 
     public override void OnShown()
     {
+        _resort = true;
         _dirty = true;
         _ = CheckFeaturesAsync();
     }
@@ -116,7 +172,28 @@ public sealed partial class AutoViewModel : PageViewModel
     /// <summary>How many strategies come with the program (the starting set).</summary>
     public string PresetText => L.F("auto.preset", GenevaShare.Preset.Count, GenevaShare.Preset.Sum(p => p.Services.Count));
 
-    partial void OnAutoShowAllChanged(bool value) => _dirty = true;
+    partial void OnAutoShowAllChanged(bool value)
+    {
+        _resort = true;
+        _dirty = true;
+    }
+
+    /// <summary>Only the services whose name, address or protocol has this text (the list is long).</summary>
+    [ObservableProperty]
+    private string _serviceFilter = "";
+
+    partial void OnServiceFilterChanged(string value)
+    {
+        _resort = true;
+        _dirty = true;
+    }
+
+    /// <summary>Services shown out of those the filter and "show all" leave: "12 из 340".</summary>
+    [ObservableProperty]
+    private string _filterCount = "";
+
+    /// <summary>The list is put in order again (opening the page, a new filter); else rows keep their places.</summary>
+    private bool _resort = true;
 
     // ---- threads
 
@@ -196,6 +273,26 @@ public sealed partial class AutoViewModel : PageViewModel
     [RelayCommand]
     private void MarkAuto(AutoRow row) => _host.GenevaAuto.SetPriority(row.Key, AutoUserPriority.None);
 
+    /// <summary>"Не подбирать": the service's site (or name, or address) joins the list, and it leaves the problems.</summary>
+    [RelayCommand]
+    private void NoSearch(AutoRow row)
+    {
+        if (_host.GenevaAuto.View.Services.FirstOrDefault(x => x.Key == row.Key) is not { } s || NoSearchEntry(s) is not { } entry)
+            return;
+        var lists = _host.Geneva.Lists;
+        if (!lists.NoSearch.Contains(entry, StringComparer.OrdinalIgnoreCase))
+            _host.Geneva.Lists = lists with { NoSearch = [.. lists.NoSearch, entry] };
+        Status = L.F("auto.no_search_done", entry);
+    }
+
+    /// <summary>What "Не подбирать" adds for a service: the site, the server's name, or its address.</summary>
+    internal static string? NoSearchEntry(AutoService s) => s.Kind switch
+    {
+        AutoKind.Web or AutoKind.Quic => AutoFamilies.SiteOf(s),
+        _ when s.Host.Length > 0 && AutoNameList.Problem(s.Host) is null && !IsAddress(s.Host) => s.Host,
+        _ => s.Address?.ToString(),
+    };
+
     [RelayCommand]
     private void TogglePin(AutoRow row) => _host.GenevaAuto.Pin(row.Key, !row.Pinned);
 
@@ -260,6 +357,12 @@ public sealed partial class AutoViewModel : PageViewModel
     private string _excludedText = "";
 
     [ObservableProperty]
+    private string _noSearchText = "";
+
+    [ObservableProperty]
+    private bool _listsBusy;
+
+    [ObservableProperty]
     private bool _knownImportant = true;
 
     [ObservableProperty]
@@ -276,6 +379,7 @@ public sealed partial class AutoViewModel : PageViewModel
         ImportantText = string.Join("\n", l.Important);
         UnimportantText = string.Join("\n", l.Unimportant);
         ExcludedText = string.Join("\n", l.Excluded);
+        NoSearchText = string.Join("\n", l.NoSearch);
         KnownImportant = l.KnownImportant;
         ByName = _host.Geneva.ByName;
         _listsLoaded = true;
@@ -284,21 +388,69 @@ public sealed partial class AutoViewModel : PageViewModel
     private static List<string> Lines(string text) =>
         [.. text.Split(['\n', '\r', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase)];
 
+    /// <summary>Reads a URL as text (RIPEstat for the AS networks); tests pass their own.</summary>
+    internal Func<string, CancellationToken, Task<string>> Get { get; set; } = AsnPrefixes.DefaultGet;
+
+    private DateTime _asnCheckedAt;
+    private int _asnRefreshing;
+
+    /// <summary>
+    /// The AS networks of the lists fetched again when they are a week old, without the user saving the lists: checked
+    /// at start and every few hours. Only the networks change; the lists stay as they are now.
+    /// </summary>
+    private async Task RefreshStaleAsnAsync()
+    {
+        if (Interlocked.Exchange(ref _asnRefreshing, 1) == 1)
+            return;
+        try
+        {
+            var lists = _host.Geneva.Lists;
+            if (!AsnPrefixes.Stale(lists, DateTime.UtcNow))
+                return;
+            var (fresh, _) = await AsnPrefixes.RefreshAsync(lists, Get, DateTime.UtcNow, CancellationToken.None);
+            _host.Geneva.Lists = _host.Geneva.Lists with { AsnPrefixes = fresh.AsnPrefixes, AsnFetched = fresh.AsnFetched };
+        }
+        finally
+        {
+            Volatile.Write(ref _asnRefreshing, 0);
+        }
+    }
+
     [RelayCommand]
-    private void SaveLists()
+    private async Task SaveListsAsync()
     {
         var important = Lines(ImportantText);
         var unimportant = Lines(UnimportantText);
         var excluded = Lines(ExcludedText);
-        if (important.Concat(unimportant).Concat(excluded).Select(AutoNameList.Problem).FirstOrDefault(p => p is not null) is { } bad)
+        var noSearch = Lines(NoSearchText);
+        // "не трогать" goes to geneva and the firewall as it is: names and networks only; the others take masks and AS
+        if (excluded.Select(AutoNameList.Problem).Concat(important.Concat(unimportant).Concat(noSearch).Select(AutoNameList.MaskProblem))
+            .FirstOrDefault(p => p is not null) is { } bad)
         {
             ListsStatus = bad;
             return;
         }
-        _host.Geneva.Lists = new AutoLists { Important = important, Unimportant = unimportant, Excluded = excluded, KnownImportant = KnownImportant };
+        var before = _host.Geneva.Lists;
+        var lists = before with { Important = important, Unimportant = unimportant, Excluded = excluded, NoSearch = noSearch, KnownImportant = KnownImportant };
+        // the networks of the AS numbers named (fetched only when missing or a week old; those no longer named go)
+        bool fetch = AsnPrefixes.Stale(lists, DateTime.UtcNow);
+        ListsBusy = fetch;
+        if (fetch)
+            ListsStatus = L["auto.asn_loading"];
+        List<string> problems;
+        try
+        {
+            (lists, problems) = await AsnPrefixes.RefreshAsync(lists, Get, DateTime.UtcNow, CancellationToken.None);
+        }
+        finally
+        {
+            ListsBusy = false;
+        }
+        // the fetch takes a while: what was added meanwhile elsewhere (a row's "Не подбирать", MCP) is kept
+        _host.Geneva.Lists = AsnPrefixes.Merge(lists, before, _host.Geneva.Lists);
         if (_host.Geneva.ByName != ByName)
             _host.Geneva.ByName = ByName;
-        ListsStatus = L["auto.lists_saved"];
+        ListsStatus = problems.Count == 0 ? L["auto.lists_saved"] : L["auto.lists_saved"] + "\n" + string.Join("\n", problems);
     }
 
     [RelayCommand]
@@ -423,6 +575,11 @@ public sealed partial class AutoViewModel : PageViewModel
         _dirty = false;
         if (!_listsLoaded)
             LoadLists();
+        if (DateTime.UtcNow - _asnCheckedAt > TimeSpan.FromHours(6))
+        {
+            _asnCheckedAt = DateTime.UtcNow;
+            _ = RefreshStaleAsnAsync();
+        }
         bool en = Loc.Loc.I.English;
         var a = _host.GenevaAuto.View;
         AutoOn = a.Running;
@@ -432,9 +589,14 @@ public sealed partial class AutoViewModel : PageViewModel
             a.Count(AutoStatus.Searching) + a.Count(AutoStatus.Blocked) + a.Count(AutoStatus.Suspected) + a.Count(AutoStatus.Degraded),
             a.Count(AutoStatus.NotFound) + a.Count(AutoStatus.IpBlocked), a.Flows);
         AutoNotice = a.Limited ? L["engine.auto_limited"] : string.Join("\n", a.Problems);
-        var rows = a.Services
+        var filter = ServiceFilter.Trim();
+        var shown = a.Services
             .Where(x => AutoShowAll || x.Status is not (AutoStatus.Watching or AutoStatus.NotBlocked))
-            .Take(200)
+            .ToList();
+        var matching = filter.Length == 0 ? shown : shown.Where(x => Matches(x, filter)).ToList();
+        FilterCount = filter.Length == 0 ? "" : L.F("auto.filter_count", Math.Min(matching.Count, MaxRows), shown.Count);
+        var rows = matching
+            .Take(MaxRows)
             .Select(x =>
             {
                 var (status, brush) = AutoStatusText(x.Status);
@@ -448,20 +610,69 @@ public sealed partial class AutoViewModel : PageViewModel
                     tags.Add(L["auto.tag_background"]);
                 if (x.Pinned)
                     tags.Add(L["auto.tag_pinned"]);
-                return new AutoRow(x.Key, x.Name, status, detail, x.Strategy ?? "", brush, x.Status != AutoStatus.Watching)
-                {
-                    Tags = string.Join(" · ", tags),
-                    CanPin = x.Strategy is not null,
-                    Pinned = x.Pinned,
-                    PinText = x.Pinned ? L["auto.unpin"] : L["auto.pin"],
-                };
+                return new AutoRowData(x.Key, x.Name, status, detail, x.Strategy ?? "", brush, x.Status != AutoStatus.Watching,
+                    string.Join(" · ", tags), x.Strategy is not null, x.Pinned, x.Pinned ? L["auto.unpin"] : L["auto.pin"]);
             }).ToList();
-        Sync(AutoServices, rows);
+        SyncRows(rows, _resort);
+        _resort = false;
         Sync(AutoGroups, Groups(a));
         var state = _host.Geneva.State;
         Sync(Imported, [.. state.Imported.AsEnumerable().Reverse().Select(i => new ImportedRow(i.Strategy, string.Join(", ", i.Services),
             i.Imported.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)))]);
         Sync(AutoLog, [.. _host.GenevaAuto.Log.TakeLast(150).Reverse()]);
+    }
+
+    /// <summary>The most services listed at once.</summary>
+    public const int MaxRows = 200;
+
+    private static bool Matches(AutoService x, string filter) =>
+        x.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
+        || x.Host.Contains(filter, StringComparison.OrdinalIgnoreCase)
+        || x.App.Contains(filter, StringComparison.OrdinalIgnoreCase)
+        || x.Addresses.Any(a => a.Ip.Contains(filter, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The rows in place: a listed service keeps its row object and (unless <paramref name="resort"/>) its place, and
+    /// only its texts change; one that left goes, a new one joins at the end. The search changing what it tries no
+    /// longer moves the list under the user's mouse, and an open "⋯" menu stays open.
+    /// </summary>
+    internal void SyncRows(IReadOnlyList<AutoRowData> rows, bool resort)
+    {
+        var wanted = rows.ToDictionary(r => r.Key, StringComparer.Ordinal);
+        for (int i = AutoServices.Count - 1; i >= 0; i--)
+        {
+            if (!wanted.ContainsKey(AutoServices[i].Key))
+                AutoServices.RemoveAt(i);
+        }
+        var have = AutoServices.ToDictionary(r => r.Key, StringComparer.Ordinal);
+        if (resort)
+        {
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (!have.TryGetValue(rows[i].Key, out var row))
+                {
+                    row = new AutoRow(this, rows[i].Key);
+                    AutoServices.Insert(i, row);
+                }
+                else
+                {
+                    int at = AutoServices.IndexOf(row);
+                    if (at != i)
+                        AutoServices.Move(at, i);
+                }
+                row.Set(rows[i]);
+            }
+            return;
+        }
+        foreach (var d in rows)
+        {
+            if (!have.TryGetValue(d.Key, out var row))
+            {
+                row = new AutoRow(this, d.Key);
+                AutoServices.Add(row);
+            }
+            row.Set(d);
+        }
     }
 
     /// <summary>
@@ -472,7 +683,8 @@ public sealed partial class AutoViewModel : PageViewModel
     {
         if (a.Groups.Count > 0)
         {
-            return [.. a.Groups.Select(g => new AutoGroupRow(g.Strategy, (g.ByName ? L["auto.by_name"] + ": " : "") + string.Join(", ", g.Services),
+            // a strategy only being tried is not a working one: it is not listed (the service's row says what is tried)
+            return [.. a.Groups.Where(g => !g.Trial).Select(g => new AutoGroupRow(g.Strategy, (g.ByName ? L["auto.by_name"] + ": " : "") + string.Join(", ", g.Services),
                 g.Stats is { } st ? L.F("engine.auto_counters", st.PktsOut + st.PktsIn, g.Rate.ToString("0", CultureInfo.InvariantCulture), st.Triggered, Uptime(st.UptimeMs)) : "",
                 g.Services.Count))];
         }
@@ -505,6 +717,16 @@ public sealed partial class AutoViewModel : PageViewModel
     {
         if (target.SequenceEqual(items))
             return;
+        if (target.Count == items.Count)
+        {
+            // the counters change every few seconds: only the rows that differ are replaced, the card keeps its size
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (!EqualityComparer<T>.Default.Equals(target[i], items[i]))
+                    target[i] = items[i];
+            }
+            return;
+        }
         target.Clear();
         foreach (var i in items)
             target.Add(i);

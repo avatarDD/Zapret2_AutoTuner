@@ -8,8 +8,8 @@ using ZapretAutoTuner.App.ViewModels;
 namespace ZapretAutoTuner.App.Services;
 
 /// <summary>
-/// The tray icon: a click opens the window, the menu turns the bypass on or off as a whole or zapret2's protection and
-/// the Auto bypass one by one, and exits. The window hides to the tray on minimize (and, if the user chose so, on close): the bypass keeps working
+/// The tray icon: a click opens the window; the menu has three items: open the window, the common bypass switch
+/// (whatever bypass runs, of either engine) and close the program. The window hides to the tray on minimize (and, if the user chose so, on close): the bypass keeps working
 /// while the program runs.
 /// </summary>
 public sealed class Tray : IDisposable
@@ -19,8 +19,6 @@ public sealed class Tray : IDisposable
     private readonly AppHost _host;
     private readonly MainViewModel _main;
     private readonly TrayIcon _icon;
-    private readonly NativeMenuItem _toggle;
-    private readonly NativeMenuItem _protection;
     private readonly NativeMenuItem _bypass;
     private bool _exiting;
 
@@ -32,19 +30,11 @@ public sealed class Tray : IDisposable
         _main = main;
         var open = new NativeMenuItem(Loc.Loc.I["tray.open"]);
         open.Click += (_, _) => Show();
-        _toggle = new NativeMenuItem(Loc.Loc.I["tray.auto_on"]);
-        _toggle.Click += (_, _) =>
-        {
-            if (_main.Auto.ToggleAutoCommand.CanExecute(null))
-                _main.Auto.ToggleAutoCommand.Execute(null);
-        };
         _bypass = new NativeMenuItem(Loc.Loc.I["tray.bypass_on"]);
         _bypass.Click += async (_, _) => await ToggleBypassAsync();
-        _protection = new NativeMenuItem(Loc.Loc.I["tray.protection_on"]);
-        _protection.Click += async (_, _) => await ToggleProtectionAsync();
         var exit = new NativeMenuItem(Loc.Loc.I["tray.exit"]);
         exit.Click += (_, _) => Exit();
-        var menu = new NativeMenu { open, new NativeMenuItemSeparator(), _bypass, _protection, _toggle, new NativeMenuItemSeparator(), exit };
+        var menu = new NativeMenu { open, _bypass, new NativeMenuItemSeparator(), exit };
         menu.NeedsUpdate += (_, _) => UpdateTexts();
         _icon = new TrayIcon
         {
@@ -56,6 +46,8 @@ public sealed class Tray : IDisposable
         _icon.Clicked += (_, _) => Show();
         TrayIcon.SetIcons(app, [_icon]);
         host.GenevaAuto.Changed += () => Dispatcher.UIThread.Post(UpdateTexts);
+        // geneva's bypass of one site counts too: the switch says "выключить" while it runs
+        host.Geneva.Changed += () => Dispatcher.UIThread.Post(UpdateTexts);
         main.Monitor.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(MonitorViewModel.Active))
@@ -85,20 +77,11 @@ public sealed class Tray : IDisposable
         var auto = _host.GenevaAuto;
         bool running = auto.Running;
         var p = auto.CurrentPhase;
-        _toggle.Header = Loc.Loc.I[running ? "tray.auto_off" : "tray.auto_on"];
-        _protection.Header = Loc.Loc.I[_main.Monitor.Active ? "tray.protection_off" : "tray.protection_on"];
         _bypass.Header = Loc.Loc.I[_main.BypassOn ? "tray.bypass_off" : "tray.bypass_on"];
         var phase = running ? (Loc.Loc.I.English ? p.En : p.Ru) : Loc.Loc.I["engine.auto_off"];
         // the tooltip has a short limit on Windows (127 characters)
         var tip = "Zapret2 AutoTuner — " + phase;
         _icon.ToolTipText = tip.Length > 120 ? tip[..120] : tip;
-    }
-
-    private async Task ToggleProtectionAsync()
-    {
-        if (!await _main.ToggleProtectionAsync())
-            Show();
-        UpdateTexts();
     }
 
     private async Task ToggleBypassAsync()

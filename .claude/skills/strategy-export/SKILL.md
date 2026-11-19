@@ -357,7 +357,10 @@ zapret2 в `/opt/zapret2` (lua `lua/`, блобы `files/fake/`, hostlist
   `settings` перезапишет конфиг пользователя.
 - Встроенные hostlist (`other`, `other2`, `netrogat`) при восстановлении
   пропускаются, поэтому в них не пишем.
-- **Блобов, ipset и lua в бэкапе нет** — это ограничение формата (см. §4).
+- AutoTuner свой бэкап пишет без блобов, ipset и lua (поэтому бандл —
+  основной путь). Бэкап самого zapret-gui может нести секции `ipsets`
+  (строки под ключом **`entries`**, не `cidrs`) и `blobs`
+  (`{name, base64}`); импорт AutoTuner читает оба ключа ipset.
 - Пользователь загружает файл в «Бэкап → Восстановить» и выбирает секции
   strategies и hostlists.
 
@@ -367,6 +370,22 @@ zapret-gui читает каталоги `catalogs/*.txt` (INI-секции ст
 отдаёт `/api/strategies/<sid>/export-catalog`. Формат см. `catalogs/README.md`
 в zapret-gui. Экспортёр «для каталога» нужен для публикации стратегий в
 репозиторий GUI. Это вторичная функция.
+
+### 3.5 Обмен в обе стороны (бандл)
+
+Бандл — общий формат обмена стратегиями nfqws2 между проектами.
+AutoTuner → zapret-gui: «Импорт бандла» (`POST
+/api/strategies/import-bundle`). zapret-gui → AutoTuner: «Стратегии → ⋯ →
+Скачать бандл» (`GET /api/strategies/<id>/export-bundle`,
+`core/bundle_export.py`) — тот же `zapret-autotuner-bundle` v1 с
+`generator.name = "zapret-gui"`, всеми hostlist, ipset (`cidrs`), своими
+блобами и lua, на которые ссылаются профили (выключенные тоже; импорт
+AutoTuner берёт только включённые). Встроенные списки GUI (`other`,
+`other2`, `netrogat`) в бандл не входят — импорт AutoTuner предупредит о
+них, а не откажет. Эталоны: `testdata/export/from-zapret-gui/` (записан
+zapret-gui; у него та же копия в `tests/data/autotuner/`), и наши бандлы
+`testdata/export/zapret-gui*/` лежат копией в zapret-gui, где их читает
+его импорт. Меняешь формат — обновляй эталоны в обоих репозиториях.
 
 ## 4. Доработки zapret-gui, которые нужны AutoTuner (отдельный PR в zapret-gui)
 

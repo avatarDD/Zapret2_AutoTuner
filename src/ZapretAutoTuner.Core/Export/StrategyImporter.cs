@@ -172,7 +172,8 @@ public static partial class StrategyImporter
         {
             foreach (var l in root[key]?.AsArray().OfType<JsonObject>() ?? [])
             {
-                var items = (l["domains"] ?? l["cidrs"])?.AsArray().Select(x => (string?)x).OfType<string>() ?? [];
+                // a bundle has "domains"/"cidrs"; a zapret-gui backup keeps an ipset's lines under "entries"
+                var items = (l["domains"] ?? l["cidrs"] ?? l["entries"])?.AsArray().Select(x => (string?)x).OfType<string>() ?? [];
                 all[$"lists/{(string?)l["name"]}.txt"] = Encoding.UTF8.GetBytes(ExportCommon.ListLines(items));
             }
         }

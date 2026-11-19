@@ -51,7 +51,7 @@ action   := name ["{" params "}"] ["(" [left] "," [right] ")"]
 | режим | argv | очередь |
 |---|---|---|
 | обход | `run [--ext] -s S -p PORTS -q 330 -c tcp:PORT -e - --stats-interval 2 --quiet [--ipset-exclude-ip F --hostlist-exclude-domains D]` | 330 |
-| подбор | `evolve --probe external --host H --port P --population N --generations G --workers W --local-ports 30000 -q 331 --checkpoint C --db D --target external:H:P --top 10 -e - --quiet` + `--resume` или `--load-from seeds.txt` | 331 |
+| подбор | `evolve --probe external --host H --port P --population N --generations G --workers W --local-ports 30000+512*k -q 331+k --checkpoint C --db D --target external:H:P --top 10 -e - --quiet` + `--resume` или `--load-from seeds.txt` | 331–334 |
 
 `--ext` (geneva_c 2.0) ставится, когда стратегия содержит x-действие или
 триггер `[L7:|FLOW:|META:` (`GenevaStrategyText.NeedsExt`) или заданы
@@ -71,6 +71,16 @@ quick` (`GenevaBundle.GridAsync`, равномерная выборка коло
 Каждый поток geneva шлёт свой `eval_request` с блоком портов
 `30000+64*i`; контроллер отвечает на них параллельно (`Task.Run`), при
 одном потоке — по-старому, последовательно.
+
+Подборов одновременно — до 4 (`GenevaArgv.MaxSearches`), каждый в своём
+слоте `k` (`GenevaManager.FreeSearchSlot`): очередь `331+k`, порты
+`30000+512*k` (8 потоков × 64); база — своя у цели
+(`GenevaManager.DbPathOf(target)`: geneva засевает подбор только той же
+целью, а общий файл два процесса не делят — geneva сжимает его
+перезаписью). Одну цель
+(`TargetKey`) Agent не подбирает дважды. Подбор пользователя идёт один;
+несколько — только у «Авто» (`StartSearchAsync(…, auto: true)`, возвращает
+id; `StopSearchAsync(id)` останавливает один, без id — все).
 
 Очереди zapret2: 300 (пробы), 310/311 (защита), 320 (починка) — geneva их не
 трогает. Метка своих пакетов geneva — `0x20000000`.
@@ -410,3 +420,22 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
     рабочими. Процессы групп «Авто» и детектор получают только те
     `--ext-blob`, что названы в их стратегии (`GenevaManager.WithBlobs(…,
     only)`); подбор и ручной `run` (`set_strategy` на лету) — все фейки.
+14. **Несколько подборов сразу** (`GenevaState.AutoSplit`, «Как делить
+    потоки», MCP `geneva_auto_lists split_workers`). Выключено: один сервис
+    за раз со всеми потоками. Включено: мест `min(потоки, 4)`
+    (`GenevaController.AutoSearches`, но не больше свободных групп:
+    `GenevaAuto.SearchSlots`, `AutoRules.MaxGroups` минус рабочие), каждому
+    подбору `потоки / мест` (`AutoWorkers`): сумма не больше заданного,
+    когда бы подбор ни начался. `GenevaAuto._works` — по
+    сервису: задача, CTS, пробуемая стратегия; все пробы сразу идут в
+    `AutoPlan.Groups(services, trials)` первыми. Сервисы, у которых общий
+    адрес или сайт (`AutoBook.Overlap`), рядом не подбираются: пробная
+    группа одного забрала бы адрес другого. Прерывание ради важного: если
+    его держат подборы на тех же адресах — уступают они (все менее важные),
+    иначе только когда заняты все места — наименее важный. Пробы подборов
+    идут с портов 30000–32047 (`GenevaArgv.AllLocalPorts`), наблюдение
+    `AutoObserver.IsProbePort` их пропускает. База geneva — своя у каждой
+    цели (`searches/<hash>/db.jsonl`; общий `db.jsonl` прежних версий
+    копируется по цели при первом подборе и читается в `InfoAsync` для
+    целей без своей). Подбор пользователя
+    (страница, MCP) «Авто» ждёт (`UserSearchRunning`).

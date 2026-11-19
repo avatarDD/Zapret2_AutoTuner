@@ -40,6 +40,13 @@
               <NumericUpDown Width="120" Minimum="1" Maximum="8" Increment="1" FormatString="0" Value="{Binding Workers}" />
               <v:HelpButton Text="{l:T help.workers}" />
             </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,16,4">
+              <ComboBox SelectedIndex="{Binding SplitIndex}" MinWidth="220" AutomationProperties.Name="{l:T auto.split}">
+                <ComboBoxItem Content="{l:T auto.split_one}" />
+                <ComboBoxItem Content="{l:T auto.split_many}" />
+              </ComboBox>
+              <v:HelpButton Text="{l:T help.split}" />
+            </StackPanel>
             <TextBlock Text="{Binding WorkersNote}" Classes="muted" FontSize="12" VerticalAlignment="Center"
                        IsVisible="{Binding WorkersNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           </WrapPanel>

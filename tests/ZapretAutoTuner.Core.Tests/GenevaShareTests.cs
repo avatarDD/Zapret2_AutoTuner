@@ -160,7 +160,9 @@ public sealed class GenevaShareTests
     {
         Assert.True(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase));
         Assert.True(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase + GenevaArgv.LocalPortsCount * 7 + 63));
-        Assert.False(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase + GenevaArgv.LocalPortsCount * 8));
+        // every search slot's workers (several searches of "Авто" side by side)
+        Assert.True(AutoObserver.IsProbePort(GenevaArgv.LocalPortsOf(GenevaArgv.MaxSearches - 1) + GenevaArgv.LocalPortsCount * 7 + 63));
+        Assert.False(AutoObserver.IsProbePort(GenevaArgv.LocalPortsOf(GenevaArgv.MaxSearches - 1) + GenevaArgv.LocalPortsCount * 8));
         Assert.False(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase - 1));
     }
 

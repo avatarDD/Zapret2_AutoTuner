@@ -43,17 +43,27 @@ public static class AutoPlan
     /// address that such sites with different strategies share goes to no group: the name decides which strategy its
     /// connection gets. A site it does not cover (no process, a port it does not catch) keeps its addresses.</para>
     public static List<AutoGroup> Groups(IEnumerable<AutoService> services, (AutoService Service, string Strategy)? trial = null,
+        IReadOnlySet<string>? byName = null) =>
+        Groups(services, trial is { } t ? [t] : [], byName);
+
+    /// <summary>
+    /// The groups with several strategies on trial at once (the "Авто" mode's searches side by side), one per service.
+    /// The tried strategies come first: an address two trials share goes to the first.
+    /// </summary>
+    public static List<AutoGroup> Groups(IEnumerable<AutoService> services, IReadOnlyList<(AutoService Service, string Strategy)> trials,
         IReadOnlySet<string>? byName = null)
     {
-        var active = services.Where(s => s.IsActive && (trial is null || s.Key != trial.Value.Service.Key))
+        var tried = trials.Select(t => t.Service.Key).ToHashSet(StringComparer.Ordinal);
+        var triedPairs = trials.Select(t => (t.Strategy, t.Service.Key)).ToHashSet();
+        var active = services.Where(s => s.IsActive && !tried.Contains(s.Key))
             .Select(s => (Service: s, Strategy: s.Strategy!)).ToList();
-        if (trial is { } tried)
-            active.Add((tried.Service, tried.Strategy));
+        foreach (var t in trials)
+            active.Add((t.Service, t.Strategy));
         HashSet<string> shared = [];
         if (byName is { Count: > 0 })
         {
             bool Named((AutoService Service, string Strategy) x) => x.Service.Kind == AutoKind.Web
-                && (trial is null || x.Service.Key != trial.Value.Service.Key) && byName.Contains(x.Service.Key);
+                && !tried.Contains(x.Service.Key) && byName.Contains(x.Service.Key);
             // an address is left to the names only when every active service on it is a site the names cover
             var uncovered = active.Where(x => !Named(x)).SelectMany(x => x.Service.Addresses.Select(a => a.Ip)).ToHashSet(StringComparer.Ordinal);
             shared = [.. active.Where(Named)
@@ -72,7 +82,7 @@ public static class AutoPlan
             .Select(g => new AutoGroup(g.Key, [.. g.Select(x => x.Service.Key)], [.. g.Select(x => Target(x.Service)).Where(x => x is not null).Select(x => x!)]))
             .Where(g => g.Targets.Count > 0)
             // the tried strategy always gets its group: it is what is being checked
-            .OrderByDescending(g => trial is not null && g.Strategy == trial.Value.Strategy && g.Services.Contains(trial.Value.Service.Key))
+            .OrderByDescending(g => g.Services.Any(k => triedPairs.Contains((g.Strategy, k))))
             .ThenByDescending(g => g.Services.Count)
             .ThenBy(g => g.Strategy, StringComparer.Ordinal);
         // One packet meets one strategy: two sites behind one CDN address would otherwise queue the same packets to two
@@ -141,14 +151,18 @@ public static class AutoPlan
     /// videos get the site's strategy before they ever fail. The service on trial is left out (its address group
     /// decides); a domain belongs to the first profile that names it; at most <see cref="AutoRules.MaxHostProfiles"/>.
     /// </summary>
-    public static List<AutoHostProfile> HostProfiles(IEnumerable<AutoService> services, string? trialKey = null, bool quic = false, bool families = true)
+    public static List<AutoHostProfile> HostProfiles(IEnumerable<AutoService> services, string? trialKey = null, bool quic = false, bool families = true) =>
+        HostProfiles(services, trialKey is null ? [] : [trialKey], quic, families);
+
+    /// <summary><see cref="HostProfiles(IEnumerable{AutoService}, string?, bool, bool)"/> with several services on trial.</summary>
+    public static List<AutoHostProfile> HostProfiles(IEnumerable<AutoService> services, IReadOnlyCollection<string> trialKeys, bool quic = false, bool families = true)
     {
         var all = services.ToList();
         var busy = all.Where(s => s.Kind is AutoKind.Web or AutoKind.Quic
                 && (s.IsActive || s.Status is AutoStatus.Searching or AutoStatus.Blocked or AutoStatus.Suspected or AutoStatus.NotFound or AutoStatus.Degraded))
             .Select(s => (Site: AutoFamilies.SiteOf(s), Udp: s.Kind == AutoKind.Quic))
             .ToHashSet();
-        var active = all.Where(s => s.IsActive && s.Key != trialKey && (s.Kind == AutoKind.Web || (quic && s.Kind == AutoKind.Quic)))
+        var active = all.Where(s => s.IsActive && !trialKeys.Contains(s.Key) && (s.Kind == AutoKind.Web || (quic && s.Kind == AutoKind.Quic)))
             .GroupBy(s => (s.Strategy!, Udp: s.Kind == AutoKind.Quic))
             .OrderByDescending(g => g.Count())
             .ThenBy(g => g.Key.Item1, StringComparer.Ordinal)

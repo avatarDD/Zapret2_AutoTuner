@@ -2051,6 +2051,30 @@
   "Встроенный geneva_c проверяет по одной стратегии; несколько потоков заработают с geneva_c 1.2.",
   "The bundled geneva_c checks one strategy at a time; several threads work with geneva_c 1.2."
  ],
+ "auto.split": [
+  "Как делить потоки",
+  "How to share the threads"
+ ],
+ "auto.split_one": [
+  "Все потоки — на один сервис",
+  "All threads on one service"
+ ],
+ "auto.split_many": [
+  "Делить между сервисами",
+  "Split between services"
+ ],
+ "auto.split_note": [
+  "Одновременно подбирается до {0} сервисов, по {1} потока на каждый.",
+  "Up to {0} services are searched at once, {1} threads each."
+ ],
+ "auto.split_note_one": [
+  "С одним потоком подбирается один сервис: добавьте потоков, чтобы делить их.",
+  "With one thread one service is searched: add threads to split them."
+ ],
+ "help.split": [
+  "«Все потоки — на один сервис»: сервисы подбираются по очереди, каждый быстрее. «Делить между сервисами»: несколько заблокированных сервисов (до 4) подбираются одновременно, потоки делятся между ними, каждый подбор идёт медленнее. Сервисы на общих адресах всё равно подбираются по очереди.\nПример: 8 потоков и «Делить» — 4 сервиса одновременно по 2 потока.",
+  "'All threads on one service': services are searched one after another, each faster. 'Split between services': several blocked services (up to 4) are searched at once, the threads shared between them, each search slower. Services on shared addresses are still searched one after another.\nExample: 8 threads and 'Split' — 4 services at once, 2 threads each."
+ ],
  "auto.working": [
   "Работающие стратегии",
   "Working strategies"

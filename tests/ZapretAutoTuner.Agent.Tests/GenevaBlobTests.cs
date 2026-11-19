@@ -45,4 +45,19 @@ public class GenevaBlobTests
             Directory.Delete(dir, true);
         }
     }
+
+    [Fact]
+    public void A_target_takes_only_its_own_lines_of_the_old_common_database()
+    {
+        string[] db =
+        [
+            "{\"s\":\"[TCP:flags:PA]-drop-| \\/\",\"t\":\"external:a.example:443\",\"runs\":3,\"ok\":2}",
+            "{\"s\":\"[TCP:flags:PA]-drop-| \\/\",\"t\":\"external:b.example:443\",\"runs\":1,\"ok\":0}",
+            "not json",
+            "",
+        ];
+        var mine = GenevaManager.LinesOf(db, "external:a.example:443");
+        Assert.Equal([db[0]], mine);
+        Assert.Empty(GenevaManager.LinesOf(db, "external:c.example:443"));
+    }
 }

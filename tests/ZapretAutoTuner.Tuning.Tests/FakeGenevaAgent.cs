@@ -14,7 +14,7 @@ namespace ZapretAutoTuner.Tuning.Tests;
 internal sealed class FakeGenevaAgent : IGenevaAgent
 {
     private readonly Dictionary<string, Channel<GenevaOutput>> _streams = [];
-    private readonly Dictionary<long, TaskCompletionSource<int>> _answers = [];
+    private readonly Dictionary<(string Search, long Id), TaskCompletionSource<int>> _answers = [];
     private readonly Lock _lock = new();
     private int _next;
 
@@ -27,6 +27,9 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
     public List<string> Commands { get; } = [];
 
     public List<string> Stopped { get; } = [];
+
+    /// <summary>Searches wait for this after their baseline (tests that see several run at once); null: they go on.</summary>
+    public TaskCompletionSource? Hold { get; set; }
 
     /// <summary>The Agent refuses every start with this text.</summary>
     public string? Refuse { get; set; }
@@ -44,7 +47,7 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
             Started.Add(request);
         }
         if (request.Mode == "evolve")
-            _ = Task.Run(() => SearchAsync(ch.Writer, request));
+            _ = Task.Run(() => SearchAsync(id, ch.Writer, request));
         else
         {
             Event(ch.Writer, new JsonObject { ["ev"] = "start", ["proto"] = 1, ["mode"] = "run" });
@@ -59,20 +62,20 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
         w.TryWrite(new GenevaOutput { Event = e.ToJsonString() });
     }
 
-    private async Task<int> AskAsync(ChannelWriter<GenevaOutput> w, long id, string strategy, int worker = 0)
+    private async Task<int> AskAsync(string search, ChannelWriter<GenevaOutput> w, long id, string strategy, int worker = 0)
     {
         var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_lock)
-            _answers[id] = tcs;
+            _answers[(search, id)] = tcs;
         int from = 30000 + 64 * worker;
         Event(w, new JsonObject { ["ev"] = "eval_request", ["id"] = id, ["strategy"] = strategy, ["run"] = 0, ["lports"] = $"{from}-{from + 63}" });
         return await tcs.Task;
     }
 
-    private async Task SearchAsync(ChannelWriter<GenevaOutput> w, GenevaStartRequest r)
+    private async Task SearchAsync(string search, ChannelWriter<GenevaOutput> w, GenevaStartRequest r)
     {
         Event(w, new JsonObject { ["ev"] = "start", ["proto"] = 1, ["mode"] = "evolve", ["population"] = r.Population, ["generations"] = r.Generations, ["resume"] = r.Resume });
-        int baseline = await AskAsync(w, 1, "");
+        int baseline = await AskAsync(search, w, 1, "");
         Event(w, new JsonObject { ["ev"] = "baseline", ["blocked"] = baseline < 0, ["fitness"] = baseline, ["outcome"] = baseline < 0 ? "reset" : "ok" });
         if (baseline > 0)
         {
@@ -80,12 +83,14 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
             w.TryWrite(new GenevaOutput { Exited = true, ExitCode = 7 });
             return;
         }
+        if (Hold is { } hold)
+            await hold.Task;
         var results = new List<(string S, int F)>();
         long id = 2;
         if (r.Workers > 1)
         {
             // geneva_c 1.2: the workers ask at once, each from its own ports, and take the answers in any order
-            var asks = Strategies.Select((st, i) => (St: st, Task: AskAsync(w, id + i, st, i % r.Workers))).ToList();
+            var asks = Strategies.Select((st, i) => (St: st, Task: AskAsync(search, w, id + i, st, i % r.Workers))).ToList();
             id += asks.Count;
             foreach (var (st, t) in asks)
             {
@@ -98,7 +103,7 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
         {
             foreach (var s in Strategies)
             {
-                int f = await AskAsync(w, id++, s);
+                int f = await AskAsync(search, w, id++, s);
                 results.Add((s, f));
                 Event(w, new JsonObject { ["ev"] = "eval", ["strategy"] = s, ["fitness"] = f, ["runs"] = 1, ["outcome"] = f > 0 ? "ok" : "failed", ["detail"] = "external" });
             }
@@ -130,7 +135,7 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
         {
             Stopped.Add(id);
             _streams.TryGetValue(id, out ch);
-            foreach (var a in _answers.Values)
+            foreach (var a in _answers.Where(x => x.Key.Search == id).Select(x => x.Value))
                 a.TrySetCanceled();
         }
         if (ch is not null)
@@ -162,7 +167,7 @@ internal sealed class FakeGenevaAgent : IGenevaAgent
         lock (_lock)
         {
             Answers.Add((requestId, fitness, detail));
-            _answers.Remove(requestId, out tcs);
+            _answers.Remove((id, requestId), out tcs);
         }
         tcs?.TrySetResult(fitness);
         return Task.CompletedTask;

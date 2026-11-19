@@ -118,6 +118,12 @@ public sealed record GenevaState
     /// <summary>Strategies judged at once by a search (geneva's workers), manual and "Авто": 1 to 8.</summary>
     public int Workers { get; init; } = 1;
 
+    /// <summary>
+    /// The "Авто" mode splits <see cref="Workers"/> between several services searched at once (up to
+    /// <see cref="GenevaArgv.MaxSearches"/>); off: all of them search one service at a time.
+    /// </summary>
+    public bool AutoSplit { get; init; }
+
     /// <summary>Imported strategies, oldest first: added next to the working ones, never replacing them.</summary>
     public List<GenevaImportedStrategy> Imported { get; init; } = [];
 

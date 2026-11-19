@@ -105,6 +105,7 @@ public sealed partial class AutoViewModel : PageViewModel
     {
         _host = host;
         _workers = host.Geneva.Workers;
+        _splitIndex = host.Geneva.AutoSplit ? 1 : 0;
         host.Geneva.Changed += () => _dirty = true;
         host.GenevaAuto.Changed += () => _dirty = true;
         // lists changed elsewhere (MCP geneva_auto_lists): the boxes show them, so a later "Сохранить" does not undo them
@@ -210,7 +211,29 @@ public sealed partial class AutoViewModel : PageViewModel
         WorkersNote = WorkersText();
     }
 
-    private string WorkersText() => (Workers ?? 1) > 1 && !_workersSupported ? L["auto.workers_old"] : "";
+    /// <summary>0: all threads search one service; 1: they are split between several services searched at once.</summary>
+    [ObservableProperty]
+    private int _splitIndex;
+
+    partial void OnSplitIndexChanged(int value)
+    {
+        if (_host.Geneva.AutoSplit != (value == 1))
+            _host.Geneva.AutoSplit = value == 1;
+        WorkersNote = WorkersText();
+    }
+
+    private string WorkersText()
+    {
+        var notes = new List<string>();
+        if (SplitIndex == 1)
+        {
+            var g = _host.Geneva;
+            notes.Add(g.AutoSearches > 1 ? L.F("auto.split_note", g.AutoSearches, g.AutoWorkers) : L["auto.split_note_one"]);
+        }
+        if ((Workers ?? 1) > 1 && !_workersSupported)
+            notes.Add(L["auto.workers_old"]);
+        return string.Join(" ", notes);
+    }
 
     private async Task CheckFeaturesAsync()
     {
@@ -580,6 +603,11 @@ public sealed partial class AutoViewModel : PageViewModel
             _asnCheckedAt = DateTime.UtcNow;
             _ = RefreshStaleAsnAsync();
         }
+        // the split changed elsewhere (MCP geneva_auto_lists): the box follows, without writing it back
+        int split = _host.Geneva.AutoSplit ? 1 : 0;
+        if (split != SplitIndex)
+            SplitIndex = split;
+        WorkersNote = WorkersText();
         bool en = Loc.Loc.I.English;
         var a = _host.GenevaAuto.View;
         AutoOn = a.Running;
@@ -600,7 +628,7 @@ public sealed partial class AutoViewModel : PageViewModel
             .Select(x =>
             {
                 var (status, brush) = AutoStatusText(x.Status);
-                var detail = x.Status == AutoStatus.Searching && x.Name == a.Current && a.Trying is { } t
+                var detail = x.Status == AutoStatus.Searching && a.Searches.FirstOrDefault(w => w.Key == x.Key)?.Trying is { } t
                     ? L.F("engine.auto_trying", t)
                     : x.Why;
                 var tags = new List<string>();

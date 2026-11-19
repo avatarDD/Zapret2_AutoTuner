@@ -601,9 +601,22 @@ public sealed class AutoBook
     /// peers, then the one used most recently and most. The number of failures does not decide: a torrent client's peers
     /// fail by the hundred.
     /// </summary>
-    public AutoService? NextToSearch(DateTime now) => Queue(_services.Values
-        .Where(s => s.Status == AutoStatus.Blocked && (s.NextCheck is null || now >= s.NextCheck) && !_noSearch.Matches(s)), now)
+    public AutoService? NextToSearch(DateTime now) => NextToSearch(now, _ => true);
+
+    /// <summary>The next service to search among those <paramref name="allowed"/> lets through (searches side by side).</summary>
+    public AutoService? NextToSearch(DateTime now, Func<AutoService, bool> allowed) => Queue(_services.Values
+        .Where(s => s.Status == AutoStatus.Blocked && (s.NextCheck is null || now >= s.NextCheck) && !_noSearch.Matches(s) && allowed(s)), now)
         .FirstOrDefault();
+
+    /// <summary>
+    /// Two services whose searches must not run side by side: they share a server address (a strategy tried on one
+    /// would meet the other's packets, and one address goes to one group) or are the same site.
+    /// </summary>
+    public static bool Overlap(AutoService a, AutoService b) =>
+        a.Key == b.Key
+        || AutoFamilies.SiteOf(a) == AutoFamilies.SiteOf(b)
+        || a.Addresses.Any(x => b.Addresses.Any(y => y.Ip == x.Ip))
+        || a.Kind == AutoKind.LocalPort && b.Kind == AutoKind.LocalPort && a.LocalPort == b.LocalPort;
 
     private static IEnumerable<AutoService> Queue(IEnumerable<AutoService> list, DateTime now) => list
         .OrderBy(s => AutoPriorities.Effective(s, now))

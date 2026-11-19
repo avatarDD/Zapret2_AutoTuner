@@ -25,6 +25,12 @@ public sealed record GenevaSearchView
 {
     public bool Running { get; init; }
 
+    /// <summary>The Agent's id of the search; empty before the first.</summary>
+    public string Id { get; init; } = "";
+
+    /// <summary>Started by the "Авто" mode (which may run several at once), not by the user.</summary>
+    public bool Auto { get; init; }
+
     public string Host { get; init; } = "";
 
     public int Port { get; init; } = 443;
@@ -121,20 +127,16 @@ public sealed class GenevaController : IAsyncDisposable
     private readonly Func<string, int, bool, int, ProbeCriteria, CancellationToken, Task<ProbeResult>> _probe;
     private readonly Lock _lock = new();
     private readonly List<GenevaTrial> _trials = [];
+
+    /// <summary>The running searches by id: the user's one, or up to <see cref="GenevaArgv.MaxSearches"/> of the "Авто" mode.</summary>
+    private readonly Dictionary<string, SearchSlot> _searches = new(StringComparer.Ordinal);
     private readonly List<string> _log = [];
     private readonly CancellationTokenSource _dispose = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private GenevaState _state;
     private GenevaSearchView _search = new();
     private GenevaRunView _run = new();
-    private string? _searchId;
-    private CancellationTokenSource? _probeCts;
-    private string? _stopRequested;
-    private GenevaJudge? _judge;
-    private ProbeCriteria _criteria = ProbeCriteria.Default;
-    private (string Ru, string En)? _portsUnavailable;
     private string? _runId;
-    private Task? _searchWatch;
     private Task? _runWatch;
     private int _probeSeq;
 
@@ -169,12 +171,45 @@ public sealed class GenevaController : IAsyncDisposable
         }
     }
 
+    /// <summary>One running search: what it judges by and how it goes.</summary>
+    private sealed class SearchSlot(string id, GenevaSearchSettings settings, GenevaJudge? judge, GenevaSearchView view)
+    {
+        public string Id { get; } = id;
+
+        public GenevaSearchSettings Settings { get; } = settings;
+
+        public GenevaJudge? Judge { get; } = judge;
+
+        public ProbeCriteria Criteria { get; set; } = settings.Criteria;
+
+        public CancellationTokenSource ProbeCts { get; } = new();
+
+        public bool StopRequested { get; set; }
+
+        public (string Ru, string En)? PortsUnavailable { get; set; }
+
+        public GenevaSearchView View { get; set; } = view;
+
+        public Task? Watch { get; set; }
+    }
+
+    /// <summary>The search the page shows: the latest running one, or the last that ended.</summary>
     public GenevaSearchView Search
     {
         get
         {
             lock (_lock)
-                return _search;
+                return _searches.Count == 0 ? _search : _searches.Values.MaxBy(x => x.View.Started)!.View;
+        }
+    }
+
+    /// <summary>Every running search (the "Авто" mode may run several).</summary>
+    public IReadOnlyList<GenevaSearchView> Searches
+    {
+        get
+        {
+            lock (_lock)
+                return [.. _searches.Values.Select(x => x.View).OrderBy(x => x.Started)];
         }
     }
 
@@ -205,7 +240,24 @@ public sealed class GenevaController : IAsyncDisposable
         }
     }
 
-    public bool SearchRunning => Search.Running;
+    public bool SearchRunning
+    {
+        get
+        {
+            lock (_lock)
+                return _searches.Count > 0;
+        }
+    }
+
+    /// <summary>A search the user started (the page, MCP) runs: the "Авто" mode waits for it.</summary>
+    public bool UserSearchRunning
+    {
+        get
+        {
+            lock (_lock)
+                return _searches.Values.Any(x => !x.View.Auto);
+        }
+    }
 
     public bool RunRunning => Run.Running;
 
@@ -244,7 +296,12 @@ public sealed class GenevaController : IAsyncDisposable
     /// when geneva started; the search goes on in the background. Throws <see cref="GenevaRefusedException"/>.
     /// </summary>
     /// <param name="judge">How each strategy is judged; null: the page's full download (<see cref="GenevaSearchSettings.Tls"/>).</param>
-    public async Task StartSearchAsync(GenevaSearchSettings settings, CancellationToken ct, GenevaJudge? judge = null)
+    /// <param name="auto">
+    /// The "Авто" mode's search: it may run beside its other ones (up to <see cref="GenevaArgv.MaxSearches"/>, each
+    /// target once); the user's search runs alone.
+    /// </param>
+    /// <returns>The search's id (<see cref="StopSearchAsync(string, CancellationToken)"/>).</returns>
+    public async Task<string> StartSearchAsync(GenevaSearchSettings settings, CancellationToken ct, GenevaJudge? judge = null, bool auto = false)
     {
         if (settings.Resume && State.ProgressOf(settings.Host, settings.Port) is { Population: > 0 } saved)
         {
@@ -262,8 +319,15 @@ public sealed class GenevaController : IAsyncDisposable
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (SearchRunning)
-                throw new GenevaRefusedException("подбор geneva уже идёт / a geneva search is already running");
+            lock (_lock)
+            {
+                if (_searches.Count > 0 && (!auto || _searches.Values.Any(x => !x.View.Auto)))
+                    throw new GenevaRefusedException("подбор geneva уже идёт / a geneva search is already running");
+                if (_searches.Count >= GenevaArgv.MaxSearches)
+                    throw new GenevaRefusedException($"уже идут {GenevaArgv.MaxSearches} подбора geneva / {GenevaArgv.MaxSearches} geneva searches already run");
+                if (_searches.Values.Any(x => string.Equals(x.Settings.Host, settings.Host, StringComparison.OrdinalIgnoreCase) && x.Settings.Port == settings.Port))
+                    throw new GenevaRefusedException("подбор этой цели уже идёт / this target is already being searched");
+            }
             if (Busy?.Invoke() is { } why)
                 throw new GenevaRefusedException(why);
             var agent = await _agent(ct).ConfigureAwait(false);
@@ -283,19 +347,17 @@ public sealed class GenevaController : IAsyncDisposable
             req.Seeds.AddRange(settings.Seeds);
             var reply = await agent.StartAsync(req, CancellationToken.None).ConfigureAwait(false);
             var prev = State.ProgressOf(settings.Host, settings.Port);
-            var probeCts = new CancellationTokenSource();
+            SearchSlot slot;
             lock (_lock)
             {
-                _searchId = reply.Id;
-                _judge = judge;
-                _criteria = settings.Criteria;
-                _probeCts?.Dispose();
-                _probeCts = probeCts;
-                _portsUnavailable = null;
-                _trials.Clear();
-                _search = new GenevaSearchView
+                // the feed belongs to the searches running now
+                if (_searches.Count == 0)
+                    _trials.Clear();
+                slot = new SearchSlot(reply.Id, settings, judge, new GenevaSearchView
                 {
                     Running = true,
+                    Id = reply.Id,
+                    Auto = auto,
                     Host = settings.Host,
                     Port = settings.Port,
                     Population = settings.Population,
@@ -307,11 +369,13 @@ public sealed class GenevaController : IAsyncDisposable
                     Generation = settings.Resume && prev is not null ? prev.Generation : -1,
                     BestFitness = settings.Resume && prev is not null ? prev.BestFitness : 0,
                     Best = settings.Resume ? prev?.Best : null,
-                };
+                });
+                _searches[reply.Id] = slot;
             }
             AddLog(settings.Resume ? $"Продолжение подбора для {settings.Host}" : $"Подбор для {settings.Host}: популяция {settings.Population}, поколений {settings.Generations}");
-            Update(s => s with { LastHost = settings.Host, LastPort = settings.Port, Population = settings.Population, Generations = settings.Generations });
-            _searchWatch = Task.Run(() => WatchSearchAsync(agent, reply.Id, settings, probeCts.Token, _dispose.Token));
+            Update(s => auto ? s : s with { LastHost = settings.Host, LastPort = settings.Port, Population = settings.Population, Generations = settings.Generations });
+            slot.Watch = Task.Run(() => WatchSearchAsync(agent, slot, _dispose.Token));
+            return reply.Id;
         }
         finally
         {
@@ -319,28 +383,47 @@ public sealed class GenevaController : IAsyncDisposable
         }
     }
 
+    /// <summary>Stops every running search (the page's Stop, MCP, the program's "turn everything off").</summary>
     public async Task StopSearchAsync(CancellationToken ct = default)
     {
-        string? id;
-        CancellationTokenSource? probe;
+        List<string> ids;
         lock (_lock)
-            (id, probe) = (_searchId, _probeCts);
-        if (id is null)
-            return;
+            ids = [.. _searches.Keys];
+        await Task.WhenAll(ids.Select(id => StopSearchAsync(id, ct))).ConfigureAwait(false);
+    }
+
+    /// <summary>Stops one search; geneva saves its checkpoint. Nothing happens when it already ended.</summary>
+    public async Task StopSearchAsync(string id, CancellationToken ct)
+    {
+        SearchSlot? slot;
         lock (_lock)
-            _stopRequested = id;
+        {
+            if (!_searches.TryGetValue(id, out slot))
+                return;
+            slot.StopRequested = true;
+        }
         // the probe in flight is not waited for: geneva stops after its current step anyway
-        await (probe?.CancelAsync() ?? Task.CompletedTask).ConfigureAwait(false);
-        AddLog("Остановка подбора: geneva сохраняет прогресс…");
+        try
+        {
+            await slot.ProbeCts.CancelAsync().ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            return; // it ended meanwhile
+        }
+        AddLog($"Остановка подбора для {slot.Settings.Host}: geneva сохраняет прогресс… / stopping the search for {slot.Settings.Host}: geneva saves its progress…");
         Changed?.Invoke();
         var agent = await _agent(ct).ConfigureAwait(false);
         await agent.StopAsync(id, ct).ConfigureAwait(false);
-        if (_searchWatch is { } w)
+        if (slot.Watch is { } w)
             await Task.WhenAny(w, Task.Delay(TimeSpan.FromSeconds(20), ct)).ConfigureAwait(false);
     }
 
-    private async Task WatchSearchAsync(IGenevaAgent agent, string id, GenevaSearchSettings settings, CancellationToken probeCt, CancellationToken ct)
+    private async Task WatchSearchAsync(IGenevaAgent agent, SearchSlot slot, CancellationToken ct)
     {
+        var id = slot.Id;
+        var settings = slot.Settings;
+        var probeCt = slot.ProbeCts.Token;
         int exitCode = -1;
         string? reason = null;
         var inflight = new List<Task>();
@@ -366,12 +449,12 @@ public sealed class GenevaController : IAsyncDisposable
                 {
                     // several workers ask at once, each from its own ports: their probes run side by side, and geneva
                     // takes the answers by id in any order. One worker keeps the old order: one probe at a time.
-                    var pending = Task.Run(() => AnswerAsync(agent, id, settings, e, probeCt, ct), CancellationToken.None);
+                    var pending = Task.Run(() => AnswerAsync(agent, slot, e, probeCt, ct), CancellationToken.None);
                     inflight.Add(pending);
                     inflight.RemoveAll(t => t.IsCompleted);
                     continue;
                 }
-                await OnSearchEventAsync(agent, id, settings, e, probeCt, ct).ConfigureAwait(false);
+                await OnSearchEventAsync(agent, slot, e, probeCt, ct).ConfigureAwait(false);
                 Changed?.Invoke();
             }
         }
@@ -390,21 +473,18 @@ public sealed class GenevaController : IAsyncDisposable
         bool stopped;
         (string Ru, string En)? ports;
         lock (_lock)
-            (stopped, ports, _portsUnavailable) = (_stopRequested == id, _portsUnavailable, null);
+            (stopped, ports) = (slot.StopRequested, slot.PortsUnavailable);
         // the Agent stops a search by closing its input, which geneva reports as a failed evaluation (code 1): the
         // user pressed Stop, the checkpoint is saved
         var ended = ports ?? (stopped && reason != "done" ? GenevaText.Exit(0, "signal") : GenevaText.Exit(exitCode, reason));
         GenevaSearchView view;
         lock (_lock)
         {
-            // the view of this search, taken before another search may start once the slot is free
-            view = _search with { Running = false, Ended = ended };
-            if (_searchId == id)
-            {
-                _searchId = null;
-                _search = view;
-            }
+            view = slot.View with { Running = false, Ended = ended };
+            _searches.Remove(id);
+            _search = view;
         }
+        slot.ProbeCts.Dispose();
         Update(s => s.WithProgress(new GenevaSearchProgress
         {
             Host = view.Host,
@@ -425,8 +505,10 @@ public sealed class GenevaController : IAsyncDisposable
         SearchEnded?.Invoke(view);
     }
 
-    private async Task OnSearchEventAsync(IGenevaAgent agent, string id, GenevaSearchSettings settings, GenevaEvent e, CancellationToken probeCt, CancellationToken ct)
+    private async Task OnSearchEventAsync(IGenevaAgent agent, SearchSlot slot, GenevaEvent e, CancellationToken probeCt, CancellationToken ct)
     {
+        var id = slot.Id;
+        var settings = slot.Settings;
         switch (e.Ev)
         {
             case "start":
@@ -437,12 +519,14 @@ public sealed class GenevaController : IAsyncDisposable
                 }
                 break;
             case "eval_request":
-                await AnswerAsync(agent, id, settings, e, probeCt, ct).ConfigureAwait(false);
+                await AnswerAsync(agent, slot, e, probeCt, ct).ConfigureAwait(false);
                 break;
             case "baseline":
                 lock (_lock)
-                    _search = _search with { Blocked = e.Bool("blocked"), BaselineOutcome = e.Str("outcome") };
-                AddLog(e.Bool("blocked") ? $"Без обхода: {GenevaText.Outcome(e.Str("outcome")).Ru} — сайт заблокирован, ищем" : "Без обхода сайт открывается: подбирать нечего");
+                    slot.View = slot.View with { Blocked = e.Bool("blocked"), BaselineOutcome = e.Str("outcome") };
+                AddLog(e.Bool("blocked")
+                    ? $"{settings.Host} без обхода: {GenevaText.Outcome(e.Str("outcome")).Ru} — сайт заблокирован, ищем / without a bypass: {GenevaText.Outcome(e.Str("outcome")).En}, blocked, searching"
+                    : $"{settings.Host} без обхода открывается: подбирать нечего / opens without a bypass: nothing to search");
                 break;
             case "eval":
             {
@@ -455,11 +539,12 @@ public sealed class GenevaController : IAsyncDisposable
                     _trials.Insert(0, t);
                     if (_trials.Count > MaxTrials)
                         _trials.RemoveAt(_trials.Count - 1);
-                    _search = _search with
+                    var v = slot.View;
+                    slot.View = v with
                     {
-                        Evaluated = _search.Evaluated + 1,
-                        EvaluatedInGeneration = Math.Min(_search.Population, _search.EvaluatedInGeneration + 1),
-                        Succeeded = _search.Succeeded + (t.Fitness > 0 ? 1 : 0),
+                        Evaluated = v.Evaluated + 1,
+                        EvaluatedInGeneration = Math.Min(v.Population, v.EvaluatedInGeneration + 1),
+                        Succeeded = v.Succeeded + (t.Fitness > 0 ? 1 : 0),
                     };
                 }
                 if (t.Fitness > 0)
@@ -474,19 +559,20 @@ public sealed class GenevaController : IAsyncDisposable
                 GenevaSearchView view;
                 lock (_lock)
                 {
-                    _search = _search with
+                    var v = slot.View;
+                    slot.View = v with
                     {
                         Generation = (int)e.Long("gen"),
                         EvaluatedInGeneration = 0,
                         BestFitness = e.Num("best_fitness"),
                         AvgFitness = e.Num("avg_fitness"),
                         Best = e.Str("best"),
-                        BestByGeneration = [.. _search.BestByGeneration.TakeLast(MaxHistory - 1), e.Num("best_fitness")],
-                        AvgByGeneration = [.. _search.AvgByGeneration.TakeLast(MaxHistory - 1), e.Num("avg_fitness")],
+                        BestByGeneration = [.. v.BestByGeneration.TakeLast(MaxHistory - 1), e.Num("best_fitness")],
+                        AvgByGeneration = [.. v.AvgByGeneration.TakeLast(MaxHistory - 1), e.Num("avg_fitness")],
                     };
-                    view = _search;
+                    view = slot.View;
                 }
-                AddLog($"Поколение {view.Generation + 1}/{view.Generations}: лучший фитнес {view.BestFitness:0}, средний {view.AvgFitness:0}");
+                AddLog($"{view.Host}: поколение {view.Generation + 1}/{view.Generations}: лучший фитнес {view.BestFitness:0}, средний {view.AvgFitness:0} / generation {view.Generation + 1}/{view.Generations}: best fitness {view.BestFitness:0}, average {view.AvgFitness:0}");
                 Update(s => s.WithProgress(new GenevaSearchProgress
                 {
                     Host = view.Host,
@@ -529,8 +615,9 @@ public sealed class GenevaController : IAsyncDisposable
     /// One strategy's verdict: the page downloaded from a local port of geneva's block, so the strategy applies to it.
     /// A port still busy from the previous probe is skipped (the block has 64).
     /// </summary>
-    private async Task AnswerAsync(IGenevaAgent agent, string id, GenevaSearchSettings settings, GenevaEvent e, CancellationToken probeCt, CancellationToken ct)
+    private async Task AnswerAsync(IGenevaAgent agent, SearchSlot slot, GenevaEvent e, CancellationToken probeCt, CancellationToken ct)
     {
+        var id = slot.Id;
         if (probeCt.IsCancellationRequested)
             return;
         long reqId = e.Long("id");
@@ -539,9 +626,7 @@ public sealed class GenevaController : IAsyncDisposable
         string detail;
         try
         {
-            GenevaJudge judge;
-            lock (_lock)
-                judge = _judge ?? ((port, c) => PageJudgeAsync(settings, port, lports, e.Str("strategy") ?? "", c));
+            GenevaJudge judge = slot.Judge ?? ((port, c) => PageJudgeAsync(slot, port, lports, e.Str("strategy") ?? "", c));
             GenevaJudgement? j = null;
             for (int attempt = 0; attempt < MaxPortAttempts; attempt++)
             {
@@ -557,7 +642,7 @@ public sealed class GenevaController : IAsyncDisposable
                 // be judged, and a made-up failure would mislead the search
                 AddLog($"Локальные порты {lports} заняты или зарезервированы системой: подбор остановлен ({j.Detail})");
                 lock (_lock)
-                    _portsUnavailable = ($"локальные порты {lports} заняты или зарезервированы системой", $"local ports {lports} are busy or reserved by the system");
+                    slot.PortsUnavailable = ($"локальные порты {lports} заняты или зарезервированы системой", $"local ports {lports} are busy or reserved by the system");
                 await agent.StopAsync(id, CancellationToken.None).ConfigureAwait(false);
                 return;
             }
@@ -592,11 +677,12 @@ public sealed class GenevaController : IAsyncDisposable
     /// page (<see cref="PageCheck"/>): a page that only seems to open is blocked, and every strategy after it must pass
     /// the tighter criterion (the speed, the padded 128 KB). geneva repeats the baseline when a search continues.
     /// </summary>
-    private async Task<GenevaJudgement> PageJudgeAsync(GenevaSearchSettings settings, int port, string lports, string strategy, CancellationToken ct)
+    private async Task<GenevaJudgement> PageJudgeAsync(SearchSlot slot, int port, string lports, string strategy, CancellationToken ct)
     {
+        var settings = slot.Settings;
         ProbeCriteria c;
         lock (_lock)
-            c = _criteria;
+            c = slot.Criteria;
         bool baseline = GenevaStrategyText.IsEmpty(strategy);
         int n = 0;
         var check = await PageCheck.RunAsync(c, baseline, LinkCapacity.Shared,
@@ -608,8 +694,8 @@ public sealed class GenevaController : IAsyncDisposable
         if (check.Finding is { } found)
         {
             lock (_lock)
-                _criteria = check.Criteria;
-            AddLog($"Без обхода страница открывается, но: {found}. Стратегия должна дать {check.Criteria}");
+                slot.Criteria = check.Criteria;
+            AddLog($"{settings.Host}: без обхода страница открывается, но: {found}. Стратегия должна дать {check.Criteria} / without a bypass the page opens, but not as it should; a strategy must give {check.Criteria}");
         }
         var (fitness, outcome) = GenevaFitness.FromProbe(r, ProbeLevel.L2Body, check.Criteria.MinBytes);
         return new GenevaJudgement(fitness, outcome + ": " + r);
@@ -881,6 +967,22 @@ public sealed class GenevaController : IAsyncDisposable
         set => Update(s => s with { Workers = Math.Clamp(value, GenevaSearchSettings.WorkersRange.Min, GenevaSearchSettings.WorkersRange.Max) });
     }
 
+    /// <summary>The "Авто" mode searches several services at once, the workers split between them.</summary>
+    public bool AutoSplit
+    {
+        get => State.AutoSplit;
+        set => Update(s => s with { AutoSplit = value });
+    }
+
+    /// <summary>Searches the "Авто" mode runs side by side now: 1, or with <see cref="AutoSplit"/> one per worker, at most <see cref="GenevaArgv.MaxSearches"/>.</summary>
+    public int AutoSearches => AutoSplit ? Math.Clamp(Workers, 1, GenevaArgv.MaxSearches) : 1;
+
+    /// <summary>
+    /// The workers of each of the "Авто" mode's searches: all of them, or an equal share per slot. Fixed per slot, so
+    /// the searches together never run more than the user set, whenever each of them starts.
+    /// </summary>
+    public int AutoWorkers => Math.Max(1, Workers / AutoSearches);
+
     /// <summary>
     /// Adds strategies from another user's file (already checked by <c>geneva check</c>): next to the working ones,
     /// nothing replaced. Returns how many were new. The "Авто" mode tries them on a service's traffic before use.
@@ -909,13 +1011,15 @@ public sealed class GenevaController : IAsyncDisposable
         // the Agent stops geneva on its own when the UI goes; this only ends the watchers, and waits for them so none
         // writes the state after the program closed its store
         await _dispose.CancelAsync().ConfigureAwait(false);
-        foreach (var w in new[] { _searchWatch, _runWatch })
+        List<Task?> watches;
+        lock (_lock)
+            watches = [.. _searches.Values.Select(x => x.Watch), _runWatch];
+        foreach (var w in watches)
         {
             if (w is not null)
                 await Task.WhenAny(w, Task.Delay(TimeSpan.FromSeconds(3))).ConfigureAwait(false);
         }
         _dispose.Dispose();
-        _probeCts?.Dispose();
         _gate.Dispose();
     }
 

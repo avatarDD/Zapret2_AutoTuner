@@ -206,15 +206,36 @@ public static partial class StrategyImporter
         return new ImportResult(format ?? "zapret-gui-strategy", s, warnings);
     }
 
+    /// <summary>
+    /// Blob names a profile takes from the GUI's registry. tls_client_hello_clone writes its clone into the desync
+    /// variable named by blob= and reads the blob named by fallback=; later calls of the same profile use the clone
+    /// by that variable name, which is not a blob.
+    /// </summary>
+    private static IEnumerable<string> RegistryBlobRefs(Profile p)
+    {
+        var calls = p.Strategy.Calls.ToList();
+        var produced = calls.Where(c => c.Function == "tls_client_hello_clone").Select(c => c["blob"]).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        foreach (var c in calls)
+        {
+            bool clone = c.Function == "tls_client_hello_clone";
+            foreach (var a in c.Args)
+            {
+                if (a.Value is null)
+                    continue;
+                if (clone ? a.Name == "fallback" : (a.Name is "blob" or "pattern" or "seqovl_pattern") && !produced.Contains(a.Value))
+                    yield return a.Value;
+            }
+        }
+    }
+
     /// <summary>The argv in the model: profiles, the lists and blobs they use read from the files.</summary>
     private static Solution FromArgv(List<string> argv, IReadOnlyDictionary<string, byte[]> files, List<string> warnings, bool registryBlobs = false)
     {
         var parsed = EngineArgsParser.Parse(argv);
         if (registryBlobs)
         {
-            foreach (var name in parsed.Profiles.SelectMany(p => p.Strategy.Calls).SelectMany(c => c.Args)
-                .Where(a => a.Name is "blob" or "pattern" or "seqovl_pattern" && Identifiers.IsLuaIdentifier(a.Value) && !a.Value!.StartsWith("fake_default_", StringComparison.Ordinal))
-                .Select(a => a.Value!).Distinct().Where(n => !parsed.Blobs.ContainsKey(n)).ToList())
+            foreach (var name in parsed.Profiles.SelectMany(RegistryBlobRefs).Distinct()
+                .Where(n => Identifiers.IsLuaIdentifier(n) && !n.StartsWith("fake_default_", StringComparison.Ordinal) && !parsed.Blobs.ContainsKey(n)).ToList())
                 parsed.Blobs[name] = $"@{name}.bin";
         }
         foreach (var (tok, why) in parsed.Problems)

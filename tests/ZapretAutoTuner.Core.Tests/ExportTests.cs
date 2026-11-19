@@ -434,6 +434,20 @@ public sealed class ExportTests
     }
 
     [Fact]
+    public void A_clone_variable_from_zapret_gui_is_not_a_missing_blob()
+    {
+        const string bundle = """
+            {"format":"zapret-autotuner-bundle","format_version":1,
+             "strategy":{"id":"x","name":"x","profiles":[{"id":"p1","name":"p1","enabled":true,
+               "args":"--filter-tcp=443 --lua-desync=tls_client_hello_clone:blob=ch:fallback=fb --lua-desync=fake:blob=ch"}]},
+             "blobs":[{"name":"fb","base64":"FgMB"}]}
+            """;
+        var r = StrategyImporter.Import(bundle);
+        Assert.DoesNotContain(r.Warnings, w => w.Contains("ch.bin", StringComparison.Ordinal));
+        Assert.Equal(new byte[] { 0x16, 0x03, 0x01 }, r.Solution.Blobs["fb"]);
+    }
+
+    [Fact]
     public void Malformed_json_is_a_failed_import_not_a_crash()
     {
         Assert.Empty(StrategyImporter.Import("""{"format":"zapret-autotuner-bundle","strategy":{"profiles":[]},"blobs":[{"name":"b","base64":"!!"}]}""").Solution.Profiles);

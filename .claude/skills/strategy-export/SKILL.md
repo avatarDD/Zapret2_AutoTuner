@@ -381,13 +381,18 @@ AutoTuner → zapret-gui: «Импорт бандла» (`POST
 `generator.name = "zapret-gui"`, всеми hostlist, ipset (`cidrs`), блобами
 и lua, на которые ссылаются профили (выключенные тоже; импорт AutoTuner
 берёт только включённые). Блоб под именем каталога GUI (`tls_google`)
-приходит байтами файла за ним. В `lua` — и скрипты, которые GUI
-подключает сам по функциям и значениям (`fakemultisplit.lua`,
-`init_vars.lua`, оркестратор `circular`…), в порядке загрузки; lua самого
-zapret2 (`zapret-lib`, `-antidpi`, `-auto`, `-obfs`, `-pcap`, `-wgobfs`,
-`-tests`) не кладётся. Паттерн с именем из `init_vars` (`tls_rnd`)
-задаёт `init_vars.lua`, блобом он не приходит — импорт AutoTuner
-предупредит о нём как о ненайденном блобе. Встроенные списки GUI
+приходит байтами файла за ним, `--blob=<имя>:…` из args — байтами
+объявления (само объявление из args убирается). В `lua` — и скрипты,
+которые GUI подключает сам по функциям и значениям (`init_vars.lua`,
+`fakemultisplit.lua`, оркестратор `circular`…), в порядке загрузки (они
+раньше `--lua-init` профилей); lua самого zapret2 (`zapret-lib`,
+`-antidpi`, `-auto`, `-obfs`, `-pcap`, `-wgobfs`, `-tests`) не кладётся.
+Паттерн `init_vars` без файла каталога (`tls_rnd` — случайный при
+запуске) байтов не имеет и в бандл не идёт: zapret-gui предупреждает
+при выгрузке, Validator AutoTuner такую стратегию не пропустит
+(`blob.missing`). Блобы больше 16 KB (`MaxBlobSize`) GUI выгружает с
+предупреждением. Импорт бандла в zapret-gui не пишет скрипты и имена
+каталога, которые у GUI свои (`skipped` плана). Встроенные списки GUI
 (`other`, `other2`, `netrogat`) в бандл не входят — импорт AutoTuner
 предупредит о них, а не откажет. Эталоны: `testdata/export/from-zapret-gui/` (записан
 zapret-gui; у него та же копия в `tests/data/autotuner/`), и наши бандлы

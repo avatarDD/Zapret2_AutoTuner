@@ -378,11 +378,18 @@ AutoTuner → zapret-gui: «Импорт бандла» (`POST
 /api/strategies/import-bundle`). zapret-gui → AutoTuner: «Стратегии → ⋯ →
 Скачать бандл» (`GET /api/strategies/<id>/export-bundle`,
 `core/bundle_export.py`) — тот же `zapret-autotuner-bundle` v1 с
-`generator.name = "zapret-gui"`, всеми hostlist, ipset (`cidrs`), своими
-блобами и lua, на которые ссылаются профили (выключенные тоже; импорт
-AutoTuner берёт только включённые). Встроенные списки GUI (`other`,
-`other2`, `netrogat`) в бандл не входят — импорт AutoTuner предупредит о
-них, а не откажет. Эталоны: `testdata/export/from-zapret-gui/` (записан
+`generator.name = "zapret-gui"`, всеми hostlist, ipset (`cidrs`), блобами
+и lua, на которые ссылаются профили (выключенные тоже; импорт AutoTuner
+берёт только включённые). Блоб под именем каталога GUI (`tls_google`)
+приходит байтами файла за ним. В `lua` — и скрипты, которые GUI
+подключает сам по функциям и значениям (`fakemultisplit.lua`,
+`init_vars.lua`, оркестратор `circular`…), в порядке загрузки; lua самого
+zapret2 (`zapret-lib`, `-antidpi`, `-auto`, `-obfs`, `-pcap`, `-wgobfs`,
+`-tests`) не кладётся. Паттерн с именем из `init_vars` (`tls_rnd`)
+задаёт `init_vars.lua`, блобом он не приходит — импорт AutoTuner
+предупредит о нём как о ненайденном блобе. Встроенные списки GUI
+(`other`, `other2`, `netrogat`) в бандл не входят — импорт AutoTuner
+предупредит о них, а не откажет. Эталоны: `testdata/export/from-zapret-gui/` (записан
 zapret-gui; у него та же копия в `tests/data/autotuner/`), и наши бандлы
 `testdata/export/zapret-gui*/` лежат копией в zapret-gui, где их читает
 его импорт. Меняешь формат — обновляй эталоны в обоих репозиториях.

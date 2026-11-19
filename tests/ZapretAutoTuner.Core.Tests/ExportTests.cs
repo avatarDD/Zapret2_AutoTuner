@@ -404,10 +404,15 @@ public sealed class ExportTests
         var r = StrategyImporter.Import(text);
         Assert.Equal("zapret-autotuner-bundle", r.Kind);
         var s = r.Solution;
-        Assert.Single(s.Profiles);                       // the disabled QUIC profile stays out
+        Assert.Equal(2, s.Profiles.Count);               // the disabled QUIC profile stays out
         Assert.Contains(s.Hostlists.Values, l => l.SequenceEqual(["youtube.com", "googlevideo.com"]));
         Assert.Equal(Encoding.ASCII.GetBytes("\u0016\u0003\u0001\0\u0005hello"), s.Blobs["my_tls"]);
+        // a catalog name of the GUI comes with the file behind it
+        Assert.True(s.Blobs.ContainsKey("tls_google"));
+        // the user's script and the GUI's own ones it loads by function (fakemultisplit) and value (init_vars)
         Assert.True(s.LuaFiles.ContainsKey("my-twice.lua"));
+        Assert.True(s.LuaFiles.ContainsKey("fakemultisplit.lua"));
+        Assert.True(s.LuaFiles.ContainsKey("init_vars.lua"));
         Assert.Equal("Моя: YouTube", s.Meta.Title);
         // lists/other.txt is the GUI's built-in list: not in the bundle, so a warning, not a failure
         Assert.Contains(r.Warnings, w => w.Contains("lists/other.txt", StringComparison.Ordinal));
@@ -419,8 +424,8 @@ public sealed class ExportTests
         const string backup = """
             {"format":"zapret-gui-backup","format_version":1,
              "strategies":[{"id":"x","name":"x","profiles":[{"id":"p1","name":"p1","enabled":true,
-               "args":"--filter-tcp=443 --ipset=lists/my-ipset.txt --lua-desync=multisplit:pos=1"}]}],
-             "ipsets":[{"name":"my-ipset","entries":["142.250.0.0/15"]}]}
+               "args":"--filter-tcp=443 --ipset=lists/ipset-yt.txt --lua-desync=multisplit:pos=1"}]}],
+             "ipsets":[{"name":"ipset-yt","entries":["142.250.0.0/15"]}]}
             """;
         var s = StrategyImporter.Import(backup).Solution;
         Assert.Contains(s.Ipsets.Values, l => l.SequenceEqual(["142.250.0.0/15"]));

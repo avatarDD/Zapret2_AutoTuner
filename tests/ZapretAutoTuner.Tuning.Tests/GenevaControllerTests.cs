@@ -155,6 +155,52 @@ public sealed class GenevaControllerTests
     }
 
     [Fact]
+    public async Task The_auto_mode_runs_searches_side_by_side_and_stops_them_one_by_one()
+    {
+        var rig = new Rig { Probe = (n, host) => Reset(host) };
+        rig.Agent.Hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var g = rig.Make();
+        var a = await g.StartSearchAsync(new GenevaSearchSettings { Host = "a.example", Population = 10, Generations = 3 }, default, auto: true);
+        var b = await g.StartSearchAsync(new GenevaSearchSettings { Host = "b.example", Population = 10, Generations = 3 }, default, auto: true);
+        Assert.NotEqual(a, b);
+        Assert.Equal(["a.example", "b.example"], g.Searches.Select(x => x.Host));
+        Assert.All(g.Searches, x => Assert.True(x.Auto));
+        // the user's search goes alone, and one target is searched once
+        await Assert.ThrowsAsync<GenevaRefusedException>(() => g.StartSearchAsync(new GenevaSearchSettings { Host = "c.example" }, default));
+        await Assert.ThrowsAsync<GenevaRefusedException>(() => g.StartSearchAsync(new GenevaSearchSettings { Host = "a.example" }, default, auto: true));
+        Assert.False(g.UserSearchRunning);
+        // each search gets its own baseline answer (the same request id in two searches)
+        await Until(() => { lock (rig.Agent.Answers) return rig.Agent.Answers.Count(x => x.Id == 1) == 2; });
+
+        await g.StopSearchAsync(a, default);
+        await Until(() => g.Searches.Count == 1);
+        Assert.Equal("b.example", Assert.Single(g.Searches).Host);
+        Assert.True(g.SearchRunning);
+        Assert.Equal([a], rig.Agent.Stopped);
+
+        rig.Agent.Hold.SetResult();
+        await Until(() => !g.SearchRunning);
+        Assert.Equal("b.example", g.Search.Host);
+        Assert.Equal("finished", g.Search.Ended?.En);
+    }
+
+    [Fact]
+    public void Split_threads_give_each_auto_search_its_share()
+    {
+        var rig = new Rig();
+        var g = rig.Make();
+        g.Workers = 8;
+        Assert.Equal((1, 8), (g.AutoSearches, g.AutoWorkers));
+        g.AutoSplit = true;
+        Assert.Equal((4, 2), (g.AutoSearches, g.AutoWorkers));
+        g.Workers = 3;
+        Assert.Equal((3, 1), (g.AutoSearches, g.AutoWorkers));
+        g.Workers = 1;
+        Assert.Equal((1, 1), (g.AutoSearches, g.AutoWorkers));
+        Assert.True(GenevaState.Parse(rig.Store.Json).AutoSplit);
+    }
+
+    [Fact]
     public void An_older_state_merges_in_without_replacing_anything()
     {
         var t = DateTimeOffset.Parse("2026-11-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture);

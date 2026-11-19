@@ -304,6 +304,58 @@ public class AutoTests
     }
 
     [Fact]
+    public void Several_services_on_trial_at_once_each_get_their_group_first()
+    {
+        // the "Авто" mode searching two services side by side: both tried strategies run, before the working ones
+        var book = new AutoBook();
+        book.Feed([Sample("web:a.com", AutoHealth.Ok, T0), Sample("web:b.com", AutoHealth.Failed, T0, ip: "203.0.113.6"),
+            Sample("dns:8.8.8.8", AutoHealth.Failed, T0, AutoKind.Dns, L4Kind.Udp, "8.8.8.8", 53, "dns")], T0);
+        book.Applied("web:a.com", AutoCandidates.Tcp[0], 400, T0);
+        var groups = AutoPlan.Groups(book.Services, [(book.Find("dns:8.8.8.8")!, AutoCandidates.Dns[0]), (book.Find("web:b.com")!, AutoCandidates.Tcp[1])]);
+        Assert.Equal(3, groups.Count);
+        Assert.Equal(new HashSet<string> { AutoCandidates.Dns[0], AutoCandidates.Tcp[1] }, groups.Take(2).Select(g => g.Strategy).ToHashSet());
+        Assert.Equal(["web:a.com"], groups[2].Services);
+        // the services on trial are left to their address groups, not to the names
+        Assert.Empty(AutoPlan.HostProfiles(book.Services, ["web:a.com"]));
+        Assert.Single(AutoPlan.HostProfiles(book.Services, Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void Services_on_one_address_or_one_site_are_not_searched_side_by_side()
+    {
+        var book = new AutoBook();
+        book.Feed([Sample("web:a.com", AutoHealth.Failed, T0), Sample("web:b.com", AutoHealth.Failed, T0),
+            Sample("web:c.com", AutoHealth.Failed, T0, ip: "203.0.113.9"), Sample("quic:a.com", AutoHealth.Failed, T0, AutoKind.Quic, L4Kind.Udp, "203.0.113.77", 443, "quic")], T0);
+        var a = book.Find("web:a.com")!;
+        Assert.True(AutoBook.Overlap(a, book.Find("web:b.com")!)); // one CDN address
+        Assert.False(AutoBook.Overlap(a, book.Find("web:c.com")!));
+        Assert.True(AutoBook.Overlap(a, book.Find("quic:a.com")!)); // one site
+        foreach (var k in new[] { "web:a.com", "web:b.com", "web:c.com" })
+            book.Confirmed(k, AutoConfirm.Blocked, T0);
+        book.Searching("web:a.com", T0);
+        var busy = new[] { book.Find("web:a.com")! };
+        Assert.Equal("web:c.com", book.NextToSearch(T0.AddMinutes(1), x => !busy.Any(b => AutoBook.Overlap(x, b)))?.Key);
+    }
+
+    [Fact]
+    public void Each_search_slot_has_its_own_queue_ports_and_database()
+    {
+        var s = new GenevaSearchSettings { Host = "a.example", Workers = 8 };
+        var first = GenevaArgv.Evolve(s, "c", "d", null);
+        var third = GenevaArgv.Evolve(s, "c", "d", null, slot: 2);
+        string After(List<string> argv, string key) => argv[argv.IndexOf(key) + 1];
+        Assert.Equal("331", After(first, "-q"));
+        Assert.Equal("30000", After(first, "--local-ports"));
+        Assert.Equal("333", After(third, "-q"));
+        Assert.Equal("31024", After(third, "--local-ports"));
+        Assert.Equal((30000, 32047), GenevaArgv.AllLocalPorts);
+        // eight workers of the last slot stay below the "Авто" groups' ports and every slot's range is apart
+        Assert.True(GenevaArgv.LocalPortsOf(GenevaArgv.MaxSearches - 1) + GenevaArgv.MaxWorkers * GenevaArgv.LocalPortsCount <= 65535);
+        Assert.True(GenevaArgv.EvalQueueOf(GenevaArgv.MaxSearches - 1) < 340);
+        Assert.Throws<ArgumentOutOfRangeException>(() => GenevaArgv.Evolve(s, "c", "d", null, slot: GenevaArgv.MaxSearches));
+    }
+
+    [Fact]
     public void Two_groups_never_queue_the_same_address_and_transport()
     {
         // two sites behind one CDN address with different strategies, and a resolver on the same address

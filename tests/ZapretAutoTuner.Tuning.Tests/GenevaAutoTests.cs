@@ -364,4 +364,52 @@ public sealed class GenevaAutoTests
         controller.Lists = new AutoLists { NoSearch = ["AS15169"], AsnPrefixes = new Dictionary<string, IReadOnlyList<string>> { ["15169"] = ["8.8.8.0/24"] } };
         await Until(() => auto.View.Services.All(x => x.Key != "dns:8.8.8.8") && auto.View.Current is null);
     }
+
+    private static GenevaState TwoBlockedResolvers()
+    {
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        AutoService Resolver(string ip) => new()
+        {
+            Key = "dns:" + ip, Kind = AutoKind.Dns, Transport = Core.Model.L4Kind.Udp, Name = "DNS " + ip, App = "dns",
+            Addresses = [new AutoAddress(ip, t0)], Ports = [53], Replay = Convert.ToBase64String([1, 2, 3]),
+            Status = AutoStatus.Blocked, BaselineAt = t0, LastSeen = t0,
+        };
+        return new GenevaState { Workers = 8, Auto = new GenevaAutoState { Services = [Resolver("8.8.8.8"), Resolver("1.1.1.1")] } };
+    }
+
+    [Fact]
+    public async Task With_split_threads_two_blocked_services_are_searched_at_once()
+    {
+        var (controller, auto, agent, _, _) = Make(works: "nothing works", saved: TwoBlockedResolvers() with { AutoSplit = true });
+        agent.Hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var _c = controller;
+        await using var _a = auto;
+        await auto.EnableAsync(default);
+
+        await Until(() => controller.Searches.Count == 2, seconds: 60);
+        Assert.Equal(new HashSet<string> { "8.8.8.8", "1.1.1.1" }, controller.Searches.Select(x => x.Host).ToHashSet());
+        lock (agent.Started)
+            Assert.All(agent.Started.Where(r => r.Mode == "evolve"), r => Assert.Equal(2, r.Workers));
+        Assert.Equal(2, auto.View.Searches.Count);
+        Assert.Contains("8.8.8.8", auto.CurrentPhase.En, StringComparison.Ordinal);
+        Assert.Contains("1.1.1.1", auto.CurrentPhase.En, StringComparison.Ordinal);
+        agent.Hold.SetResult();
+    }
+
+    [Fact]
+    public async Task With_all_threads_on_one_service_the_services_wait_their_turn()
+    {
+        var (controller, auto, agent, _, _) = Make(works: "nothing works", saved: TwoBlockedResolvers());
+        agent.Hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var _c = controller;
+        await using var _a = auto;
+        await auto.EnableAsync(default);
+
+        await Until(() => controller.Searches.Count == 1, seconds: 60);
+        await Task.Delay(1500);
+        Assert.Single(controller.Searches);
+        Assert.Single(auto.View.Searches);
+        Assert.Equal(8, Assert.Single(agent.Started, r => r.Mode == "evolve").Workers);
+        agent.Hold.SetResult();
+    }
 }

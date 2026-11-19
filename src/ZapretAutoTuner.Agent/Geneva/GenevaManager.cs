@@ -35,6 +35,12 @@ internal sealed class GenevaManager : IDisposable
     private readonly WindowsJob? _job;
     private readonly FirewallManager? _firewall;
     private readonly SemaphoreSlim _autoGate = new(1, 1);
+
+    /// <summary>One search start at a time: two at once could take the same slot.</summary>
+    private readonly SemaphoreSlim _searchGate = new(1, 1);
+
+    /// <summary>The target each running search works on (by instance id): two searches of one target would share its checkpoint.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _searchTargets = new(StringComparer.Ordinal);
     private readonly Dictionary<string, GenevaInstance> _auto = new(StringComparer.Ordinal);
     private readonly Dictionary<int, string> _autoFilters = [];
     private GenevaInstance? _host;
@@ -141,7 +147,43 @@ internal sealed class GenevaManager : IDisposable
 
     private string? _stateDir;
 
+    /// <summary>The database of earlier versions: one for every target. Read, and copied from per target, never written.</summary>
     public string DbPath => Path.Combine(StateDir, "db.jsonl");
+
+    /// <summary>
+    /// The database of one target, in its search folder: geneva seeds a search from the same target's results only,
+    /// and searches side by side must not share a file (geneva compacts it by rewriting).
+    /// </summary>
+    public string DbPathOf(string targetKey) => Path.Combine(SearchDir(targetKey), "db.jsonl");
+
+    /// <summary>The target's lines of the old common database, the first time its own database is used.</summary>
+    private async Task MigrateDbAsync(string targetKey, CancellationToken ct)
+    {
+        var own = DbPathOf(targetKey);
+        if (File.Exists(own) || !File.Exists(DbPath))
+            return;
+        var lines = LinesOf(await File.ReadAllLinesAsync(DbPath, ct), targetKey);
+        if (lines.Count > 0)
+            await File.WriteAllLinesAsync(own, lines, ct);
+    }
+
+    /// <summary>The database lines of one target (<c>"t"</c>); broken lines are left out.</summary>
+    internal static List<string> LinesOf(IEnumerable<string> db, string targetKey)
+    {
+        var lines = new List<string>();
+        foreach (var line in db)
+        {
+            try
+            {
+                if (JsonNode.Parse(line) is JsonObject o && (string?)o["t"] == targetKey)
+                    lines.Add(line);
+            }
+            catch (JsonException)
+            {
+            }
+        }
+        return lines;
+    }
 
     /// <summary>The folder of one target's search: its checkpoint and seeds.</summary>
     public string SearchDir(string targetKey) =>
@@ -196,8 +238,35 @@ internal sealed class GenevaManager : IDisposable
 
     private async Task<GenevaStartReply> StartSearchAsync(string geneva, GenevaStartRequest r, CancellationToken ct)
     {
-        if (_running.Values.Any(i => i.Mode == "evolve" && !i.HasExited))
-            throw new GenevaStartException("подбор geneva уже идёт / a geneva search is already running");
+        await _searchGate.WaitAsync(ct);
+        try
+        {
+            return await StartSearchLockedAsync(geneva, r, ct);
+        }
+        finally
+        {
+            _searchGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// A free slot for a search (<see cref="GenevaArgv.MaxSearches"/>): its queue is free. Throws when every slot is
+    /// taken.
+    /// </summary>
+    private int FreeSearchSlot()
+    {
+        var used = _running.Values.Where(i => i.Mode == "evolve" && !i.HasExited).Select(i => i.Queue).ToHashSet();
+        for (int k = 0; k < GenevaArgv.MaxSearches; k++)
+        {
+            if (!used.Contains(GenevaArgv.EvalQueueOf(k)))
+                return k;
+        }
+        throw new GenevaStartException($"уже идут {GenevaArgv.MaxSearches} подбора geneva / {GenevaArgv.MaxSearches} geneva searches already run");
+    }
+
+    private async Task<GenevaStartReply> StartSearchLockedAsync(string geneva, GenevaStartRequest r, CancellationToken ct)
+    {
+        int slot = FreeSearchSlot();
         var settings = new GenevaSearchSettings
         {
             Host = r.Host.Trim().TrimEnd('.').ToLowerInvariant(),
@@ -212,6 +281,11 @@ internal sealed class GenevaManager : IDisposable
         };
         if (settings.Problems() is { Count: > 0 } bad)
             throw new GenevaStartException(string.Join("; ", bad));
+        foreach (var (id, target) in _searchTargets)
+        {
+            if (target == settings.TargetKey && Find(id) is { HasExited: false })
+                throw new GenevaStartException("подбор этой цели уже идёт / this target is already being searched");
+        }
         // an older geneva_c refuses --probe external with several workers: it gets one
         if (settings.Workers > 1 && !(await FeaturesAsync(geneva, ct)).Contains(GenevaBundle.ExternalWorkersFeature))
             settings = settings with { Workers = 1 };
@@ -255,10 +329,14 @@ internal sealed class GenevaManager : IDisposable
             await File.WriteAllTextAsync(extMark, "x-actions\n", ct);
         else if (!settings.Resume && File.Exists(extMark))
             File.Delete(extMark);
-        var argv = GenevaArgv.Evolve(settings, checkpoint, DbPath, seedsFile);
+        await MigrateDbAsync(settings.TargetKey, ct);
+        var argv = GenevaArgv.Evolve(settings, checkpoint, DbPathOf(settings.TargetKey), seedsFile, slot);
+        int queue = GenevaArgv.EvalQueueOf(slot);
         if (OperatingSystem.IsLinux())
-            await FirewallDownAsync(geneva, GenevaArgv.EvalQueue);
-        var inst = Launch("evolve", geneva, argv, new Dictionary<string, string>(), supervise: false, queue: GenevaArgv.EvalQueue);
+            await FirewallDownAsync(geneva, queue);
+        var inst = Launch("evolve", geneva, argv, new Dictionary<string, string>(), supervise: false, queue: queue);
+        _searchTargets[inst.Id] = settings.TargetKey;
+        _ = inst.Exited.ContinueWith(_ => _searchTargets.TryRemove(inst.Id, out string? _), TaskScheduler.Default);
         return new GenevaStartReply { Id = inst.Id, Pid = inst.Pid };
     }
 
@@ -1047,11 +1125,21 @@ internal sealed class GenevaManager : IDisposable
             cts.CancelAfter(TimeSpan.FromSeconds(10));
             var v = await Cmd.RunAsync(geneva, ["version", "--json"], ct: cts.Token);
             reply.VersionJson = v.Stdout.Trim();
+            // every target's database, and of the old common one the targets without their own (copied on first use)
+            var entries = new List<GenevaDbEntry>();
+            var searchesDir = Path.Combine(StateDir, "searches");
+            var own = Directory.Exists(searchesDir)
+                ? new DirectoryInfo(searchesDir).GetDirectories().Select(d => Path.Combine(d.FullName, "db.jsonl")).Where(File.Exists).ToList()
+                : [];
+            foreach (var db in own)
+                entries.AddRange(ParseDb((await Cmd.RunAsync(geneva, ["db", "--db", db, "list", "--json"], ct: cts.Token)).Stdout));
             if (File.Exists(DbPath))
             {
-                var top = await Cmd.RunAsync(geneva, ["db", "--db", DbPath, "list", "--json"], ct: cts.Token);
-                reply.Best.AddRange(ParseDb(top.Stdout).OrderByDescending(e => e.Ok * 1.0 / Math.Max(1, e.Runs)).ThenByDescending(e => e.AvgFitness).Take(100));
+                var targets = entries.Select(e => e.Target).ToHashSet(StringComparer.Ordinal);
+                var old = ParseDb((await Cmd.RunAsync(geneva, ["db", "--db", DbPath, "list", "--json"], ct: cts.Token)).Stdout);
+                entries.AddRange(old.Where(e => !targets.Contains(e.Target)));
             }
+            reply.Best.AddRange(entries.OrderByDescending(e => e.Ok * 1.0 / Math.Max(1, e.Runs)).ThenByDescending(e => e.AvgFitness).Take(100));
         }
         catch (Exception e) when (e is OperationCanceledException or InvalidOperationException or IOException)
         {

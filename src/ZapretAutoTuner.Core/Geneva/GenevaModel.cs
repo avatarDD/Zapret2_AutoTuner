@@ -208,6 +208,23 @@ public static class GenevaArgv
     /// <summary>The block of local ports of one worker: the probe connects from these, the strategy applies only to them.</summary>
     public const int LocalPortsCount = 64;
 
+    /// <summary>
+    /// Searches the Agent runs at once ("Авто" with its threads split between services): each has a slot of its own —
+    /// its queue (<see cref="EvalQueue"/> + slot, 331–334) and its block of local ports for all its workers. The
+    /// database is the target's own (the Agent keeps it in the target's search folder).
+    /// </summary>
+    public const int MaxSearches = 4;
+
+    /// <summary>The most workers one search has (the 1–8 of the page): the size of a slot's port range.</summary>
+    public const int MaxWorkers = 8;
+
+    public static int EvalQueueOf(int slot) => EvalQueue + slot;
+
+    public static int LocalPortsOf(int slot) => LocalPortsBase + slot * MaxWorkers * LocalPortsCount;
+
+    /// <summary>The local ports of every slot's workers: the observation of "Авто" leaves them to the searches.</summary>
+    public static (int From, int To) AllLocalPorts => (LocalPortsBase, LocalPortsOf(MaxSearches - 1) + MaxWorkers * LocalPortsCount - 1);
+
     public const int MaxSeeds = 50;
 
     /// <summary>Seconds between stats events of <c>geneva run</c>: the page's telemetry.</summary>
@@ -253,8 +270,10 @@ public static class GenevaArgv
     /// loads the page from those ports and answers (success is the full download, AGENTS.md rule 5). With several
     /// workers each asks from its own block, and the answers go back by id.
     /// </summary>
-    public static List<string> Evolve(GenevaSearchSettings s, string checkpoint, string db, string? seedsFile)
+    public static List<string> Evolve(GenevaSearchSettings s, string checkpoint, string db, string? seedsFile, int slot = 0)
     {
+        if (slot is < 0 or >= MaxSearches)
+            throw new ArgumentOutOfRangeException(nameof(slot));
         var bad = s.Problems();
         if (bad.Count > 0)
             throw new FormatException(string.Join("; ", bad));
@@ -266,8 +285,8 @@ public static class GenevaArgv
             "--probe", "external", "--host", s.Host.ToLowerInvariant(), "--port", s.Port.ToString(CultureInfo.InvariantCulture),
             "--population", s.Population.ToString(CultureInfo.InvariantCulture),
             "--generations", s.Generations.ToString(CultureInfo.InvariantCulture),
-            "--workers", s.Workers.ToString(CultureInfo.InvariantCulture), "--local-ports", LocalPortsBase.ToString(CultureInfo.InvariantCulture),
-            "-q", EvalQueue.ToString(CultureInfo.InvariantCulture),
+            "--workers", s.Workers.ToString(CultureInfo.InvariantCulture), "--local-ports", LocalPortsOf(slot).ToString(CultureInfo.InvariantCulture),
+            "-q", EvalQueueOf(slot).ToString(CultureInfo.InvariantCulture),
             "--checkpoint", checkpoint, "--db", db, "--target", s.TargetKey,
             "--top", "10", "-e", "-", "--quiet",
         });

@@ -523,6 +523,30 @@
   "Разрезы и фейки zapret2 в виде x-действий geneva_c 2.0, те же, что пробует «Авто-обход». Подбор скрещивает их с действиями Geneva. Нужна geneva_c 2.0, со старой версией пропускаются.",
   "zapret2's splits and fakes as geneva_c 2.0 x-actions, the ones the Auto bypass tries. The search crosses them with Geneva's actions. Needs geneva_c 2.0; an older one skips them."
  ],
+ "engine.browser_check": [
+  "Итоговая проверка в браузере",
+  "Final check in the browser"
+ ],
+ "engine.browser_check_tip": [
+  "Когда подбор закончится, три лучшие найденные стратегии по очереди включаются на порту сайта, и встроенный браузер программы открывает сайт через каждую. На время проверки (до минуты на стратегию) она действует на весь трафик этого порта. Ваши браузеры и их профили не используются. Без встроенного браузера проверка пропускается.",
+  "When the search ends, the three best strategies found are turned on in turn on the site's port, and the program's own browser opens the site through each. During the check (up to a minute per strategy) it applies to all traffic on that port. Your browsers and their profiles are not used. Without the program's browser the check is skipped."
+ ],
+ "engine.browser_checking": [
+  "Итоговая проверка: открываю сайт во встроенном браузере…",
+  "Final check: opening the site in the program's browser…"
+ ],
+ "engine.browser_ok": [
+  "открылся в браузере",
+  "opened in the browser"
+ ],
+ "engine.browser_failed": [
+  "не открылся в браузере",
+  "did not open in the browser"
+ ],
+ "auto.browser_check_tip": [
+  "Прежде чем применить найденную для сайта стратегию, «Авто» открывает сайт через неё во встроенном браузере программы; не открылся — пробует следующую. Ваши браузеры и их профили не используются. Без встроенного браузера проверка пропускается.",
+  "Before applying a strategy found for a site, the \"Auto\" mode opens the site through it in the program's own browser; if it does not open, the next one is tried. Your browsers and their profiles are not used. Without the program's browser the check is skipped."
+ ],
  "engine.library_zapret2_row": [
   "Метод zapret2: {0}",
   "zapret2 method: {0}"

@@ -50,6 +50,7 @@
             <TextBlock Text="{Binding WorkersNote}" Classes="muted" FontSize="12" VerticalAlignment="Center"
                        IsVisible="{Binding WorkersNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           </WrapPanel>
+          <CheckBox Content="{l:T engine.browser_check}" IsChecked="{Binding BrowserCheck}" ToolTip.Tip="{l:T auto.browser_check_tip}" />
         </StackPanel>
       </Border>
 

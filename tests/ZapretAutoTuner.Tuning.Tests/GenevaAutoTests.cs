@@ -412,4 +412,84 @@ public sealed class GenevaAutoTests
         Assert.Equal(8, Assert.Single(agent.Started, r => r.Mode == "evolve").Workers);
         agent.Hold.SetResult();
     }
+
+    /// <summary>The resolver of <see cref="Make"/> opens: only the saved site is searched.</summary>
+    private static AutoConfirm? OnlyTheSite(AutoService s, string? applied) => s.Key.StartsWith("dns:", StringComparison.Ordinal) ? AutoConfirm.NotBlocked : null;
+
+    private static GenevaState BlockedSite() => new()
+    {
+        Auto = new GenevaAutoState
+        {
+            Services =
+            [
+                new AutoService
+                {
+                    Key = "web:blocked.example", Kind = AutoKind.Web, Transport = Core.Model.L4Kind.Tcp, Name = "blocked.example", Host = "blocked.example", App = "tls",
+                    Addresses = [new AutoAddress("203.0.113.7", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc))],
+                    Ports = [443], Status = AutoStatus.Blocked,
+                    FirstSeen = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), LastSeen = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                },
+            ],
+        },
+    };
+
+    [Fact]
+    public async Task A_sites_strategy_is_applied_only_after_it_opens_the_site_in_the_programs_browser()
+    {
+        var opened = new List<(string Host, int Port, string? Address)>();
+        var (controller, auto, _, probes, _) = Make((c, _) => c.Browser = new GenevaBrowser(() => true, (host, port, address, ct) =>
+        {
+            lock (opened)
+                opened.Add((host, port, address?.ToString()));
+            return Task.FromResult<PageLoad?>(new PageLoad { Url = GenevaBrowserCheck.Url(host, port), LoadFired = true });
+        }), works: AutoCandidates.Tcp[0], saved: BlockedSite());
+        probes.Answer = OnlyTheSite;
+        await using var _ = controller;
+        await using var __ = auto;
+        await auto.EnableAsync(default);
+        await Until(() => auto.View.Services.Any(s => s.Key == "web:blocked.example" && s.Status == AutoStatus.Applied));
+        Assert.Equal(AutoCandidates.Tcp[0], auto.View.Services.Single(x => x.Key == "web:blocked.example").Strategy);
+        // the name pinned to the address the strategy is applied to
+        lock (opened)
+            Assert.Contains(("blocked.example", 443, (string?)"203.0.113.7"), opened);
+    }
+
+    [Fact]
+    public async Task A_strategy_that_does_not_open_the_site_in_the_browser_is_not_applied()
+    {
+        int opens = 0;
+        var (controller, auto, _, probes, _) = Make((c, _) => c.Browser = new GenevaBrowser(() => true, (host, port, address, ct) =>
+        {
+            Interlocked.Increment(ref opens);
+            return Task.FromResult<PageLoad?>(new PageLoad { Url = GenevaBrowserCheck.Url(host, port), Error = "net::ERR_CONNECTION_RESET" });
+        }), works: AutoCandidates.Tcp[0], saved: BlockedSite());
+        probes.Answer = OnlyTheSite;
+        await using var _ = controller;
+        await using var __ = auto;
+        await auto.EnableAsync(default);
+        await Until(() => auto.Log.Any(l => l.Contains("не открылся во встроенном браузере", StringComparison.Ordinal)));
+        Assert.True(Volatile.Read(ref opens) > 0);
+        Assert.NotEqual(AutoStatus.Applied, auto.View.Services.Single(x => x.Key == "web:blocked.example").Status);
+    }
+
+    [Fact]
+    public async Task With_the_browser_check_off_a_site_is_judged_by_the_probes_alone()
+    {
+        int opens = 0;
+        var (controller, auto, _, probes, _) = Make((c, _) =>
+        {
+            c.BrowserCheck = false;
+            c.Browser = new GenevaBrowser(() => true, (host, port, address, ct) =>
+            {
+                Interlocked.Increment(ref opens);
+                return Task.FromResult<PageLoad?>(new PageLoad { Url = "", Error = "failed" });
+            });
+        }, works: AutoCandidates.Tcp[0], saved: BlockedSite());
+        probes.Answer = OnlyTheSite;
+        await using var _ = controller;
+        await using var __ = auto;
+        await auto.EnableAsync(default);
+        await Until(() => auto.View.Services.Any(s => s.Key == "web:blocked.example" && s.Status == AutoStatus.Applied));
+        Assert.Equal(0, Volatile.Read(ref opens));
+    }
 }

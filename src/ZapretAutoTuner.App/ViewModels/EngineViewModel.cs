@@ -140,6 +140,20 @@ public sealed partial class EngineViewModel : PageViewModel
     [ObservableProperty]
     private bool _seedZapret2 = true;
 
+    /// <summary>"Итоговая проверка в браузере": the best strategies found open the site in the program's browser (shared with "Авто").</summary>
+    public bool BrowserCheck
+    {
+        get => _host.Geneva.BrowserCheck;
+        set
+        {
+            if (value != _host.Geneva.BrowserCheck)
+            {
+                _host.Geneva.BrowserCheck = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     [ObservableProperty]
     private bool _searching;
 
@@ -445,7 +459,8 @@ public sealed partial class EngineViewModel : PageViewModel
 
         Searching = search.Running;
         SearchPercent = search.Percent * 100;
-        SearchProgress = search.Running || search.Generation >= 0
+        SearchProgress = search.BrowserChecking ? L["engine.browser_checking"]
+            : search.Running || search.Generation >= 0
             ? L.F("engine.progress", Math.Max(0, search.Generation + 1), search.Generations, search.Evaluated, search.Succeeded, search.Host)
             : "";
         SearchBaseline = search.Blocked switch
@@ -468,7 +483,13 @@ public sealed partial class EngineViewModel : PageViewModel
         Sync(Feed, g.Trials.Take(60).Select(x => new TrialRow(x.Time.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture),
             x.Fitness.ToString("0", CultureInfo.InvariantCulture), Pick(GenevaText.Outcome(x.Outcome), en), x.Strategy, x.Fitness > 0 ? "#2E9E5B" : "#D0443E")).ToList());
         Sync(Found, state.Found.Take(50).Select(f => new FoundRow(f.Host, f.Strategy,
-            L.F("engine.score", f.Fitness.ToString("0", CultureInfo.InvariantCulture), f.Runs), f.Found.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))).ToList());
+            L.F("engine.score", f.Fitness.ToString("0", CultureInfo.InvariantCulture), f.Runs) + f.Browser switch
+            {
+                true => ", " + L["engine.browser_ok"],
+                false => ", " + L["engine.browser_failed"],
+                null => "",
+            }, f.Found.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))).ToList());
+        OnPropertyChanged(nameof(BrowserCheck));
         Sync(Log, g.Log.TakeLast(150).Reverse().ToList());
 
         var run = g.Run;

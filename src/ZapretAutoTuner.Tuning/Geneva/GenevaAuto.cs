@@ -1093,7 +1093,7 @@ public sealed class GenevaAuto : IAsyncDisposable
         lock (_lock)
             current = (_book.Find(s.Key) ?? s).Clone();
         if (current.Probeable)
-            return await _probes.WorksAsync(current, ct).ConfigureAwait(false);
+            return await _probes.WorksAsync(current, ct).ConfigureAwait(false) && await OpensInBrowserAsync(current, strategy, ct).ConfigureAwait(false);
 
         var start = _now();
         var until = start + PassiveTrial;
@@ -1110,6 +1110,26 @@ public sealed class GenevaAuto : IAsyncDisposable
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// "Итоговая проверка в браузере" for a site: with the tried strategy applied to the service's addresses, the
+    /// program's own browser opens the page at the address the service was seen at (the name pinned to it, HTTP/3 off:
+    /// the strategy is for TCP). True when it opened, the switch is off, there is no browser or the service is not a
+    /// site.
+    /// </summary>
+    private async Task<bool> OpensInBrowserAsync(AutoService s, string strategy, CancellationToken ct)
+    {
+        if (s.Kind != AutoKind.Web || s.Address is not { } address || s.Port is not (80 or 443) || _controller.BrowserNow is not { } browser)
+            return true;
+        var host = s.Host.Length > 0 ? s.Host : s.Name;
+        var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, host, s.Port, address, ct).ConfigureAwait(false);
+        // no browser any more, or a root it does not know: the probes' verdict stands, as without the switch
+        if (verdict is not { Ok: { } ok } v)
+            return true;
+        if (!ok)
+            AddLog($"{s.Name}: стратегия прошла проверки, но сайт не открылся во встроенном браузере ({v.Detail}) — пробую дальше / the strategy passed the probes, but the site did not open in the program's browser, trying on: {strategy}");
+        return ok;
     }
 
     // ---- applying

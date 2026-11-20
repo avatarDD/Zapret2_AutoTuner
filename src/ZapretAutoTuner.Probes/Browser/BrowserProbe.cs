@@ -45,6 +45,12 @@ public sealed record BrowserProbeOptions
     public bool IgnoreCertificateErrors { get; init; }
 
     public string? UserAgent { get; init; }
+
+    /// <summary>
+    /// Chromium only: no HTTP/3. A check of a TCP bypass (geneva's single strategy, an "Авто" site) judges the TCP path,
+    /// and a switch to QUIC after the site's Alt-Svc would go past it.
+    /// </summary>
+    public bool DisableQuic { get; init; }
 }
 
 /// <summary>
@@ -220,6 +226,8 @@ public static class BrowserProbe
     internal static List<string> ChromiumArgs(BrowserProbeOptions o)
     {
         var args = new List<string> { "--disable-extensions", "--no-first-run", "--disk-cache-size=1", "--disable-background-networking" };
+        if (o.DisableQuic)
+            args.Add("--disable-quic");
         if (o.Resolve.Count > 0)
             args.Add("--host-resolver-rules=" + string.Join(", ", o.Resolve.Select(kv => $"MAP {kv.Key} {kv.Value}")));
         if (o.DohTemplate is not null)

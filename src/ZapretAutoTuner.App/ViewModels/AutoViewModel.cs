@@ -127,6 +127,7 @@ public sealed partial class AutoViewModel : PageViewModel
     {
         _resort = true;
         _dirty = true;
+        OnPropertyChanged(nameof(BrowserCheck)); // the manual page shares the switch
         _ = CheckFeaturesAsync();
     }
 
@@ -209,6 +210,20 @@ public sealed partial class AutoViewModel : PageViewModel
         if (value is { } v)
             _host.Geneva.Workers = (int)v;
         WorkersNote = WorkersText();
+    }
+
+    /// <summary>"Итоговая проверка в браузере": a site's strategy opens the site in the program's browser before it is applied.</summary>
+    public bool BrowserCheck
+    {
+        get => _host.Geneva.BrowserCheck;
+        set
+        {
+            if (value != _host.Geneva.BrowserCheck)
+            {
+                _host.Geneva.BrowserCheck = value;
+                OnPropertyChanged();
+            }
+        }
     }
 
     /// <summary>0: all threads search one service; 1: they are split between several services searched at once.</summary>

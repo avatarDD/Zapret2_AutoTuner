@@ -530,6 +530,6 @@ public sealed class GenevaControllerTests
         await Until(() => !g.SearchRunning);
         Assert.False(Assert.Single(GenevaState.Parse(rig.Store.Json).Found).Browser);
         Assert.Contains(g.Log, l => l.Contains("не загрузились связанные ресурсы", StringComparison.Ordinal) && l.Contains("video.blocked.example", StringComparison.Ordinal));
-        Assert.Contains(g.Log, l => l.Contains("их стратегия сайта не касается", StringComparison.Ordinal) && l.Contains("cdn.other.example", StringComparison.Ordinal));
+        Assert.Contains(g.Log, l => l.Contains("по ним стратегию не судим", StringComparison.Ordinal) && l.Contains("cdn.other.example", StringComparison.Ordinal));
     }
 }

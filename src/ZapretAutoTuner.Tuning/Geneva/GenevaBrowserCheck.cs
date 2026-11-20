@@ -75,8 +75,42 @@ public static class GenevaBrowserCheck
     /// </summary>
     public static IReadOnlyList<string> SiteAndFamily(string host)
     {
-        var site = Classifier.Registrable(host.TrimEnd('.').ToLowerInvariant());
-        return Core.Geneva.Auto.AutoFamilies.Of(site) is { } family ? [site, .. Core.Geneva.Auto.AutoFamilies.Domains(family)] : [site];
+        var h = host.TrimEnd('.').ToLowerInvariant();
+        // an address has no other names and no family
+        if (IPAddress.TryParse(h.Trim('[', ']'), out _))
+            return [];
+        // the family by the host itself (youtubei.googleapis.com is YouTube's, while googleapis.com as a whole is not)
+        if (Core.Geneva.Auto.AutoFamilies.Of(h) is { } family)
+        {
+            var domains = Core.Geneva.Auto.AutoFamilies.Domains(family);
+            var site = Classifier.Registrable(h);
+            // the registrable domain is the site's own only when the family claims it whole
+            return domains.Any(d => Under(site, d)) ? [site, .. domains] : [h, .. domains];
+        }
+        return [Classifier.Registrable(h)];
+    }
+
+    /// <summary>
+    /// A host the user's "не трогать" keeps out of geneva: by name, or by an excluded subnet it resolves into (geneva
+    /// does not touch those addresses, so their failure says nothing about the strategy).
+    /// </summary>
+    public static async Task<bool> ExcludedAsync(Core.Geneva.Auto.AutoNameList excluded, string host, CancellationToken ct)
+    {
+        if (excluded.MatchesName(host))
+            return true;
+        if (!excluded.Subnets.Any())
+            return false;
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(TimeSpan.FromSeconds(2));
+        try
+        {
+            var addresses = await Dns.GetHostAddressesAsync(host.TrimEnd('.'), limit.Token).ConfigureAwait(false);
+            return addresses.Any(excluded.MatchesAddress);
+        }
+        catch (Exception e) when (e is System.Net.Sockets.SocketException or ArgumentException || e is OperationCanceledException && !ct.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     private static string Describe(SecondaryDomain d) => $"{d.Host}: {d.State}{(d.Error is null ? "" : " " + d.Error)}";
@@ -97,8 +131,12 @@ public static class GenevaBrowserCheck
     /// Opens the page and judges it, within <see cref="Timeout"/>. Null when there is no browser; a load that throws or
     /// runs out of time is a failure, a cancellation by <paramref name="ct"/> is passed on.
     /// </summary>
+    /// <param name="excluded">
+    /// Asked of each covered domain that failed (only those, so a page of many domains costs no lookups): kept out of
+    /// geneva (the user's "не трогать" by subnet), it is judged as not covered.
+    /// </param>
     public static async Task<GenevaBrowserVerdict?> RunAsync(GenevaOpenPage open, string host, int port, bool tls, IPAddress? address, CancellationToken ct,
-        Func<string, bool>? covered = null)
+        Func<string, bool>? covered = null, Func<string, CancellationToken, Task<bool>>? excluded = null)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(Timeout);
@@ -115,7 +153,19 @@ public static class GenevaBrowserCheck
         {
             return new(false, e.Message);
         }
-        return load is null ? null : Judge(load, host, covered);
+        if (load is null)
+            return null;
+        var verdict = Judge(load, host, covered);
+        if (excluded is null || covered is null || verdict.Ok != false || !verdict.SiteOpened)
+            return verdict;
+        var failed = SecondaryDomains.Analyze(load, host).Where(d => d.Important && !d.IsMain && Failed(d) && covered(d.Host)).Select(d => d.Host).ToList();
+        var outside = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var h in failed)
+        {
+            if (await excluded(h, ct).ConfigureAwait(false))
+                outside.Add(h);
+        }
+        return outside.Count == 0 ? verdict : Judge(load, host, h => covered(h) && !outside.Contains(h));
     }
 }
 

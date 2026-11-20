@@ -54,8 +54,8 @@ public sealed class AutoProbes : IAutoProbes
     public TimeSpan Recheck { get; init; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// The page loaded under its criterion; a certificate with the right name whose only fault is the national root this
-    /// system lacks (Минцифры, many .ru sites) counts: the browser that has the root opens the site.
+    /// The page loaded under its criterion; a Russian site's certificate that chains to the bundled national root
+    /// (Минцифры), which this system lacks, counts (the HTTP probe already takes it as valid).
     /// </summary>
     private static bool Passes(PageCheckResult c) => c.Probe.PassesNameOnly(ProbeLevel.L2Body, c.Criteria.MinBytes);
 

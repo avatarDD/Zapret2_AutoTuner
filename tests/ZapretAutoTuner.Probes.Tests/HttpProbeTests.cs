@@ -172,6 +172,40 @@ public class HttpProbeTests
     }
 
     [Fact]
+    public async Task A_chain_to_the_national_root_is_a_genuine_certificate_for_every_check()
+    {
+        // the test CA stands in for Минцифры: absent from the system store, present as the bundled national root
+        const string bank = "bank.ru";
+        await using var s = new TestServer(ServerMode.Ok, TestCerts.Leaf(bank), bodyBytes: 100);
+        var r = await HttpProbe.RunAsync(Opts(s, o => o with { Host = bank, TrustedRoots = null, NationalRootForTests = TestCerts.Ca }));
+        Assert.True(r.CertNationalRoot);
+        Assert.True(r.CertValid);
+        Assert.Null(r.CertError);
+        Assert.True(r.Passes(ProbeLevel.L1Handshake));
+
+        // another root in that place: the chain does not build, the certificate stays untrusted
+        using var otherKey = System.Security.Cryptography.RSA.Create(2048);
+        var otherReq = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=Other CA", otherKey,
+            System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        using var other = otherReq.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
+        r = await HttpProbe.RunAsync(Opts(s, o => o with { Host = bank, TrustedRoots = null, NationalRootForTests = other }));
+        Assert.False(r.CertNationalRoot);
+        Assert.False(r.CertValid);
+        Assert.NotNull(r.CertError);
+    }
+
+    [Fact]
+    public async Task The_national_root_is_not_trusted_for_a_foreign_site()
+    {
+        // the state's CA on youtube.com is what an interception shows
+        await using var s = new TestServer(ServerMode.Ok, TestCerts.Leaf("youtube.com"), bodyBytes: 100);
+        var r = await HttpProbe.RunAsync(Opts(s, o => o with { Host = "youtube.com", TrustedRoots = null, NationalRootForTests = TestCerts.Ca }));
+        Assert.True(r.CertNameOk);
+        Assert.False(r.CertNationalRoot);
+        Assert.False(r.CertValid);
+    }
+
+    [Fact]
     public async Task No_sni_and_neutral_sni()
     {
         await using var s = new TestServer(ServerMode.Ok, TestCerts.Leaf(Host), bodyBytes: 100);

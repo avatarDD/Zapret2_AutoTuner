@@ -58,4 +58,39 @@ public sealed class NationalRootsTests
         // a self-signed certificate under the root's own name is not the root either
         Assert.False(NationalRoots.Chains(fakeRoot));
     }
+
+    [Theory]
+    [InlineData("www.sberbank.ru", true)]
+    [InlineData("gosuslugi.ru.", true)]
+    [InlineData("xn--80ajghhoc2aj1c8b.xn--p1ai", true)]
+    [InlineData("example.su", true)]
+    [InlineData("site.xn--p1acf", true)]
+    [InlineData("site.moscow", true)]
+    [InlineData("youtube.com", false)]
+    [InlineData("ru.example.com", false)]
+    [InlineData("example.run", false)]
+    public void The_national_root_covers_russian_sites_only(string host, bool covered) => Assert.Equal(covered, NationalRoots.Covers(host));
+
+    [Fact]
+    public void A_leaf_sent_alone_chains_through_the_bundled_intermediate()
+    {
+        // the production wiring: the root trusted, the sub CA from the bundle, the server sending only its leaf
+        using var rootKey = RSA.Create(2048);
+        var rootReq = new CertificateRequest("CN=Test National Root", rootKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        rootReq.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        using var root = rootReq.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
+        using var subKey = RSA.Create(2048);
+        var subReq = new CertificateRequest("CN=Test National Sub", subKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        subReq.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        using var sub = subReq.Create(root, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddMonths(6), [1, 2, 3, 4]);
+        using var subWithKey = sub.CopyWithPrivateKey(subKey);
+        using var leafKey = RSA.Create(2048);
+        var leafReq = new CertificateRequest("CN=bank.ru", leafKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        leafReq.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new Oid("1.3.6.1.5.5.7.3.1")], false));
+        using var leaf = leafReq.Create(subWithKey, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddMonths(1), [5, 6, 7, 8]);
+
+        Assert.True(NationalRoots.Chains(leaf, [], true, root, sub));
+        // without the intermediate (none bundled, none sent) the chain does not build: nothing is downloaded
+        Assert.False(NationalRoots.Chains(leaf, [], true, root, null));
+    }
 }

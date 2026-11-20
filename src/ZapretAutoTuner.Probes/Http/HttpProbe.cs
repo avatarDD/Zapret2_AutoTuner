@@ -99,6 +99,9 @@ public sealed record HttpProbeOptions
 
     /// <summary>Extra trust anchors (test servers). The system store is used when null.</summary>
     public X509Certificate2Collection? TrustedRoots { get; init; }
+
+    /// <summary>Tests: a CA standing in for the national root (Минцифры), which only the bundled one is otherwise.</summary>
+    internal X509Certificate2? NationalRootForTests { get; init; }
 }
 
 /// <summary>
@@ -570,17 +573,20 @@ public static class HttpProbe
                 chainOk = (errors & ~SslPolicyErrors.RemoteCertificateNameMismatch) == SslPolicyErrors.None;
             }
             bool nameOk = c.MatchesHostname(o.Host, allowWildcards: true, allowCommonName: false);
-            CertValid = chainOk && nameOk;
             CertNameOk = nameOk;
             string? rootProblem = null;
-            // not trusted here, but perhaps by the user's browser: the national root (Минцифры), checked by the chain itself
-            if (!chainOk && o.TrustedRoots is not { Count: > 0 })
+            // not in this system's store, but Russia's national root (Минцифры) of many .ru sites, checked by the chain
+            // itself against the bundled root: such a Russian site is genuine, not a forged certificate (for a foreign
+            // site the same CA is what an interception would show: no trust there)
+            if (!chainOk && NationalRoots.Covers(o.Host) && (o.TrustedRoots is not { Count: > 0 } || o.NationalRootForTests is not null))
             {
                 try
                 {
                     // what the server sent (the system's build may have taken another path) and what that build found
                     IEnumerable<X509Certificate2> sent = presented is null ? [] : [.. presented.ChainPolicy.ExtraStore, .. presented.ChainElements.Select(e => e.Certificate)];
-                    CertNationalRoot = NationalRoots.Chains(c, sent);
+                    CertNationalRoot = o.NationalRootForTests is { } testRoot
+                        ? NationalRoots.Chains(c, sent, true, testRoot, null)
+                        : NationalRoots.Chains(c, sent);
                 }
                 catch (Exception e) when (e is CryptographicException or InvalidOperationException)
                 {
@@ -589,7 +595,9 @@ public static class HttpProbe
                     rootProblem = "корень Минцифры не загружен / the national root is not loaded: " + e.Message;
                 }
             }
-            if (!chainOk)
+            bool trusted = chainOk || CertNationalRoot;
+            CertValid = trusted && nameOk;
+            if (!trusted)
                 CertError = "цепочка сертификата не доверенная" + (rootProblem is null ? "" : "; " + rootProblem);
             else if (!nameOk)
                 CertError = $"сертификат не для {o.Host}";

@@ -52,7 +52,9 @@ public static class ConfigCheck
                 }
                 var load = await openPage(t.Host, ct).ConfigureAwait(false);
                 var domains = SecondaryDomains.Analyze(load, t.Host);
-                results.Add(new ConfigDomainResult(t.Host, l2, SecondaryDomains.PagePasses(load, domains), domains));
+                // a Russian site on the Минцифры root the program's browser lacks: no page verdict (FinalCheck does the same)
+                bool? pageOk = NationalZone.BrowserLacksRoot(load, t.Host) ? null : SecondaryDomains.PagePasses(load, domains);
+                results.Add(new ConfigDomainResult(t.Host, l2, pageOk, domains));
             }
         }
         finally

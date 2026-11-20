@@ -21,8 +21,10 @@ public sealed class CertNameOnlyTests
     };
 
     [Fact]
-    public void An_untrusted_root_with_the_right_name_passes_for_the_auto_mode_only()
+    public void A_result_carrying_only_the_national_flag_passes_the_lenient_check()
     {
+        // the HTTP probe itself sets CertValid for a chain to the bundled national root (HttpProbeTests); a result built
+        // with only the flag still passes where the "Авто" mode asks
         var p = Page(certValid: false, nameOk: true);
         Assert.False(p.Passes(ProbeLevel.L2Body));
         Assert.True(p.PassesNameOnly(ProbeLevel.L2Body));

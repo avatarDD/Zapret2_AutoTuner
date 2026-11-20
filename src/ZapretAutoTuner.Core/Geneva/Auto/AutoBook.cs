@@ -567,6 +567,8 @@ public sealed class AutoBook
         {
             s.Status = to;
             s.Since = now;
+            // the count of probes without an answer is for one stay in Degraded only
+            s.Timeouts = 0;
         }
         if (why.Length > 0)
             s.Why = why;
@@ -633,6 +635,8 @@ public sealed class AutoBook
     /// </summary>
     public AutoService? NextToConfirm(DateTime now) => Queue(_services.Values
         .Where(s => s.Status is AutoStatus.Suspected or AutoStatus.Degraded && (s.NextCheck is null || now >= s.NextCheck)
+            // a degraded one whose group is not running: a probe "with its bypass" would judge it without one
+            && !(s.Status == AutoStatus.Degraded && LeftOut.Contains(s.Key))
             && (s.Status == AutoStatus.Degraded || !_noSearch.Matches(s))), now)
         .FirstOrDefault();
 
@@ -804,9 +808,16 @@ public sealed class AutoBook
                 s.NextCheck = now + AutoRules.NotBlockedPause;
                 Move(s, AutoStatus.NotBlocked, now, "без обхода открывается");
                 return $"{s.Name}: без обхода открывается, это не блокировка";
-            case AutoConfirm.IpBlocked when degraded && (s.Pinned || s.Timeouts + 1 < AutoRules.TimeoutsToDrop):
-                // the server does not answer even with the bypass: an outage or an address block; the strategy stays (a
-                // pinned one always) and the probe looks again later
+            case AutoConfirm.IpBlocked when degraded && s.Pinned:
+                s.AppliedAt = now;
+                s.Fails.Clear();
+                s.NoConnections.Clear();
+                s.Detected.Clear();
+                Move(s, AutoStatus.Applied, now, "закреплена; сервер не отвечает и с обходом");
+                return $"{s.Name}: сервер не отвечает и с обходом, но стратегия закреплена — оставляю";
+            case AutoConfirm.IpBlocked when degraded && s.Timeouts + 1 < AutoRules.TimeoutsToDrop:
+                // the server does not answer even with the bypass: an outage or an address block; the strategy stays and
+                // the probe looks again later
                 s.Timeouts++;
                 s.NextCheck = now + AutoRules.TimeoutRecheck;
                 s.Why = "сервер не отвечает и с обходом; проверю позже";

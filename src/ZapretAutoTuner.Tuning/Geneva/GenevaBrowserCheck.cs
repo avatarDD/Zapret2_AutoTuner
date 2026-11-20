@@ -41,9 +41,8 @@ public static class GenevaBrowserCheck
     /// ytimg.com when the strategy reaches them). An important domain the strategy does not reach says nothing about it:
     /// it is named in <see cref="GenevaBrowserVerdict.Uncovered"/>, not failed. Noise (ads, counters) never counts
     /// (<see cref="SecondaryDomains"/>). A certificate from an authority the browser does not know says nothing about the
-    /// strategy either: a trial reaches the browser only after the probes accepted the site's certificate, so the chain
-    /// ends at a root the probes trust and the browser lacks (Минцифры on Russian sites, an antivirus or corporate root
-    /// in the system store on Linux, which Chromium does not read); that is no verdict (null) for any host.
+    /// strategy either on a Russian site: its chain may end at the national root (Минцифры) the browser lacks, which the
+    /// probes trust there; that is no verdict (null). Elsewhere the same error is what an interception shows: a failure.
     /// </summary>
     public static GenevaBrowserVerdict Judge(PageLoad load, string host, Func<string, bool>? covered = null)
     {
@@ -51,7 +50,7 @@ public static class GenevaBrowserCheck
         if (!FinalCheck.TargetPartLoads(load, domains))
         {
             if (load.Error is { Length: > 0 } error)
-                return new(error.Contains("ERR_CERT_AUTHORITY_INVALID", StringComparison.Ordinal) ? null : false, error);
+                return new(NationalZone.BrowserLacksRoot(load, host) ? null : false, error);
             var main = domains.FirstOrDefault(d => d.IsMain && d.Broken);
             return new(false, main is null ? "failed" : Describe(main));
         }

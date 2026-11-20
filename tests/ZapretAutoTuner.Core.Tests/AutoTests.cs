@@ -441,8 +441,14 @@ public class AutoTests
         book.Feed([.. Enumerable.Range(0, 10).Select(i => Sample("web:a.com", AutoHealth.Failed, t.AddSeconds(i)))], t.AddSeconds(10));
         book.Evaluate(t.AddSeconds(10));
         Assert.Equal(AutoStatus.Applied, s.Status);
-        Assert.Null(book.NextRoutineCheck(T0 + AutoRules.RoutineCheck + TimeSpan.FromMinutes(1)));
-        Assert.Empty(book.Detect("host", "a.com", AutoRules.DetectorClasses.First(), T0 + AutoRules.DetectorHold + TimeSpan.FromMinutes(1)));
+        // long after: the routine check and the detector would take it if it ran
+        var late = t + AutoRules.RoutineCheck + AutoRules.DetectorHold;
+        book.Feed([Sample("web:a.com", AutoHealth.Ok, late)], late);
+        Assert.Null(book.NextRoutineCheck(late));
+        Assert.Empty(book.Detect("host", "a.com", AutoRules.DetectorClasses.First(), late));
+        book.LeftOut = new HashSet<string>(StringComparer.Ordinal);
+        Assert.Same(s, book.NextRoutineCheck(late));
+        book.LeftOut = new HashSet<string>(StringComparer.Ordinal) { "web:a.com" };
 
         // back in a group: only what happens from then on counts
         book.LeftOut = new HashSet<string>(StringComparer.Ordinal);
@@ -470,6 +476,20 @@ public class AutoTests
         // still no answer: an address block after all
         book.Confirmed("web:a.com", AutoConfirm.IpBlocked, t);
         Assert.Equal(AutoStatus.IpBlocked, s.Status);
+        Assert.Equal(0, s.Timeouts);
+    }
+
+    [Fact]
+    public void A_pinned_strategy_stays_applied_when_its_server_does_not_answer()
+    {
+        var book = AppliedSite(out var s, T0);
+        book.Pin("web:a.com", true);
+        var t = T0.AddMinutes(1);
+        book.CheckNow("web:a.com", t);
+        Assert.Equal(AutoStatus.Degraded, s.Status);
+        Assert.Contains("закреплена", book.Confirmed("web:a.com", AutoConfirm.IpBlocked, t), StringComparison.Ordinal);
+        Assert.Equal(AutoStatus.Applied, s.Status);
+        Assert.Equal(0, s.Timeouts);
     }
 
     [Fact]

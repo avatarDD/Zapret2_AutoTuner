@@ -1444,7 +1444,8 @@ public sealed class GenevaAuto : IAsyncDisposable
                 // the address groups keep every site's traffic
                 var covered = byName && _byName && _hostUp ? AutoPlan.ByNameCovers(_book.Services, hosts) : null;
                 groups = AutoPlan.Groups(_book.Services, trials, covered, left, _controller.AutoGroups);
-                _book.LeftOut = left.ToHashSet(StringComparer.Ordinal);
+                // a site the name-based process serves still has its bypass running: it is judged as usual
+                _book.LeftOut = left.Where(k => covered?.Contains(k) != true).ToHashSet(StringComparer.Ordinal);
                 left = [.. left.Select(k => _book.Find(k)?.Name ?? k)];
                 excluded = _book.Excluded;
             }

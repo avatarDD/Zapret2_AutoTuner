@@ -2192,8 +2192,8 @@
   "Close the window to the tray (the bypass keeps working)"
  ],
  "settings.tray_hint": [
-  "Из трея окно открывается щелчком по значку; «Выход» в меню значка закрывает программу и снимает обход.",
-  "Click the tray icon to open the window; 'Exit' in its menu closes the program and removes the bypass."
+  "Из трея окно открывается щелчком по значку; «Закрыть» в меню значка закрывает программу и снимает обход.",
+  "Click the tray icon to open the window; 'Close' in its menu closes the program and removes the bypass."
  ],
  "tray.open": [
   "Открыть окно",

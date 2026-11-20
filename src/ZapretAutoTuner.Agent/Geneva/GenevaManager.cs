@@ -1131,14 +1131,47 @@ internal sealed class GenevaManager : IDisposable
             var own = Directory.Exists(searchesDir)
                 ? new DirectoryInfo(searchesDir).GetDirectories().Select(d => Path.Combine(d.FullName, "db.jsonl")).Where(File.Exists).ToList()
                 : [];
-            foreach (var db in own)
-                entries.AddRange(ParseDb((await Cmd.RunAsync(geneva, ["db", "--db", db, "list", "--json"], ct: cts.Token)).Stdout));
+            // the "Авто" mode makes a database per service, dozens of them: read side by side, each with its own time
+            // limit, and one that fails costs only its own entries (not the whole library)
+            var lists = new GenevaDbEntry[own.Count][];
+            int failed = 0;
+            // the whole library within a minute, whatever the number of databases
+            using var all = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            all.CancelAfter(TimeSpan.FromSeconds(60));
+            async Task<GenevaDbEntry[]?> ReadDb(string db)
+            {
+                using var one = CancellationTokenSource.CreateLinkedTokenSource(all.Token);
+                one.CancelAfter(TimeSpan.FromSeconds(10));
+                try
+                {
+                    var r = await Cmd.RunAsync(geneva, ["db", "--db", db, "list", "--json"], ct: one.Token);
+                    return r.Ok ? [.. ParseDb(r.Stdout)] : null;
+                }
+                catch (Exception e) when (e is OperationCanceledException or InvalidOperationException or IOException && !ct.IsCancellationRequested)
+                {
+                    return null;
+                }
+            }
+            await Parallel.ForEachAsync(Enumerable.Range(0, own.Count), new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct }, async (i, _) =>
+            {
+                // past the overall limit the rest count as not read, without starting geneva for them
+                var read = all.IsCancellationRequested ? null : await ReadDb(own[i]);
+                if (read is null)
+                    Interlocked.Increment(ref failed);
+                lists[i] = read ?? [];
+            });
+            foreach (var l in lists)
+                entries.AddRange(l);
             if (File.Exists(DbPath))
             {
                 var targets = entries.Select(e => e.Target).ToHashSet(StringComparer.Ordinal);
-                var old = ParseDb((await Cmd.RunAsync(geneva, ["db", "--db", DbPath, "list", "--json"], ct: cts.Token)).Stdout);
-                entries.AddRange(old.Where(e => !targets.Contains(e.Target)));
+                if (await ReadDb(DbPath) is { } old)
+                    entries.AddRange(old.Where(e => !targets.Contains(e.Target)));
+                else
+                    failed++;
             }
+            if (failed > 0)
+                reply.Problems.Add($"geneva: не прочитано баз подбора / search databases not read: {failed}");
             reply.Best.AddRange(entries.OrderByDescending(e => e.Ok * 1.0 / Math.Max(1, e.Runs)).ThenByDescending(e => e.AvgFitness).Take(100));
         }
         catch (Exception e) when (e is OperationCanceledException or InvalidOperationException or IOException)

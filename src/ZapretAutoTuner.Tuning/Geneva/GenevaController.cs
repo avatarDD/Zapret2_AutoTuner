@@ -75,6 +75,9 @@ public sealed record GenevaSearchView
     /// <summary>Why the last search ended, in Russian and English; null while it runs or before the first.</summary>
     public (string Ru, string En)? Ended { get; init; }
 
+    /// <summary>Stopped before it finished: a stop asked for, or geneva lost without its exit (the Agent gone).</summary>
+    public bool Stopped { get; init; }
+
     /// <summary>geneva's search is over and the strategies it found are being opened in the program's browser.</summary>
     public bool BrowserChecking { get; init; }
 
@@ -418,6 +421,18 @@ public sealed class GenevaController : IAsyncDisposable
         await Task.WhenAll(ids.Select(id => StopSearchAsync(id, ct))).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Stops the searches the user started (the page, MCP); the "Авто" mode's searches go on, the mode stops them itself
+    /// (a stop it did not ask for would read to it as "nothing found").
+    /// </summary>
+    public async Task StopUserSearchesAsync(CancellationToken ct = default)
+    {
+        List<string> ids;
+        lock (_lock)
+            ids = [.. _searches.Where(x => !x.Value.View.Auto).Select(x => x.Key)];
+        await Task.WhenAll(ids.Select(id => StopSearchAsync(id, ct))).ConfigureAwait(false);
+    }
+
     /// <summary>Stops one search; geneva saves its checkpoint. Nothing happens when it already ended.</summary>
     public async Task StopSearchAsync(string id, CancellationToken ct)
     {
@@ -529,7 +544,7 @@ public sealed class GenevaController : IAsyncDisposable
         GenevaSearchView view;
         lock (_lock)
         {
-            view = slot.View with { Running = false, Probing = 0, Ended = ended };
+            view = slot.View with { Running = false, Probing = 0, Ended = ended, Stopped = (stopped && reason != "done") || exitCode == -1 };
             _searches.Remove(id);
             _search = view;
         }
@@ -800,7 +815,7 @@ public sealed class GenevaController : IAsyncDisposable
         Volatile.Write(ref _browserChecking, true);
         Changed?.Invoke();
         using var both = CancellationTokenSource.CreateLinkedTokenSource(slot.ProbeCts.Token, ct);
-        var excluded = new AutoNameList(State.Lists.Excluded);
+        var excluded = AutoNameList.Exclusions(State.Lists.Excluded);
         int passed = 0, checkedCount = 0;
         foreach (var f in found)
         {
@@ -822,7 +837,7 @@ public sealed class GenevaController : IAsyncDisposable
                     AddLog($"Итоговая проверка: geneva со стратегией не запустилась ({why}): {f.Strategy} / the final check: geneva did not start with the strategy");
                     continue;
                 }
-                var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, settings.Host, settings.Port, null, both.Token).ConfigureAwait(false);
+                var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, settings.Host, settings.Port, settings.Tls, null, both.Token).ConfigureAwait(false);
                 if (verdict is null)
                 {
                     AddLog("Итоговая проверка в браузере пропущена: встроенного браузера программы нет / the final check in the browser is skipped: the program has no browser of its own");
@@ -928,7 +943,7 @@ public sealed class GenevaController : IAsyncDisposable
                 throw new GenevaRefusedException(why);
             var agent = await _agent(ct).ConfigureAwait(false);
             // the user's "не трогать" list (a VPN or proxy server) stays out of the bypass (geneva_c 2.0)
-            var excluded = new AutoNameList(State.Lists.Excluded);
+            var excluded = AutoNameList.Exclusions(State.Lists.Excluded);
             var req = new GenevaStartRequest { Mode = "run", Strategy = settings.Strategy, Ports = settings.Ports, Tag = "geneva-run" };
             req.ExcludeSubnets.AddRange(excluded.Subnets);
             req.ExcludeDomains.AddRange(excluded.Domains);

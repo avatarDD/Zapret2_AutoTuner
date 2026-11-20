@@ -108,7 +108,7 @@ public sealed class AppHost : IAsyncDisposable
     /// geneva's final check: the page in the program's browser, the name pinned to <paramref name="address"/> when the
     /// strategy applies to that address only; HTTP/3 off, geneva's strategies here are for TCP. Null without a browser.
     /// </summary>
-    private static async Task<Core.Diagnostics.PageLoad?> GenevaOpenPageAsync(string host, int port, System.Net.IPAddress? address, CancellationToken ct)
+    private static async Task<Core.Diagnostics.PageLoad?> GenevaOpenPageAsync(string host, int port, bool tls, System.Net.IPAddress? address, CancellationToken ct)
     {
         if (!HasBrowser())
             return null;
@@ -124,7 +124,7 @@ public sealed class AppHost : IAsyncDisposable
         {
             return await Probes.Browser.BrowserProbe.RunAsync(new Probes.Browser.BrowserProbeOptions
             {
-                Url = Tuning.Geneva.GenevaBrowserCheck.Url(host, port),
+                Url = Tuning.Geneva.GenevaBrowserCheck.Url(host, port, tls),
                 Resolve = resolve,
                 DisableQuic = true,
             }, ct).ConfigureAwait(false);

@@ -121,6 +121,20 @@ public sealed class AutoNameList
 
     public static AutoNameList Empty { get; } = new([]);
 
+    /// <summary>
+    /// The "не трогать" list: domains, addresses and subnets only, where <c>*cdn.net</c> keeps the meaning it had before
+    /// masks (the domain cdn.net with its subdomains), so a saved exclusion is never dropped as a pattern.
+    /// </summary>
+    public static AutoNameList Exclusions(IEnumerable<string>? entries) => new((entries ?? []).Select(StrictForm));
+
+    /// <summary>"*cdn.net" as the domain cdn.net: the strict lists had no patterns, a leading '*' meant "with subdomains".</summary>
+    private static string StrictForm(string entry)
+    {
+        var e = entry.Trim().TrimEnd('.');
+        return e.StartsWith('*') && !e.StartsWith("*.", StringComparison.Ordinal) && IsDomain("*." + e.TrimStart('*', '.').ToLowerInvariant())
+            ? e.TrimStart('*', '.') : e;
+    }
+
     public bool IsEmpty => _domains.Count == 0 && _nets.Count == 0 && _patterns.Count == 0 && _asnNets.Count == 0;
 
     /// <summary>The plain domains (a zone such as <c>ru</c> and the patterns are left out: geneva's name lists take names).</summary>
@@ -142,7 +156,7 @@ public sealed class AutoNameList
     /// </summary>
     public static string? Problem(string entry)
     {
-        var e = entry.Trim().TrimEnd('.').ToLowerInvariant();
+        var e = StrictForm(entry).TrimEnd('.').ToLowerInvariant();
         if (e.Length == 0 || e.StartsWith('#'))
             return null;
         return TryNet(e, out _, out _) || IsDomain(e) ? null : $"не домен и не адрес / neither a domain nor an address: {entry.Trim()}";

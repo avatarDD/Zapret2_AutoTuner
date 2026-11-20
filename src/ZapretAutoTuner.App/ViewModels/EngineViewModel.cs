@@ -157,6 +157,10 @@ public sealed partial class EngineViewModel : PageViewModel
     [ObservableProperty]
     private bool _searching;
 
+    /// <summary>No search of the user's runs and none of the "Авто" mode's either: the page may start one.</summary>
+    [ObservableProperty]
+    private bool _canSearch = true;
+
     [ObservableProperty]
     private bool _canResume;
 
@@ -271,7 +275,7 @@ public sealed partial class EngineViewModel : PageViewModel
     {
         try
         {
-            await _host.Geneva.StopSearchAsync();
+            await _host.Geneva.StopUserSearchesAsync();
         }
         catch (Exception e) when (e is GenevaRefusedException or Grpc.Core.RpcException or InvalidOperationException)
         {
@@ -461,7 +465,9 @@ public sealed partial class EngineViewModel : PageViewModel
         var state = g.State;
         bool en = Loc.Loc.I.English;
 
-        Searching = search.Running;
+        // the "Авто" mode's searches are stopped on its page: a stop here would read to it as "nothing found"
+        Searching = search.Running && !search.Auto;
+        CanSearch = !search.Running;
         SearchPercent = search.Percent * 100;
         SearchProgress = search.BrowserChecking ? L["engine.browser_checking"]
             : search.Running || search.Generation >= 0

@@ -9,7 +9,7 @@ namespace ZapretAutoTuner.Tuning.Geneva;
 /// applies a strategy to the service's addresses only); null resolves it as usual. Returns null when the program has no
 /// browser.
 /// </summary>
-public delegate Task<PageLoad?> GenevaOpenPage(string host, int port, IPAddress? address, CancellationToken ct);
+public delegate Task<PageLoad?> GenevaOpenPage(string host, int port, bool tls, IPAddress? address, CancellationToken ct);
 
 /// <summary>
 /// The final check of a geneva strategy in the browser (dpi-diagnostics §6.4, the wizard's final check for zapret2):
@@ -25,11 +25,14 @@ public static class GenevaBrowserCheck
     public static TimeSpan Timeout { get; } = TimeSpan.FromSeconds(60);
 
     /// <summary>The page's URL: plain HTTP on 80, HTTPS otherwise (another port is named).</summary>
-    public static string Url(string host, int port) => port switch
+    public static string Url(string host, int port) => Url(host, port, port != 80);
+
+    /// <summary>The page's URL by the search's own scheme (<paramref name="tls"/>); a port other than the scheme's is named.</summary>
+    public static string Url(string host, int port, bool tls) => (tls, port) switch
     {
-        80 => $"http://{host}/",
-        443 => $"https://{host}/",
-        _ => $"https://{host}:{port}/",
+        (false, 80) => $"http://{host}/",
+        (true, 443) => $"https://{host}/",
+        _ => $"{(tls ? "https" : "http")}://{host}:{port}/",
     };
 
     /// <summary>
@@ -52,14 +55,14 @@ public static class GenevaBrowserCheck
     /// Opens the page and judges it, within <see cref="Timeout"/>. Null when there is no browser; a load that throws or
     /// runs out of time is a failure, a cancellation by <paramref name="ct"/> is passed on.
     /// </summary>
-    public static async Task<GenevaBrowserVerdict?> RunAsync(GenevaOpenPage open, string host, int port, IPAddress? address, CancellationToken ct)
+    public static async Task<GenevaBrowserVerdict?> RunAsync(GenevaOpenPage open, string host, int port, bool tls, IPAddress? address, CancellationToken ct)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(Timeout);
         PageLoad? load;
         try
         {
-            load = await open(host, port, address, limit.Token).ConfigureAwait(false);
+            load = await open(host, port, tls, address, limit.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {

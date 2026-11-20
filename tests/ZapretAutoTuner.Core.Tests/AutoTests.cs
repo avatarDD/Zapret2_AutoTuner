@@ -417,6 +417,82 @@ public class AutoTests
     }
 
     [Fact]
+    public void Every_trial_gets_a_group_even_over_the_limit()
+    {
+        // four searches in parallel and room for two: a trial without a group would fail every strategy it tries
+        var book = new AutoBook();
+        var ips = new[] { "203.0.113.5", "203.0.113.6", "203.0.113.7", "203.0.113.8", "203.0.113.9" };
+        book.Feed([.. ips.Select((ip, i) => Sample($"web:s{i}.com", AutoHealth.Failed, T0, ip: ip))], T0);
+        book.Applied("web:s4.com", AutoCandidates.Tcp[0], 400, T0);
+        List<string> left = [];
+        var groups = AutoPlan.Groups(book.Services,
+            [.. Enumerable.Range(0, 4).Select(i => (book.Find($"web:s{i}.com")!, AutoCandidates.Tcp[i + 1]))], null, left, maxGroups: 2);
+        Assert.Equal(4, groups.Count);
+        Assert.Equal(["web:s4.com"], left);
+    }
+
+    [Fact]
+    public void A_strategy_left_without_a_group_is_not_judged()
+    {
+        // its bypass is not running: its failing flows say nothing about the strategy
+        var book = AppliedSite(out var s, T0);
+        book.LeftOut = new HashSet<string>(StringComparer.Ordinal) { "web:a.com" };
+        var t = T0.AddMinutes(1);
+        book.Feed([.. Enumerable.Range(0, 10).Select(i => Sample("web:a.com", AutoHealth.Failed, t.AddSeconds(i)))], t.AddSeconds(10));
+        book.Evaluate(t.AddSeconds(10));
+        Assert.Equal(AutoStatus.Applied, s.Status);
+        // long after: the routine check and the detector would take it if it ran
+        var late = t + AutoRules.RoutineCheck + AutoRules.DetectorHold;
+        book.Feed([Sample("web:a.com", AutoHealth.Ok, late)], late);
+        Assert.Null(book.NextRoutineCheck(late));
+        Assert.Empty(book.Detect("host", "a.com", AutoRules.DetectorClasses.First(), late));
+        book.LeftOut = new HashSet<string>(StringComparer.Ordinal);
+        Assert.Same(s, book.NextRoutineCheck(late));
+        book.LeftOut = new HashSet<string>(StringComparer.Ordinal) { "web:a.com" };
+
+        // back in a group: only what happens from then on counts
+        book.LeftOut = new HashSet<string>(StringComparer.Ordinal);
+        book.Evaluate(t.AddSeconds(20));
+        Assert.Equal(AutoStatus.Applied, s.Status);
+    }
+
+    [Fact]
+    public void A_server_that_does_not_answer_with_the_bypass_keeps_the_strategy_for_a_while()
+    {
+        var book = AppliedSite(out var s, T0);
+        var t = T0 + AutoRules.RoutineCheck;
+        book.Feed([Sample("web:a.com", AutoHealth.Ok, t)], t);
+        book.RoutineChecked("web:a.com", AutoCandidates.Tcp[0], false, t);
+        Assert.Equal(AutoStatus.Degraded, s.Status);
+        for (int i = 1; i < AutoRules.TimeoutsToDrop; i++)
+        {
+            Assert.Contains("оставляю", book.Confirmed("web:a.com", AutoConfirm.IpBlocked, t), StringComparison.Ordinal);
+            Assert.Equal(AutoStatus.Degraded, s.Status);
+            Assert.True(s.IsActive);
+            Assert.Null(book.NextToConfirm(t.AddMinutes(1)));
+            t += AutoRules.TimeoutRecheck;
+            Assert.Same(s, book.NextToConfirm(t));
+        }
+        // still no answer: an address block after all
+        book.Confirmed("web:a.com", AutoConfirm.IpBlocked, t);
+        Assert.Equal(AutoStatus.IpBlocked, s.Status);
+        Assert.Equal(0, s.Timeouts);
+    }
+
+    [Fact]
+    public void A_pinned_strategy_stays_applied_when_its_server_does_not_answer()
+    {
+        var book = AppliedSite(out var s, T0);
+        book.Pin("web:a.com", true);
+        var t = T0.AddMinutes(1);
+        book.CheckNow("web:a.com", t);
+        Assert.Equal(AutoStatus.Degraded, s.Status);
+        Assert.Contains("закреплена", book.Confirmed("web:a.com", AutoConfirm.IpBlocked, t), StringComparison.Ordinal);
+        Assert.Equal(AutoStatus.Applied, s.Status);
+        Assert.Equal(0, s.Timeouts);
+    }
+
+    [Fact]
     public void Group_queues_skip_the_name_based_process_and_the_detector()
     {
         var queues = Enumerable.Range(0, AutoRules.MaxServices).Select(AutoRules.GroupQueue).ToList();

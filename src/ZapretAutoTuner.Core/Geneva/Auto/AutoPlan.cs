@@ -54,7 +54,7 @@ public static class AutoPlan
     public static List<AutoGroup> Groups(IEnumerable<AutoService> services, IReadOnlyList<(AutoService Service, string Strategy)> trials,
         IReadOnlySet<string>? byName = null, List<string>? left = null, int maxGroups = AutoRules.DefaultMaxGroups)
     {
-        maxGroups = Math.Max(1, maxGroups);
+        maxGroups = Math.Clamp(maxGroups, 1, AutoRules.MaxServices);
         var tried = trials.Select(t => t.Service.Key).ToHashSet(StringComparer.Ordinal);
         var triedPairs = trials.Select(t => (t.Strategy, t.Service.Key)).ToHashSet();
         var active = services.Where(s => s.IsActive && !tried.Contains(s.Key))
@@ -90,6 +90,7 @@ public static class AutoPlan
         // One packet meets one strategy: two sites behind one CDN address would otherwise queue the same packets to two
         // groups, and which one gets them would depend on the rules' order (Linux) or on WinDivert (Windows). An
         // address and transport (or a local port) belongs to the first group that names it.
+        bool IsTrial(AutoGroup g) => g.Services.Any(k => triedPairs.Contains((g.Strategy, k)));
         var claimed = new HashSet<(string Proto, IPAddress Address)>();
         var claimedPorts = new HashSet<(string Proto, string Ports)>();
         var result = new List<AutoGroup>();
@@ -122,7 +123,9 @@ public static class AutoPlan
             }
             if (targets.Count == 0)
                 continue;
-            if (result.Count >= maxGroups)
+            // the cap gives way to trials (they come first, a few at most): a trial left without a group would be judged
+            // as not working
+            if (result.Count >= maxGroups && !IsTrial(g) || result.Count >= AutoRules.MaxServices)
             {
                 left?.AddRange(g.Services.Where(k => !tried.Contains(k)));
                 continue;

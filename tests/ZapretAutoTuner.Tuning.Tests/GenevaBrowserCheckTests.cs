@@ -30,7 +30,8 @@ public sealed class GenevaBrowserCheckTests
     [Fact]
     public void An_unknown_root_is_no_verdict_for_a_russian_site_only()
     {
-        // a chain to the national root the browser lacks: the probes trust it on Russian zones, the browser cannot say
+        // a chain to the national root the browser lacks: the probes trust it on Russian zones, the browser cannot say;
+        // elsewhere it is what an interception shows
         Assert.Null(GenevaBrowserCheck.Judge(new PageLoad { Url = "https://bank.ru/", Error = "net::ERR_CERT_AUTHORITY_INVALID at https://bank.ru/" }, "bank.ru").Ok);
         Assert.False(GenevaBrowserCheck.Judge(new PageLoad { Url = "https://a.example/", Error = "net::ERR_CERT_AUTHORITY_INVALID at https://a.example/" }, "a.example").Ok);
         Assert.False(GenevaBrowserCheck.Judge(new PageLoad { Url = "https://bank.ru/", Error = "net::ERR_CERT_COMMON_NAME_INVALID" }, "bank.ru").Ok);

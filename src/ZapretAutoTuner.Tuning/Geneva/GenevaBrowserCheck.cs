@@ -41,8 +41,8 @@ public static class GenevaBrowserCheck
     /// ytimg.com when the strategy reaches them). An important domain the strategy does not reach says nothing about it:
     /// it is named in <see cref="GenevaBrowserVerdict.Uncovered"/>, not failed. Noise (ads, counters) never counts
     /// (<see cref="SecondaryDomains"/>). A certificate from an authority the browser does not know says nothing about the
-    /// strategy either: the site's chain may end at a national root the system lacks (Минцифры), which the probes already
-    /// allow when the name is right; that is no verdict (null).
+    /// strategy either on a Russian site: its chain may end at the national root (Минцифры) the browser lacks, which the
+    /// probes trust there; that is no verdict (null). Elsewhere the same error is what an interception shows: a failure.
     /// </summary>
     public static GenevaBrowserVerdict Judge(PageLoad load, string host, Func<string, bool>? covered = null)
     {

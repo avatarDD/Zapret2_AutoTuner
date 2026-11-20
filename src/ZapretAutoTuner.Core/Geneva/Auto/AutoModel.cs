@@ -164,6 +164,18 @@ public static class AutoRules
     /// </summary>
     public static TimeSpan RoutineCheck { get; } = TimeSpan.FromMinutes(30);
 
+    /// <summary>
+    /// The shortest time between two checks with the bypass of an important service whose flows fail
+    /// (<see cref="AutoBook.Troubled"/>): sooner than the routine check, never every slice.
+    /// </summary>
+    public static TimeSpan TroubleRecheck { get; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// The failures of an important service count as trouble when they are at least this share of its successes
+    /// (one in ten): fewer are a busy service's ordinary noise.
+    /// </summary>
+    public const int TroubleShare = 10;
+
     /// <summary>A service the probe found open is not suspected again before this.</summary>
     public static TimeSpan NotBlockedPause { get; } = TimeSpan.FromHours(1);
 

@@ -645,16 +645,49 @@ public sealed class AutoBook
     /// lately, not pinned, judged by a probe; the most important and the longest unchecked first. A bypass that weakened
     /// shows here even when the slices and the detector miss it (the user's "Проверить сейчас", done by the mode).
     /// </summary>
+    /// <remarks>
+    /// An important service is not left to the half-hour turn when its flows fail with the bypass on: once they reach
+    /// the suspicion's threshold since the last check (<see cref="Troubled"/>), it is checked at once, before the rest.
+    /// </remarks>
     public AutoService? NextRoutineCheck(DateTime now, Func<AutoService, bool>? allowed = null) => _services.Values
         .Where(s => s.Status == AutoStatus.Applied && s.Strategy is not null && !s.Pinned && s.Probeable && !LeftOut.Contains(s.Key)
-            && now - s.LastSeen <= AutoRules.RoutineCheck && now - LastChecked(s) >= AutoRules.RoutineCheck
+            && (now - s.LastSeen <= AutoRules.RoutineCheck && now - LastChecked(s) >= AutoRules.RoutineCheck || Troubled(s, now))
             && (allowed is null || allowed(s)))
         .OrderBy(s => AutoPriorities.Effective(s, now))
+        .ThenByDescending(s => Troubled(s, now))
         .ThenBy(LastChecked)
         .FirstOrDefault();
 
-    private static DateTime LastChecked(AutoService s) =>
+    /// <summary>When the applied strategy was last judged: applied, or checked with the bypass since.</summary>
+    public static DateTime LastChecked(AutoService s) =>
         s.CheckedAt is { } c && (s.AppliedAt is null || c > s.AppliedAt) ? c : s.AppliedAt ?? DateTime.MinValue;
+
+    /// <summary>
+    /// The flows of an applied service since its strategy was last judged (<see cref="LastChecked"/>), within the
+    /// observation window: failed and passed. The lists are trimmed only when the service sends traffic; an idle one's
+    /// old failures do not count.
+    /// </summary>
+    public static (int Fails, int Oks) SinceChecked(AutoService s, DateTime now)
+    {
+        var last = LastChecked(s);
+        var from = last > now - AutoRules.Window ? last : now - AutoRules.Window;
+        return (s.Fails.Count(t => t > from) + s.NoConnections.Count(t => t > from), s.Oks.Count(t => t > from));
+    }
+
+    /// <summary>
+    /// An important applied service whose flows with the bypass failed as often as a suspicion needs since its last
+    /// check, and in at least a <see cref="AutoRules.TroubleShare"/>-th of the passing ones (many passing flows do not
+    /// hide it: a video that stalls while the page's small requests pass; a few stalls among hundreds are noise), and
+    /// that was not checked for <see cref="AutoRules.TroubleRecheck"/>: its check with the bypass is due now.
+    /// </summary>
+    public static bool Troubled(AutoService s, DateTime now)
+    {
+        if (s.Priority != AutoPriority.Important || s.Status != AutoStatus.Applied || s.Strategy is null || s.Pinned
+            || now - LastChecked(s) < AutoRules.TroubleRecheck)
+            return false;
+        var (fails, oks) = SinceChecked(s, now);
+        return fails >= Threshold(s) && fails * AutoRules.TroubleShare >= oks;
+    }
 
     /// <summary>
     /// The routine check's verdict on <paramref name="strategy"/> (<see cref="NextRoutineCheck"/>): passed, the strategy stays; failed, the service is

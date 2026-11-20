@@ -673,7 +673,7 @@ public sealed partial class AutoViewModel : PageViewModel
                 var detail = work is { Trying: { } kt, Step: > 0 } ? L.F("auto.trying_known", kt, work.Step, work.Steps)
                     : work?.Trying is { } t ? L.F("engine.auto_trying", t)
                     : evolve is not null ? L.F("auto.evolving", Math.Max(0, evolve.Generation + 1), evolve.Generations, evolve.Probing, evolve.Workers, evolve.Evaluated)
-                    : x.Why;
+                    : AppliedDetail(x, DateTime.UtcNow) ?? x.Why;
                 var tags = new List<string>();
                 if (x.Priority == AutoPriority.Important)
                     tags.Add(L["auto.tag_important"]);
@@ -693,6 +693,36 @@ public sealed partial class AutoViewModel : PageViewModel
             i.Imported.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)))]);
         Sync(AutoLog, [.. _host.GenevaAuto.Log.TakeLast(150).Reverse()]);
     }
+
+    /// <summary>
+    /// What a working strategy's row says: its failures since it was last judged (applied or checked with the bypass),
+    /// or when its check passed. The service's last failure alone ("соединение есть, данных нет" next to "обход работает")
+    /// read as a broken bypass the mode ignores, though one stalled flow among many passing ones may be nothing.
+    /// Null when the row keeps its own text (pinned, or nothing to add).
+    /// </summary>
+    internal static string? AppliedDetail(AutoService x, DateTime now)
+    {
+        if (x.Status != AutoStatus.Applied || x.Strategy is null || x.Pinned)
+            return null;
+        var (fails, oks) = AutoBook.SinceChecked(x, now);
+        if (fails > 0)
+            return L.F("auto.applied_errors", fails, fails + oks, Loc.Loc.I.English ? FlowWhyEn.GetValueOrDefault(x.Why, x.Why) : x.Why);
+        if (x.CheckedAt is not { } c || x.AppliedAt is { } at && c <= at)
+            return null;
+        var local = c.ToLocalTime();
+        return L.F("auto.applied_checked", local.ToString(local.Date == now.ToLocalTime().Date ? "t" : "g", CultureInfo.CurrentCulture));
+    }
+
+    /// <summary>The flows' failures as <see cref="AutoObserver.Judge"/> names them, for the English page.</summary>
+    private static readonly Dictionary<string, string> FlowWhyEn = new(StringComparer.Ordinal)
+    {
+        ["соединение не устанавливается"] = "no connection",
+        ["нет ответа"] = "no answer",
+        ["запросы без ответа"] = "requests without an answer",
+        ["сброс (RST) не от сервера"] = "a reset (RST) not from the server",
+        ["соединение есть, данных нет"] = "connected, no data",
+        ["обрыв на 16 КБ"] = "cut off at 16 KB",
+    };
 
     /// <summary>The most services listed at once.</summary>
     public const int MaxRows = 200;

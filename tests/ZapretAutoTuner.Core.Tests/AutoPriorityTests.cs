@@ -228,6 +228,27 @@ public class AutoPriorityTests
     }
 
     [Fact]
+    public void A_site_checked_in_the_browser_takes_its_family_by_name_but_not_a_member_with_its_own_search()
+    {
+        var book = Blocked([.. Fails((_, h, t) => Site("youtube.com", h, t), 0), .. Fails((_, h, t) => Site("googlevideo.com", h, t, ip: "203.0.113.50", host: "rr1---sn-abc.googlevideo.com"), 0)]);
+        var site = book.Find("web:youtube.com")!;
+        var trial = AutoPlan.TrialFamilies(book.Services, [(site, AutoCandidates.XTcp[1])], []);
+        var (key, p) = Assert.Single(trial);
+        Assert.Equal("web:youtube.com", key);
+        Assert.Equal(AutoCandidates.XTcp[1], p.Strategy);
+        Assert.Contains("youtube.com", p.Domains);
+        Assert.Contains("ytimg.com", p.Domains);
+        // googlevideo.com waits for its own search
+        Assert.DoesNotContain("googlevideo.com", p.Domains);
+        // the site stays with its address group
+        Assert.Empty(p.Services);
+
+        // a domain an applied profile names keeps that profile
+        var taken = new AutoHostProfile(AutoCandidates.XTcp[0], false, ["ytimg.com"], ["web:other"]);
+        Assert.DoesNotContain("ytimg.com", Assert.Single(AutoPlan.TrialFamilies(book.Services, [(site, AutoCandidates.XTcp[1])], [taken])).Profile.Domains);
+    }
+
+    [Fact]
     public void Sites_behind_one_address_with_different_strategies_are_left_to_their_names()
     {
         var book = Blocked([.. Fails((_, h, t) => Site("a.com", h, t, ip: "203.0.113.7"), 0), .. Fails((_, h, t) => Site("b.com", h, t, ip: "203.0.113.7"), 0)]);

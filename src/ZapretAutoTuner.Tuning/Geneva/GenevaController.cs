@@ -774,6 +774,7 @@ public sealed class GenevaController : IAsyncDisposable
         Changed?.Invoke();
         using var both = CancellationTokenSource.CreateLinkedTokenSource(slot.ProbeCts.Token, ct);
         var excluded = new AutoNameList(State.Lists.Excluded);
+        var family = GenevaBrowserCheck.SiteAndFamily(settings.Host);
         int passed = 0, checkedCount = 0;
         foreach (var f in found)
         {
@@ -795,7 +796,11 @@ public sealed class GenevaController : IAsyncDisposable
                     AddLog($"Итоговая проверка: geneva со стратегией не запустилась ({why}): {f.Strategy} / the final check: geneva did not start with the strategy");
                     continue;
                 }
-                var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, settings.Host, settings.Port, null, both.Token).ConfigureAwait(false);
+                // the bypass takes the whole port: on 443 the site's other names and its family (YouTube's googlevideo.com
+                // and ytimg.com) go through the strategy and must load, except what the user's "не трогать" keeps out.
+                // Other domains of the page may fail for reasons of their own (blocked by address, down): only logged
+                var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, settings.Host, settings.Port, null, both.Token,
+                    h => settings.Port == 443 && !excluded.MatchesName(h) && family.Any(d => GenevaBrowserCheck.Under(h, d))).ConfigureAwait(false);
                 if (verdict is null)
                 {
                     AddLog("Итоговая проверка в браузере пропущена: встроенного браузера программы нет / the final check in the browser is skipped: the program has no browser of its own");
@@ -809,9 +814,14 @@ public sealed class GenevaController : IAsyncDisposable
                 checkedCount++;
                 passed += ok ? 1 : 0;
                 Update(s => s.WithBrowser(settings.Host, settings.Port, f.Strategy, ok));
+                var related = verdict.RelatedOk.Count == 0 ? "" : $" (и связанные: {string.Join(", ", verdict.RelatedOk)} / and related ones)";
                 AddLog(ok
-                    ? $"{settings.Host} открылся во встроенном браузере: {f.Strategy} / opened in the program's browser"
+                    ? $"{settings.Host} открылся во встроенном браузере{related}: {f.Strategy} / opened in the program's browser"
+                    : verdict.SiteOpened
+                    ? $"{settings.Host} открылся во встроенном браузере, но не загрузились связанные ресурсы ({verdict.Detail}): {f.Strategy} / opened in the program's browser, but its related resources did not load"
                     : $"{settings.Host} не открылся во встроенном браузере ({verdict.Detail}): {f.Strategy} / did not open in the program's browser");
+                if (verdict.NotCovered.Count > 0)
+                    AddLog($"{settings.Host}: на странице не грузятся и другие ресурсы, их стратегия сайта не касается: {string.Join(", ", verdict.NotCovered)} / other resources of the page fail too, not the site's strategy's business");
             }
             catch (OperationCanceledException)
             {

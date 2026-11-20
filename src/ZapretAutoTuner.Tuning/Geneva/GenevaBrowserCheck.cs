@@ -33,26 +33,69 @@ public static class GenevaBrowserCheck
     };
 
     /// <summary>
-    /// The verdict on one load: the document came and the target's own requests went through. A certificate from an
-    /// authority the browser does not know says nothing about the strategy: the site's chain may end at a national root
-    /// the system lacks (Минцифры), which the probes already allow when the name is right; that is no verdict (null).
+    /// The verdict on one load: the document came and the target's own requests went through, and so did the page's
+    /// other important domains that the tried strategy covers (<paramref name="covered"/>: YouTube's googlevideo.com and
+    /// ytimg.com when the strategy reaches them). An important domain the strategy does not reach says nothing about it:
+    /// it is named in <see cref="GenevaBrowserVerdict.Uncovered"/>, not failed. Noise (ads, counters) never counts
+    /// (<see cref="SecondaryDomains"/>). A certificate from an authority the browser does not know says nothing about the
+    /// strategy either: the site's chain may end at a national root the system lacks (Минцифры), which the probes already
+    /// allow when the name is right; that is no verdict (null).
     /// </summary>
-    public static GenevaBrowserVerdict Judge(PageLoad load, string host)
+    public static GenevaBrowserVerdict Judge(PageLoad load, string host, Func<string, bool>? covered = null)
     {
         var domains = SecondaryDomains.Analyze(load, host);
-        if (FinalCheck.TargetPartLoads(load, domains))
-            return new(true, "ok");
-        if (load.Error is { Length: > 0 } error)
-            return new(error.Contains("ERR_CERT_AUTHORITY_INVALID", StringComparison.Ordinal) ? null : false, error);
-        var main = domains.FirstOrDefault(d => d.IsMain && d.Broken);
-        return new(false, main is null ? "failed" : $"{main.Host}: {main.State}{(main.Error is null ? "" : " " + main.Error)}");
+        if (!FinalCheck.TargetPartLoads(load, domains))
+        {
+            if (load.Error is { Length: > 0 } error)
+                return new(error.Contains("ERR_CERT_AUTHORITY_INVALID", StringComparison.Ordinal) ? null : false, error);
+            var main = domains.FirstOrDefault(d => d.IsMain && d.Broken);
+            return new(false, main is null ? "failed" : Describe(main));
+        }
+        var related = domains.Where(d => d.Important && !d.IsMain).ToList();
+        var mine = related.Where(d => covered?.Invoke(d.Host) == true).ToList();
+        var broken = mine.Where(Failed).ToList();
+        var uncovered = related.Where(d => Failed(d) && covered?.Invoke(d.Host) != true).Select(d => d.Host).ToList();
+        if (broken.Count > 0)
+            return new(false, string.Join(", ", broken.Select(Describe)), [.. mine.Where(d => !Failed(d)).Select(d => d.Host)], uncovered) { SiteOpened = true };
+        return new(true, "ok", [.. mine.Select(d => d.Host)], uncovered) { SiteOpened = true };
+    }
+
+    /// <summary>
+    /// A related domain the network failed: requests ended in errors. A request still open when the page is read (a
+    /// video streaming, a long poll) is not a failure: the stalled state of the page check does not count here.
+    /// </summary>
+    private static bool Failed(SecondaryDomain d) => d.State == DomainState.Failed || (d.State == DomainState.Partial && d.Error is not null);
+
+    /// <summary>
+    /// What the tried strategy reaches besides the site's own host: the site's other names (its registrable domain)
+    /// and its family (<see cref="Core.Geneva.Auto.AutoFamilies"/>: YouTube's googlevideo.com, ytimg.com).
+    /// </summary>
+    public static IReadOnlyList<string> SiteAndFamily(string host)
+    {
+        var site = Classifier.Registrable(host.TrimEnd('.').ToLowerInvariant());
+        return Core.Geneva.Auto.AutoFamilies.Of(site) is { } family ? [site, .. Core.Geneva.Auto.AutoFamilies.Domains(family)] : [site];
+    }
+
+    private static string Describe(SecondaryDomain d) => $"{d.Host}: {d.State}{(d.Error is null ? "" : " " + d.Error)}";
+
+    /// <summary>
+    /// A name and everything under it: <paramref name="host"/> is <paramref name="domain"/> or its subdomain
+    /// (<c>rr1.googlevideo.com</c> under <c>googlevideo.com</c>).
+    /// </summary>
+    public static bool Under(string host, string domain)
+    {
+        host = host.TrimEnd('.');
+        domain = domain.TrimEnd('.');
+        return host.Equals(domain, StringComparison.OrdinalIgnoreCase)
+            || (host.Length > domain.Length && host.EndsWith(domain, StringComparison.OrdinalIgnoreCase) && host[host.Length - domain.Length - 1] == '.');
     }
 
     /// <summary>
     /// Opens the page and judges it, within <see cref="Timeout"/>. Null when there is no browser; a load that throws or
     /// runs out of time is a failure, a cancellation by <paramref name="ct"/> is passed on.
     /// </summary>
-    public static async Task<GenevaBrowserVerdict?> RunAsync(GenevaOpenPage open, string host, int port, IPAddress? address, CancellationToken ct)
+    public static async Task<GenevaBrowserVerdict?> RunAsync(GenevaOpenPage open, string host, int port, IPAddress? address, CancellationToken ct,
+        Func<string, bool>? covered = null)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(Timeout);
@@ -69,12 +112,24 @@ public static class GenevaBrowserCheck
         {
             return new(false, e.Message);
         }
-        return load is null ? null : Judge(load, host);
+        return load is null ? null : Judge(load, host, covered);
     }
 }
 
-/// <summary>The browser's verdict: <see cref="Ok"/> true opened, false did not, null cannot say (an unknown root).</summary>
-public sealed record GenevaBrowserVerdict(bool? Ok, string Detail);
+/// <summary>
+/// The browser's verdict: <see cref="Ok"/> true opened, false did not, null cannot say (an unknown root).
+/// <see cref="Related"/>: the page's other important domains the strategy reaches that loaded with it;
+/// <see cref="Uncovered"/>: important domains that failed but are not the strategy's (another service's business).
+/// </summary>
+public sealed record GenevaBrowserVerdict(bool? Ok, string Detail, IReadOnlyList<string>? Related = null, IReadOnlyList<string>? Uncovered = null)
+{
+    /// <summary>The site itself opened: a failure is its related resources'.</summary>
+    public bool SiteOpened { get; init; }
+
+    public IReadOnlyList<string> RelatedOk => Related ?? [];
+
+    public IReadOnlyList<string> NotCovered => Uncovered ?? [];
+}
 
 /// <summary>The program's own browser: whether it is there now, and how a page is opened in it.</summary>
 public sealed record GenevaBrowser(Func<bool> Available, GenevaOpenPage Open);

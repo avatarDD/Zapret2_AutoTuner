@@ -492,4 +492,50 @@ public sealed class GenevaAutoTests
         await Until(() => auto.View.Services.Any(s => s.Key == "web:blocked.example" && s.Status == AutoStatus.Applied));
         Assert.Equal(0, Volatile.Read(ref opens));
     }
+
+    [Fact]
+    public async Task During_the_browser_check_the_tried_strategy_also_reaches_the_sites_family_by_name()
+    {
+        var site = new AutoService
+        {
+            Key = "web:youtube.com", Kind = AutoKind.Web, Transport = Core.Model.L4Kind.Tcp, Name = "youtube.com", Host = "www.youtube.com", App = "tls",
+            Addresses = [new AutoAddress("203.0.113.7", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc))],
+            Ports = [443], Status = AutoStatus.Blocked,
+            FirstSeen = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), LastSeen = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var seen = new List<IReadOnlyList<string>>();
+        FakeGenevaAgent? fake = null;
+        var (controller, auto, agent, probes, _) = Make((c, a) =>
+        {
+            fake = a;
+            a.AutoByName = true;
+            c.Browser = new GenevaBrowser(() => true, (host, port, address, ct) =>
+            {
+                // what the name-based process was given while the page opens
+                lock (a.AutoApplied)
+                    seen.Add([.. a.AutoApplied[^1].Hosts.Where(h => h.Strategy == AutoCandidates.Tcp[0]).SelectMany(h => h.Domains)]);
+                return Task.FromResult<PageLoad?>(new PageLoad
+                {
+                    Url = GenevaBrowserCheck.Url(host, port),
+                    LoadFired = true,
+                    Requests =
+                    [
+                        new PageRequest { Url = "https://www.youtube.com/", ResourceType = "document", Status = 200, Duration = TimeSpan.FromSeconds(1) },
+                        new PageRequest { Url = "https://i.ytimg.com/a.jpg", ResourceType = "image", Error = "net::ERR_CONNECTION_RESET" },
+                    ],
+                });
+            });
+        }, works: AutoCandidates.Tcp[0], saved: new GenevaState { Auto = new GenevaAutoState { Services = [site] } });
+        probes.Answer = OnlyTheSite;
+        await using var _ = controller;
+        await using var __ = auto;
+        await auto.EnableAsync(default);
+        // ytimg.com went through the strategy under test and did not load: the strategy is not taken
+        await Until(() => auto.Log.Any(l => l.Contains("не загрузились связанные ресурсы", StringComparison.Ordinal) && l.Contains("ytimg.com", StringComparison.Ordinal)));
+        lock (seen)
+            Assert.Contains(seen, d => d.Contains("ytimg.com") && d.Contains("googlevideo.com"));
+        Assert.NotEqual(AutoStatus.Applied, auto.View.Services.Single(x => x.Key == "web:youtube.com").Status);
+        // the trial's names are gone once the check is over
+        await Until(() => { lock (agent.AutoApplied) return !agent.AutoApplied[^1].Hosts.Any(h => h.Domains.Contains("ytimg.com") && h.Strategy == AutoCandidates.Tcp[0]); });
+    }
 }

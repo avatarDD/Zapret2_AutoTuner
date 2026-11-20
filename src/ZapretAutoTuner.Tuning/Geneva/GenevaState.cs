@@ -182,7 +182,7 @@ public sealed record GenevaState
             if (i < 0)
                 list.Add(f);
             else
-                list[i] = list[i] with { Fitness = Math.Max(list[i].Fitness, f.Fitness), Runs = Math.Max(list[i].Runs, f.Runs), Browser = f.Browser };
+                list[i] = list[i] with { Fitness = Math.Max(list[i].Fitness, f.Fitness), Runs = Math.Max(list[i].Runs, f.Runs), Browser = f.Browser ?? list[i].Browser };
         }
         return this with { Found = [.. list.OrderByDescending(x => x.Fitness).ThenByDescending(x => x.Runs).Take(MaxFound)] };
     }

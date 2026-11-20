@@ -19,6 +19,9 @@ public sealed record GenevaFoundStrategy
     public int Runs { get; init; }
 
     public DateTimeOffset Found { get; init; }
+
+    /// <summary>The final check in the program's browser: true opened, false did not, null not checked.</summary>
+    public bool? Browser { get; init; }
 }
 
 /// <summary>How far a target's search got: shown after a restart, and "Продолжить" resumes from geneva's checkpoint.</summary>
@@ -136,6 +139,12 @@ public sealed record GenevaState
     /// <summary>The "Авто" mode also applies site strategies by name (geneva_c 2.0); off: by address only, as before.</summary>
     public bool ByName { get; init; } = true;
 
+    /// <summary>
+    /// "Итоговая проверка в браузере": a strategy that geneva's search or the "Авто" mode found also has to open the
+    /// site in the program's own browser (<see cref="GenevaBrowserCheck"/>).
+    /// </summary>
+    public bool BrowserCheck { get; init; } = true;
+
     public const int MaxFound = 200;
 
     public const int MaxImported = 200;
@@ -173,10 +182,16 @@ public sealed record GenevaState
             if (i < 0)
                 list.Add(f);
             else
-                list[i] = list[i] with { Fitness = Math.Max(list[i].Fitness, f.Fitness), Runs = Math.Max(list[i].Runs, f.Runs) };
+                list[i] = list[i] with { Fitness = Math.Max(list[i].Fitness, f.Fitness), Runs = Math.Max(list[i].Runs, f.Runs), Browser = f.Browser };
         }
         return this with { Found = [.. list.OrderByDescending(x => x.Fitness).ThenByDescending(x => x.Runs).Take(MaxFound)] };
     }
+
+    /// <summary>The final check's verdict on a found strategy of a target (nothing when it is not among the found).</summary>
+    public GenevaState WithBrowser(string host, int port, string strategy, bool ok) => this with
+    {
+        Found = [.. Found.Select(x => x.Strategy == strategy && x.Port == port && string.Equals(x.Host, host, StringComparison.OrdinalIgnoreCase) ? x with { Browser = ok } : x)],
+    };
 
     /// <summary>
     /// The imported strategies with more: a new strategy is added, a known one only gains the new services' names

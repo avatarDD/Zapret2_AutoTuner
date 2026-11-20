@@ -32,7 +32,11 @@ public sealed class AppHost : IAsyncDisposable
         Geneva = new Tuning.Geneva.GenevaController(
             async ct => new Tuning.Geneva.AgentGeneva((await AgentAsync(ct).ConfigureAwait(false)).Client),
             new KbGenevaStore(Kb),
-            GenevaProbeAsync);
+            GenevaProbeAsync)
+        {
+            // the final check opens found strategies in the program's own browser only, never the user's
+            Browser = new Tuning.Geneva.GenevaBrowser(() => HasBrowser(), GenevaOpenPageAsync),
+        };
         GenevaAuto = new Tuning.Geneva.GenevaAuto(
             Geneva,
             async ct => new Tuning.Geneva.AgentGeneva((await AgentAsync(ct).ConfigureAwait(false)).Client),
@@ -85,6 +89,50 @@ public sealed class AppHost : IAsyncDisposable
             Level = Core.Diagnostics.ProbeLevel.L2Body,
             MaxTime = TimeSpan.FromSeconds(12),
         }, criteria), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The program's own Chromium is there (bundled or downloaded from Playwright's CDN).</summary>
+    private static bool HasBrowser()
+    {
+        try
+        {
+            return Probes.Browser.BrowserLocator.Chromium() is not null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// geneva's final check: the page in the program's browser, the name pinned to <paramref name="address"/> when the
+    /// strategy applies to that address only; HTTP/3 off, geneva's strategies here are for TCP. Null without a browser.
+    /// </summary>
+    private static async Task<Core.Diagnostics.PageLoad?> GenevaOpenPageAsync(string host, int port, System.Net.IPAddress? address, CancellationToken ct)
+    {
+        if (!HasBrowser())
+            return null;
+        var resolve = new Dictionary<string, string>();
+        if (address is not null)
+        {
+            // the name and its www twin: a redirect between them must not leave the address the strategy is tried on
+            var ip = address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? $"[{address}]" : address.ToString();
+            resolve[host] = ip;
+            resolve[host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : "www." + host] = ip;
+        }
+        try
+        {
+            return await Probes.Browser.BrowserProbe.RunAsync(new Probes.Browser.BrowserProbeOptions
+            {
+                Url = Tuning.Geneva.GenevaBrowserCheck.Url(host, port),
+                Resolve = resolve,
+                DisableQuic = true,
+            }, ct).ConfigureAwait(false);
+        }
+        catch (Probes.Browser.BrowserNotFoundException)
+        {
+            return null;
+        }
     }
 
     public static AppHost? Current { get; set; }

@@ -72,6 +72,9 @@ WireGuard, OpenVPN, DHT торрентов и любыми другими про
 Найденная стратегия применяется только к трафику этого сервиса (его адресам
 и портам, а для торрента — его локальному порту), остальной трафик через
 geneva не идёт. Если обход перестал работать, стратегия подбирается заново.
+С галочкой «Итоговая проверка в браузере» (включена по умолчанию) стратегия
+для сайта применяется, только если сайт с ней открылся и во встроенном
+браузере программы; не открылся — пробуется следующая.
 Если заблокирован сам адрес (соединение не устанавливается вовсе),
 программа так и пишет: здесь поможет только туннель.
 
@@ -243,7 +246,13 @@ geneva не идёт. Если обход перестал работать, с�
    (тех же, что пробует «Авто»), а в «Библиотеке» рядом со стратегиями Geneva
    есть все TCP-методы zapret2: любую можно взять для обхода. Список «Не
    трогать» со страницы «Авто» действует и здесь: при его изменении
-   включённый обход перезапускается. Одновременно работает
+   включённый обход перезапускается. Галочка «Итоговая проверка в браузере»
+   (общая с «Авто»): когда подбор закончится, три лучшие найденные стратегии
+   по очереди ненадолго включаются на порту сайта, и встроенный браузер
+   программы открывает сайт через каждую; в «Найденных» рядом с оценкой видно
+   «открылся в браузере» или «не открылся в браузере». На время проверки (до
+   минуты на стратегию) стратегия действует на весь трафик порта сайта. Пока работает обход
+   geneva («Авто» или одна стратегия), проверка пропускается. Одновременно работает
    только один движок: geneva (авто или вручную) или zapret2.
 
    ![Ручной подбор geneva](img/manual-geneva.png)
@@ -331,7 +340,8 @@ zapret-gui на роутере (например, 192.168.2.1).
 **Linux: «не найден pkexec».** Установите polkit (`policykit-1` или
 `polkit`) или запустите программу от root.
 
-**Проверка в браузере.** Галочка «Проверять найденное в браузере» открывает
+**Проверка в браузере.** Галочка «Проверять найденное в браузере» (мастер
+zapret2) и «Итоговая проверка в браузере» (geneva: ручной подбор и «Авто») открывают
 сайт во встроенном браузере программы: Chromium без окна из Playwright в
 папке `browsers` рядом с программой, каждый раз с чистым временным профилем.
 Установленные у вас браузеры, их профили и настройки программа не трогает.
@@ -424,7 +434,10 @@ or a freeze sooner, and measures the link speed this check needs.
 
 A strategy it finds applies to that service's traffic only (its addresses and
 ports, or a torrent's local port); the rest of the traffic never goes through
-geneva. When a bypass stops working, a new one is searched. When the address
+geneva. When a bypass stops working, a new one is searched. With "Final check
+in the browser" (on by default) a site's strategy is applied only if the site
+also opens with it in the program's own browser; if not, the next one is tried.
+When the address
 itself is blocked (no connection at all), the program says so: only a tunnel
 helps there.
 
@@ -518,7 +531,15 @@ geneva_c 1.1 or newer.
    zapret2's methods" box also starts the search from zapret2's splits and
    fakes (the ones Auto tries), and the Library lists every TCP method of
    zapret2 next to Geneva's strategies, ready for the bypass. Auto's "never
-   touch" list applies here too: a change restarts a running bypass. Only one
+   touch" list applies here too: a change restarts a running bypass. "Final
+   check in the browser" (shared with Auto): when the search ends, the three
+   best strategies found are turned on in turn on the site's port for a moment
+   and the program's browser opens the site through each; Found then says
+   "opened in the browser" or "did not open in the browser" next to the score.
+   During the check (up to a minute per strategy) the strategy applies to all
+   traffic on the site's port.
+   The check is skipped while a geneva bypass runs (Auto or a single
+   strategy). Only one
    engine runs at a time: geneva (auto or manual) or zapret2.
 
 Every menu item says what it is for. Closing the program ends every process it

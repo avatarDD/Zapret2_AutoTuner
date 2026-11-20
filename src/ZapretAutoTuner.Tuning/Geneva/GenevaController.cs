@@ -72,6 +72,9 @@ public sealed record GenevaSearchView
     /// <summary>Why the last search ended, in Russian and English; null while it runs or before the first.</summary>
     public (string Ru, string En)? Ended { get; init; }
 
+    /// <summary>geneva's search is over and the strategies it found are being opened in the program's browser.</summary>
+    public bool BrowserChecking { get; init; }
+
     /// <summary>Best fitness per finished generation: the page's chart.</summary>
     public IReadOnlyList<double> BestByGeneration { get; init; } = [];
 
@@ -137,6 +140,7 @@ public sealed class GenevaController : IAsyncDisposable
     private GenevaSearchView _search = new();
     private GenevaRunView _run = new();
     private string? _runId;
+    private bool _browserChecking;
     private Task? _runWatch;
     private int _probeSeq;
 
@@ -155,6 +159,19 @@ public sealed class GenevaController : IAsyncDisposable
 
     /// <summary>The "Авто" mode runs: it applies its own strategies, so the single-strategy bypass waits.</summary>
     public Func<bool>? AutoRunning { get; set; }
+
+    /// <summary>The program's own browser for the final check (<see cref="GenevaBrowserCheck"/>); null: there is none.</summary>
+    public GenevaBrowser? Browser { get; set; }
+
+    /// <summary>"Итоговая проверка в браузере" (manual search and "Авто"): saved with the rest.</summary>
+    public bool BrowserCheck
+    {
+        get => State.BrowserCheck;
+        set => Update(s => s with { BrowserCheck = value });
+    }
+
+    /// <summary>The browser to check with now: the switch is on and the program has one.</summary>
+    internal GenevaBrowser? BrowserNow => BrowserCheck && Browser is { } b && b.Available() ? b : null;
 
     /// <summary>Something the page or MCP shows changed.</summary>
     public event Action? Changed;
@@ -191,6 +208,9 @@ public sealed class GenevaController : IAsyncDisposable
         public GenevaSearchView View { get; set; } = view;
 
         public Task? Watch { get; set; }
+
+        /// <summary>What geneva's <c>result</c> named, best first: the final check opens them in the browser.</summary>
+        public List<GenevaFoundStrategy> Result { get; } = [];
     }
 
     /// <summary>The search the page shows: the latest running one, or the last that ended.</summary>
@@ -470,6 +490,24 @@ public sealed class GenevaController : IAsyncDisposable
         }
         // the probes still running answer nobody now (geneva is gone); they end with the probe's own timeout
         await Task.WhenAny(Task.WhenAll(inflight), Task.Delay(TimeSpan.FromSeconds(15), CancellationToken.None)).ConfigureAwait(false);
+        // the user's search found something: the final check in the browser before the search counts as over (the
+        // "Авто" mode checks on the service's own traffic itself)
+        if (!slot.View.Auto && exitCode == 0 && !_dispose.IsCancellationRequested && !slot.ProbeCts.IsCancellationRequested)
+        {
+            try
+            {
+                await CheckInBrowserAsync(agent, slot, ct).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                // the search must still end below: a slot left behind would refuse every later search
+                AddLog("Итоговая проверка в браузере прервана / the final check in the browser stopped: " + e.Message);
+            }
+            finally
+            {
+                Volatile.Write(ref _browserChecking, false);
+            }
+        }
         bool stopped;
         (string Ru, string En)? ports;
         lock (_lock)
@@ -602,6 +640,11 @@ public sealed class GenevaController : IAsyncDisposable
                 }
                 if (found.Count > 0)
                     Update(s => s.WithFound(found));
+                lock (_lock)
+                {
+                    slot.Result.Clear();
+                    slot.Result.AddRange(found.OrderByDescending(f => f.Fitness).ThenByDescending(f => f.Runs));
+                }
                 AddLog(found.Count > 0 ? $"Найдено рабочих стратегий: {found.Count}" : "Рабочая стратегия не найдена");
                 break;
             }
@@ -701,6 +744,136 @@ public sealed class GenevaController : IAsyncDisposable
         return new GenevaJudgement(fitness, outcome + ": " + r);
     }
 
+    /// <summary>
+    /// The final check of a manual search (<see cref="GenevaBrowserCheck"/>): each of the best strategies found runs as
+    /// the bypass on the target's port for a moment, and the program's browser opens the site through it. The verdict is
+    /// kept with the found strategy. Skipped when the switch is off, there is no browser, or another geneva bypass holds
+    /// the port (the single-strategy bypass, "Авто").
+    /// </summary>
+    private async Task CheckInBrowserAsync(IGenevaAgent agent, SearchSlot slot, CancellationToken ct)
+    {
+        List<GenevaFoundStrategy> found;
+        lock (_lock)
+            found = [.. slot.Result.Take(GenevaBrowserCheck.MaxManual)];
+        if (found.Count == 0 || !BrowserCheck)
+            return;
+        var settings = slot.Settings;
+        if (BrowserNow is not { } browser)
+        {
+            AddLog("Итоговая проверка в браузере пропущена: встроенного браузера программы нет / the final check in the browser is skipped: the program has no browser of its own");
+            return;
+        }
+        if (RunRunning || AutoRunning?.Invoke() == true || Busy?.Invoke() is not null)
+        {
+            AddLog("Итоговая проверка в браузере пропущена: работает обход geneva («Авто» или одна стратегия) / the final check in the browser is skipped: a geneva bypass runs (\"Auto\" or a single strategy)");
+            return;
+        }
+        lock (_lock)
+            slot.View = slot.View with { BrowserChecking = true };
+        Volatile.Write(ref _browserChecking, true);
+        Changed?.Invoke();
+        using var both = CancellationTokenSource.CreateLinkedTokenSource(slot.ProbeCts.Token, ct);
+        var excluded = new AutoNameList(State.Lists.Excluded);
+        int passed = 0, checkedCount = 0;
+        foreach (var f in found)
+        {
+            string? id = null;
+            try
+            {
+                var req = new GenevaStartRequest
+                {
+                    Mode = "run",
+                    Strategy = f.Strategy,
+                    Ports = settings.Port.ToString(CultureInfo.InvariantCulture),
+                    Tag = "geneva-check:" + settings.Host,
+                };
+                req.ExcludeSubnets.AddRange(excluded.Subnets);
+                req.ExcludeDomains.AddRange(excluded.Domains);
+                id = (await agent.StartAsync(req, both.Token).ConfigureAwait(false)).Id;
+                if (await WaitReadyAsync(agent, id, both.Token).ConfigureAwait(false) is { } why)
+                {
+                    AddLog($"Итоговая проверка: geneva со стратегией не запустилась ({why}): {f.Strategy} / the final check: geneva did not start with the strategy");
+                    continue;
+                }
+                var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, settings.Host, settings.Port, null, both.Token).ConfigureAwait(false);
+                if (verdict is null)
+                {
+                    AddLog("Итоговая проверка в браузере пропущена: встроенного браузера программы нет / the final check in the browser is skipped: the program has no browser of its own");
+                    break;
+                }
+                if (verdict.Ok is not { } ok)
+                {
+                    AddLog($"Итоговая проверка: браузер не знает корневой сертификат сайта ({verdict.Detail}), по стратегии судить нельзя / the browser does not know the site's root certificate, no verdict: {f.Strategy}");
+                    continue;
+                }
+                checkedCount++;
+                passed += ok ? 1 : 0;
+                Update(s => s.WithBrowser(settings.Host, settings.Port, f.Strategy, ok));
+                AddLog(ok
+                    ? $"{settings.Host} открылся во встроенном браузере: {f.Strategy} / opened in the program's browser"
+                    : $"{settings.Host} не открылся во встроенном браузере ({verdict.Detail}): {f.Strategy} / did not open in the program's browser");
+            }
+            catch (OperationCanceledException)
+            {
+                break; // stopped: what was checked stays
+            }
+            catch (GenevaRefusedException e)
+            {
+                AddLog($"Итоговая проверка в браузере прервана: {e.Message} / the final check in the browser stopped");
+                break;
+            }
+            catch (Exception e) when (e is Grpc.Core.RpcException or IOException or InvalidOperationException)
+            {
+                AddLog($"Итоговая проверка в браузере прервана: {e.Message} / the final check in the browser stopped");
+                break;
+            }
+            finally
+            {
+                if (id is not null)
+                    await agent.StopAsync(id, CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default).ConfigureAwait(false);
+            }
+        }
+        if (checkedCount > 0)
+        {
+            AddLog(passed > 0
+                ? $"Итоговая проверка в браузере: открыли сайт {passed} из {checkedCount} / the final check in the browser: {passed} of {checkedCount} opened the site"
+                : $"Итоговая проверка в браузере: ни одна из {checkedCount} стратегий не открыла сайт в браузере — подбор можно продолжить / the final check in the browser: none of {checkedCount} opened the site, the search can go on");
+        }
+        lock (_lock)
+            slot.View = slot.View with { BrowserChecking = false };
+    }
+
+    /// <summary>Waits for a bypass's <c>ready</c> (its rules are in): null, or why it did not come.</summary>
+    private static async Task<string?> WaitReadyAsync(IGenevaAgent agent, string id, CancellationToken ct)
+    {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(ReadyTimeout);
+        string? error = null;
+        try
+        {
+            await foreach (var o in agent.WatchAsync(id, limit.Token).ConfigureAwait(false))
+            {
+                if (o.Exited)
+                    return error ?? $"exit {o.ExitCode}";
+                if (GenevaEvent.Parse(o.Event) is not { } e)
+                    continue;
+                if (e.Ev == "ready")
+                    return null;
+                if (e.Ev == "error")
+                    error = e.Str("message");
+            }
+        }
+        catch (Exception e) when (!ct.IsCancellationRequested && (e is OperationCanceledException || e is Grpc.Core.RpcException { StatusCode: Grpc.Core.StatusCode.Cancelled or Grpc.Core.StatusCode.DeadlineExceeded }))
+        {
+            return error ?? "timeout";
+        }
+        ct.ThrowIfCancellationRequested();
+        return error ?? "ended";
+    }
+
+    /// <summary>How long a bypass of the final check may take to put its rules in.</summary>
+    internal static TimeSpan ReadyTimeout { get; set; } = TimeSpan.FromSeconds(20);
+
     /// <summary>Ports of the block the probe tries for one strategy before it gives up on the block.</summary>
     public const int MaxPortAttempts = 8;
 
@@ -720,6 +893,8 @@ public sealed class GenevaController : IAsyncDisposable
         {
             if (RunRunning)
                 throw new GenevaRefusedException("обход geneva уже включён: сначала выключите / the geneva bypass is already on");
+            if (Volatile.Read(ref _browserChecking))
+                throw new GenevaRefusedException("идёт итоговая проверка найденного в браузере: дождитесь её конца / the final check of what was found runs in the browser, wait for it to end");
             if (AutoRunning?.Invoke() == true)
                 throw new GenevaRefusedException("включён режим «Авто»: сначала выключите его / the \"Auto\" mode is on: turn it off first");
             if (Busy?.Invoke() is { } why)

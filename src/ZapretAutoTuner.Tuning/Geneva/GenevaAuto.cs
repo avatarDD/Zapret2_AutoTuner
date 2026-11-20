@@ -1053,6 +1053,14 @@ public sealed class GenevaAuto : IAsyncDisposable
                     return;
                 }
             }
+            if (view.Stopped)
+            {
+                // stopped from outside (the program closing, the Agent): not searched through, so not "nothing found"
+                lock (_lock)
+                    _book.Interrupted(s.Key, _now());
+                AddLog($"{s.Name}: подбор остановлен; продолжу позже с того же места / the search was stopped; it continues later from the same point");
+                return;
+            }
             lock (_lock)
                 _book.NotFound(s.Key, _now());
             AddLog($"{s.Name}: подбор не нашёл обход; продолжу позже с новыми поколениями");
@@ -1123,7 +1131,7 @@ public sealed class GenevaAuto : IAsyncDisposable
         if (s.Kind != AutoKind.Web || s.Address is not { } address || s.Port is not (80 or 443) || _controller.BrowserNow is not { } browser)
             return true;
         var host = s.Host.Length > 0 ? s.Host : s.Name;
-        var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, host, s.Port, address, ct).ConfigureAwait(false);
+        var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, host, s.Port, s.Port == 443, address, ct).ConfigureAwait(false);
         // no browser any more, or a root it does not know: the probes' verdict stands, as without the switch
         if (verdict is not { Ok: { } ok } v)
             return true;

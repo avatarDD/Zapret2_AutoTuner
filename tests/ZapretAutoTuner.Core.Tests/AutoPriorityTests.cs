@@ -361,7 +361,8 @@ public class AutoPriorityTests
             Assert.Null(AutoNameList.MaskProblem(ok));
         foreach (var bad in new[] { "*", "*.", "AS", "ASx1", "exa mple.com", "a/b" })
             Assert.NotNull(AutoNameList.MaskProblem(bad));
-        foreach (var strict in new[] { "*.ru", "AS12389", "*google*", "*cdn.org" })
+        // "*cdn.org" in «Не трогать» keeps its old meaning there: the domain cdn.org (A_saved_exclusion_with_a_leading_star_keeps_its_old_meaning)
+        foreach (var strict in new[] { "*.ru", "AS12389", "*google*" })
             Assert.NotNull(AutoNameList.Problem(strict));
         Assert.Equal([12389, 3216], AutoNameList.AsnsOf(["AS12389", "as3216", "x.com", "AS12389"]));
     }
@@ -503,5 +504,16 @@ public class AutoPriorityTests
         {
             Directory.Delete(dir, true);
         }
+    }
+
+    [Fact]
+    public void A_saved_exclusion_with_a_leading_star_keeps_its_old_meaning()
+    {
+        // before masks, "*vpn.example.com" in «Не трогать» was the domain with its subdomains: it must still go to geneva
+        var l = AutoNameList.Exclusions(["*vpn.example.com", "10.1.0.0/16"]);
+        Assert.Equal(["vpn.example.com"], l.Domains);
+        Assert.True(l.MatchesName("a.vpn.example.com"));
+        Assert.Null(AutoNameList.Problem("*vpn.example.com"));
+        Assert.Equal(["10.1.0.0/16"], l.Subnets);
     }
 }

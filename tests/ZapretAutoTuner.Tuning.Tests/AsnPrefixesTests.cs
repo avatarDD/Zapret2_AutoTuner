@@ -87,4 +87,30 @@ public sealed class AsnPrefixesTests
         // what the user removed stays removed
         Assert.Empty(merged.Important);
     }
+
+    [Fact]
+    public void Overlapping_fetches_keep_each_others_networks()
+    {
+        var old = Now.AddDays(-8);
+        // a background refresh started on the old lists and fetched AS1 again
+        var refreshed = new AutoLists
+        {
+            NoSearch = ["AS1"],
+            AsnPrefixes = new Dictionary<string, IReadOnlyList<string>> { ["1"] = ["1.0.0.0/8"] },
+            AsnFetched = new Dictionary<string, DateTime> { ["1"] = Now },
+        };
+        // meanwhile the user saved AS2 with its networks (AS1's are still the old ones there)
+        var saved = new AutoLists
+        {
+            NoSearch = ["AS1", "AS2"],
+            AsnPrefixes = new Dictionary<string, IReadOnlyList<string>> { ["1"] = ["1.0.0.0/16"], ["2"] = ["2.0.0.0/8"] },
+            AsnFetched = new Dictionary<string, DateTime> { ["1"] = old, ["2"] = Now },
+        };
+        var l = AsnPrefixes.WithNetworks(saved, refreshed);
+        Assert.Equal(["1.0.0.0/8"], l.AsnPrefixes["1"]);
+        Assert.Equal(["2.0.0.0/8"], l.AsnPrefixes["2"]);
+        Assert.Equal(Now, l.AsnFetched["1"]);
+        // an AS the lists no longer name goes
+        Assert.False(AsnPrefixes.WithNetworks(saved with { NoSearch = ["AS2"] }, refreshed).AsnPrefixes.ContainsKey("1"));
+    }
 }

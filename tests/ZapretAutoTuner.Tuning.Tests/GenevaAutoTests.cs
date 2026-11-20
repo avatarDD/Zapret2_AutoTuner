@@ -437,7 +437,7 @@ public sealed class GenevaAutoTests
     public async Task A_sites_strategy_is_applied_only_after_it_opens_the_site_in_the_programs_browser()
     {
         var opened = new List<(string Host, int Port, string? Address)>();
-        var (controller, auto, _, probes, _) = Make((c, _) => c.Browser = new GenevaBrowser(() => true, (host, port, address, ct) =>
+        var (controller, auto, _, probes, _) = Make((c, _) => c.Browser = new GenevaBrowser(() => true, (host, port, _, address, ct) =>
         {
             lock (opened)
                 opened.Add((host, port, address?.ToString()));
@@ -458,7 +458,7 @@ public sealed class GenevaAutoTests
     public async Task A_strategy_that_does_not_open_the_site_in_the_browser_is_not_applied()
     {
         int opens = 0;
-        var (controller, auto, _, probes, _) = Make((c, _) => c.Browser = new GenevaBrowser(() => true, (host, port, address, ct) =>
+        var (controller, auto, _, probes, _) = Make((c, _) => c.Browser = new GenevaBrowser(() => true, (host, port, _, address, ct) =>
         {
             Interlocked.Increment(ref opens);
             return Task.FromResult<PageLoad?>(new PageLoad { Url = GenevaBrowserCheck.Url(host, port), Error = "net::ERR_CONNECTION_RESET" });
@@ -479,7 +479,7 @@ public sealed class GenevaAutoTests
         var (controller, auto, _, probes, _) = Make((c, _) =>
         {
             c.BrowserCheck = false;
-            c.Browser = new GenevaBrowser(() => true, (host, port, address, ct) =>
+            c.Browser = new GenevaBrowser(() => true, (host, port, _, address, ct) =>
             {
                 Interlocked.Increment(ref opens);
                 return Task.FromResult<PageLoad?>(new PageLoad { Url = "", Error = "failed" });

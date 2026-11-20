@@ -169,6 +169,10 @@ public sealed class GenevaControllerTests
         await Assert.ThrowsAsync<GenevaRefusedException>(() => g.StartSearchAsync(new GenevaSearchSettings { Host = "c.example" }, default));
         await Assert.ThrowsAsync<GenevaRefusedException>(() => g.StartSearchAsync(new GenevaSearchSettings { Host = "a.example" }, default, auto: true));
         Assert.False(g.UserSearchRunning);
+        // the page's and MCP's Stop are for the user's searches: the mode's go on
+        await g.StopUserSearchesAsync();
+        Assert.Equal(2, g.Searches.Count);
+        Assert.Empty(rig.Agent.Stopped);
         // each search gets its own baseline answer (the same request id in two searches)
         await Until(() => { lock (rig.Agent.Answers) return rig.Agent.Answers.Count(x => x.Id == 1) == 2; });
 
@@ -298,6 +302,7 @@ public sealed class GenevaControllerTests
         gate.SetResult();
         await Until(() => !g.SearchRunning);
         Assert.Equal("stopped", g.Search.Ended?.En);
+        Assert.True(g.Search.Stopped);
         var p = GenevaState.Parse(rig.Store.Json).ProgressOf("blocked.example", 443);
         Assert.NotNull(p);
         Assert.False(p.Finished);
@@ -422,7 +427,7 @@ public sealed class GenevaControllerTests
         var rig = new Rig();
         await using var g = rig.Make();
         var opened = new List<(string Host, int Port, bool Ready)>();
-        g.Browser = new GenevaBrowser(() => true, (host, port, address, ct) =>
+        g.Browser = new GenevaBrowser(() => true, (host, port, _, address, ct) =>
         {
             // the strategy runs while the page opens
             lock (opened)
@@ -450,7 +455,7 @@ public sealed class GenevaControllerTests
     {
         var rig = new Rig();
         await using var g = rig.Make();
-        g.Browser = new GenevaBrowser(() => true, (host, port, _, _) => Task.FromResult<PageLoad?>(new PageLoad { Url = GenevaBrowserCheck.Url(host, port), Error = "net::ERR_CONNECTION_RESET" }));
+        g.Browser = new GenevaBrowser(() => true, (host, port, _, _, _) => Task.FromResult<PageLoad?>(new PageLoad { Url = GenevaBrowserCheck.Url(host, port), Error = "net::ERR_CONNECTION_RESET" }));
         await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3 }, default);
         await Until(() => !g.SearchRunning);
         Assert.False(Assert.Single(GenevaState.Parse(rig.Store.Json).Found).Browser);
@@ -466,7 +471,7 @@ public sealed class GenevaControllerTests
             await using var g = rig.Make();
             int opens = 0;
             g.BrowserCheck = on;
-            g.Browser = new GenevaBrowser(() => has, (_, _, _, _) =>
+            g.Browser = new GenevaBrowser(() => has, (_, _, _, _, _) =>
             {
                 Interlocked.Increment(ref opens);
                 return Task.FromResult<PageLoad?>(null);

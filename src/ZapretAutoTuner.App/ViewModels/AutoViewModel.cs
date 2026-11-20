@@ -446,7 +446,8 @@ public sealed partial class AutoViewModel : PageViewModel
             if (!AsnPrefixes.Stale(lists, DateTime.UtcNow))
                 return;
             var (fresh, _) = await AsnPrefixes.RefreshAsync(lists, Get, DateTime.UtcNow, CancellationToken.None);
-            _host.Geneva.Lists = _host.Geneva.Lists with { AsnPrefixes = fresh.AsnPrefixes, AsnFetched = fresh.AsnFetched };
+            // the lists as they are now (saved meanwhile, perhaps with an AS fetched by that save): per AS the fresher networks
+            _host.Geneva.Lists = AsnPrefixes.WithNetworks(_host.Geneva.Lists, fresh);
         }
         finally
         {

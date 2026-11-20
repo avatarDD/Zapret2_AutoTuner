@@ -228,7 +228,7 @@ public sealed class AutoBook
         _lists = lists;
         _important = new AutoNameList(lists.Important, lists.AsnPrefixes);
         _unimportant = new AutoNameList(lists.Unimportant, lists.AsnPrefixes);
-        _excluded = new AutoNameList(lists.Excluded);
+        _excluded = AutoNameList.Exclusions(lists.Excluded);
         _noSearch = new AutoNameList(lists.NoSearch, lists.AsnPrefixes);
         var gone = new List<string>();
         skipped = [];

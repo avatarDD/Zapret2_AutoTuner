@@ -105,9 +105,11 @@ public sealed class GenevaTools(McpSession session)
             ["geneva_search_start"] = SearchStartAsync,
             ["geneva_search_stop"] = (a, ct) => WithGeneva(async g =>
             {
-                if (!g.SearchRunning)
-                    return McpErrors.Error("no geneva search is running / подбор geneva не идёт");
-                await g.StopSearchAsync(ct).ConfigureAwait(false);
+                if (!g.UserSearchRunning)
+                    return McpErrors.Error(g.SearchRunning
+                        ? "only the Auto mode's searches run; geneva_auto_disable stops them / идут только подборы «Авто», их останавливает geneva_auto_disable"
+                        : "no geneva search is running / подбор geneva не идёт");
+                await g.StopUserSearchesAsync(ct).ConfigureAwait(false);
                 return new JsonObject { ["ok"] = true, ["status"] = "stopped", ["hint"] = "geneva_search_start with resume=true continues it" };
             }),
             ["geneva_run_start"] = (a, ct) => Task.FromResult(RunStart(a)),

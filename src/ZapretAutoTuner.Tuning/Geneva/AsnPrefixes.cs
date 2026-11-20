@@ -33,19 +33,46 @@ public static class AsnPrefixes
 
     /// <summary>
     /// The user's edit of the lists made on <paramref name="before"/>, laid over <paramref name="now"/>: entries added
-    /// meanwhile elsewhere ("Не подбирать" in a row's menu, MCP) are kept, the networks are those of <paramref name="edited"/>.
+    /// meanwhile elsewhere ("Не подбирать" in a row's menu, MCP) are kept, and so are the networks fetched for them
+    /// meanwhile (<see cref="WithNetworks"/>).
     /// </summary>
     public static AutoLists Merge(AutoLists edited, AutoLists before, AutoLists now)
     {
         static List<string> M(IReadOnlyList<string> mine, IReadOnlyList<string> was, IReadOnlyList<string> cur) =>
             [.. mine, .. cur.Where(x => !was.Contains(x, StringComparer.OrdinalIgnoreCase) && !mine.Contains(x, StringComparer.OrdinalIgnoreCase))];
-        return edited with
+        return WithNetworks(edited with
         {
             Important = M(edited.Important, before.Important, now.Important),
             Unimportant = M(edited.Unimportant, before.Unimportant, now.Unimportant),
             Excluded = M(edited.Excluded, before.Excluded, now.Excluded),
             NoSearch = M(edited.NoSearch, before.NoSearch, now.NoSearch),
-        };
+        }, now);
+    }
+
+    /// <summary>
+    /// <paramref name="lists"/> with the AS networks of both it and <paramref name="other"/>: per AS the fresher fetch
+    /// wins, and only the AS the lists still name are kept. Two fetches that overlapped (a background refresh and a save)
+    /// then never drop each other's networks.
+    /// </summary>
+    public static AutoLists WithNetworks(AutoLists lists, AutoLists other)
+    {
+        var prefixes = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        var fetched = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        foreach (var asn in Named(lists))
+        {
+            var key = asn.ToString(CultureInfo.InvariantCulture);
+            bool mine = lists.AsnPrefixes.TryGetValue(key, out var p1);
+            bool theirs = other.AsnPrefixes.TryGetValue(key, out var p2);
+            var t1 = lists.AsnFetched.GetValueOrDefault(key);
+            var t2 = other.AsnFetched.GetValueOrDefault(key);
+            if (theirs && (!mine || t2 > t1))
+                (prefixes[key], fetched[key]) = (p2!, t2);
+            else if (mine)
+                (prefixes[key], fetched[key]) = (p1!, t1);
+            if (fetched.TryGetValue(key, out var t) && t == default)
+                fetched.Remove(key);
+        }
+        return lists with { AsnPrefixes = prefixes, AsnFetched = fetched };
     }
 
     public static string Url(int asn) => "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS" + asn.ToString(CultureInfo.InvariantCulture);

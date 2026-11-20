@@ -380,7 +380,7 @@ AutoTuner → zapret-gui: «Импорт бандла» (`POST
 `core/bundle_export.py`) — тот же `zapret-autotuner-bundle` v1 с
 `generator.name = "zapret-gui"`, всеми hostlist, ipset (`cidrs`), блобами
 и lua, на которые ссылаются профили (выключенные тоже; импорт AutoTuner
-берёт только включённые). Блоб под именем каталога GUI (`tls_google`)
+берёт только включённые). Блоб под именем каталога GUI (`quic_vk`, `fake_tls_1`)
 приходит байтами файла за ним (как и имена из `fake_blob=` и
 `dataxor=` скриптов GUI и `fallback=` у `tls_client_hello_clone`; его
 `blob=` — имя переменной клона, не блоб, а `fallback=` у

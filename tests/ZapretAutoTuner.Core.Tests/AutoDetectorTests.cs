@@ -59,6 +59,39 @@ public class AutoDetectorTests
     }
 
     [Fact]
+    public void A_shaper_on_an_applied_strategy_makes_it_checked_once_it_settled()
+    {
+        var book = new AutoBook();
+        book.Feed([Site("example.com", T0)], T0);
+        book.Applied("web:example.com", "\\/", 400, T0);
+        var s = book.Find("web:example.com")!;
+        // just applied: the probe that found it passed a moment ago
+        Assert.Empty(book.Detect("host", "example.com", "THROTTLE", T0.AddMinutes(1)));
+        var t = T0 + AutoRules.DetectorHold;
+        Assert.Equal(["example.com"], book.Detect("host", "example.com", "THROTTLE", t));
+        book.Evaluate(t.AddSeconds(15));
+        Assert.Equal(AutoStatus.Degraded, s.Status);
+        Assert.Contains("шейпер", s.Why, StringComparison.Ordinal);
+        // the probe with the bypass passed: kept, and the same shaper is not judged again at once
+        book.Confirmed("web:example.com", AutoConfirm.NotBlocked, t.AddSeconds(30));
+        Assert.Equal(AutoStatus.Applied, s.Status);
+        Assert.Empty(book.Detect("host", "example.com", "THROTTLE", t.AddMinutes(2)));
+    }
+
+    [Fact]
+    public void A_pinned_strategy_is_kept_whatever_the_detector_says()
+    {
+        var book = new AutoBook();
+        book.Feed([Site("example.com", T0)], T0);
+        book.Applied("web:example.com", "\\/", 400, T0);
+        book.Pin("web:example.com", true);
+        var t = T0 + AutoRules.DetectorHold;
+        book.Detect("ip", "203.0.113.5", "FREEZE_N", t);
+        book.Evaluate(t.AddSeconds(15));
+        Assert.Equal(AutoStatus.Applied, book.Find("web:example.com")!.Status);
+    }
+
+    [Fact]
     public void A_sites_quic_is_not_judged_by_the_detectors_tcp_classes()
     {
         var book = new AutoBook();

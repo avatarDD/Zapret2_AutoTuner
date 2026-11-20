@@ -542,4 +542,56 @@ public sealed class GenevaAutoTests
         // the trial's names are gone once the check is over
         await Until(() => { lock (agent.AutoApplied) return !agent.AutoApplied[^1].Hosts.Any(h => h.Domains.Contains("ytimg.com") && h.Strategy == AutoCandidates.Tcp[0]); });
     }
+
+    [Fact]
+    public async Task An_applied_strategy_that_no_longer_opens_the_site_is_found_by_the_routine_check()
+    {
+        // applied an hour ago and in use, but the DPI learned it: its flows show nothing the slices could judge
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var site = new AutoService
+        {
+            Key = "web:weak.example", Kind = AutoKind.Web, Transport = Core.Model.L4Kind.Tcp, Name = "weak.example", Host = "weak.example", App = "tls",
+            Addresses = [new AutoAddress("203.0.113.8", t0)], Ports = [443],
+            Status = AutoStatus.Applied, Strategy = AutoCandidates.Tcp[1], AppliedAt = t0.AddHours(-1),
+            FirstSeen = t0.AddHours(-2), LastSeen = t0,
+        };
+        var (controller, auto, _, probes, _) = Make(works: AutoCandidates.Tcp[0], saved: new GenevaState { Auto = new GenevaAutoState { Services = [site] } });
+        probes.Answer = OnlyTheSite;
+        await using var _ = controller;
+        await using var __ = auto;
+        await auto.EnableAsync(default);
+        await Until(() => auto.Log.Any(l => l.Contains("плановая проверка с обходом не прошла", StringComparison.Ordinal)));
+        // a second probe with the bypass agrees: a new strategy is searched
+        await Until(() => auto.Log.Any(l => l.Contains("weak.example: стратегия больше не работает, ищу новую", StringComparison.Ordinal)));
+        // the probes judged the strategy that was applied
+        lock (probes.Checks)
+            Assert.Contains(("web:weak.example", (string?)AutoCandidates.Tcp[1]), probes.Checks);
+    }
+
+    [Fact]
+    public void The_programs_own_page_loads_are_not_the_users_traffic()
+    {
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        AutoSample Flow(string host, DateTime time) => new()
+        {
+            Key = "web:" + host, Kind = AutoKind.Web, Transport = Core.Model.L4Kind.Tcp, Name = host, Host = host, App = "tls",
+            Server = new System.Net.IPEndPoint(System.Net.IPAddress.Parse("203.0.113.9"), 443), Time = time, Health = AutoHealth.Failed,
+        };
+        var done = new GenevaAuto.OwnLoad(t0, "www.site.example", "ads.tracker.example") { To = t0.AddSeconds(10) };
+        // a check still running when the slice ends: open-ended
+        var running = new GenevaAuto.OwnLoad(t0.AddSeconds(20), "running.example");
+        List<GenevaAuto.OwnLoad> loads = [done, running];
+        var kept = GenevaAuto.WithoutOwnLoads(
+        [
+            Flow("ads.tracker.example", t0.AddSeconds(3)),     // fetched by the check, while it ran
+            Flow("WWW.site.example", t0.AddSeconds(5)),         // the same name, another case
+            Flow("ads.tracker.example", t0.AddSeconds(30)),    // the user's own visit later
+            Flow("other.example", t0.AddSeconds(4)),            // the user's own traffic meanwhile
+            Flow("", t0.AddSeconds(4)) with { Host = null },    // an address only
+            Flow("running.example", t0.AddSeconds(25)),         // fetched by the check still under way
+        ], loads);
+        Assert.Equal(3, kept.Count);
+        Assert.DoesNotContain(kept, x => x.Host == "running.example");
+        Assert.DoesNotContain(kept, x => x.Time == t0.AddSeconds(3) || x.Time == t0.AddSeconds(5));
+    }
 }

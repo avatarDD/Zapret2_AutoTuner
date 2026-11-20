@@ -54,6 +54,9 @@ public sealed class AutoService
 
     public DateTime? AppliedAt { get; set; }
 
+    /// <summary>When the routine check with the strategy on last passed (<see cref="AutoBook.NextRoutineCheck"/>).</summary>
+    public DateTime? CheckedAt { get; set; }
+
     public DateTime FirstSeen { get; set; }
 
     public DateTime LastSeen { get; set; }
@@ -470,7 +473,15 @@ public sealed class AutoBook
                     // only what happened with the strategy on counts
                     int fails = s.Fails.Count(t => t > at) + s.NoConnections.Count(t => t > at);
                     int oks = s.Oks.Count(t => t > at);
-                    if (oks == 0 && fails >= Threshold(s) && s.Pinned)
+                    bool broken = oks == 0 && fails >= Threshold(s);
+                    // weakened: some connections still pass, but at least half fail (a DPI that learned to catch most
+                    // of them); one lucky flow in ten minutes must not hide it
+                    // Only where a probe with the bypass can judge: elsewhere "can't tell" would drop a working strategy.
+                    bool weak = !broken && s.Probeable && fails >= AutoRules.WeakFactor * Threshold(s) && fails >= oks;
+                    // geneva's detector sees a shaper or a freeze on the bypassed traffic: its flows look fine to the slices
+                    // (a pinned strategy is kept: the mark may be another service's on a shared address)
+                    bool detected = s.Probeable && !s.Pinned && s.Detected.Any(t => t > at);
+                    if ((broken || weak) && s.Pinned)
                     {
                         // the user pinned it: no new search; failures only show
                         if (!s.PinnedWarned)
@@ -480,11 +491,20 @@ public sealed class AutoBook
                             s.Why = "закреплена; есть ошибки: " + s.Why;
                         s.AppliedAt = now;
                     }
-                    else if (oks == 0 && fails >= Threshold(s))
+                    else if (broken)
                     {
                         Move(s, AutoStatus.Degraded, now, "обход перестал работать: " + s.Why);
                         s.NextCheck = null;
                         log.Add($"{s.Name}: обход перестал работать, проверяю");
+                    }
+                    else if (weak || detected)
+                    {
+                        var weakWhy = weak
+                            ? $"обход ослаб: не прошли {fails} из {fails + oks} соединений ({s.Why})"
+                            : "обход ослаб: " + s.DetectedWhy;
+                        Move(s, AutoStatus.Degraded, now, weakWhy);
+                        s.NextCheck = null;
+                        log.Add($"{s.Name}: {weakWhy}, проверяю / the bypass weakened, checking");
                     }
                     break;
                 }
@@ -556,7 +576,8 @@ public sealed class AutoBook
     /// A key geneva's detector holds impaired (<c>ext_status</c>, <c>impaired</c>): a name (<paramref name="level"/>
     /// <c>host</c>) or an address (<c>ip</c>) with a class of <see cref="AutoRules.DetectorClasses"/>. The services it
     /// names — a site by its name or a subdomain of it, any service by an address it was seen at — are suspected unless
-    /// they are already handled (applied, searched, paused after a probe). Returns the names of the newly suspected.
+    /// they are already handled (searched, paused after a probe); an applied one is checked with its bypass once its
+    /// strategy held for <see cref="AutoRules.DetectorHold"/> (a weakened bypass). Returns the names of the newly marked.
     /// </summary>
     public List<string> Detect(string level, string key, string cls, DateTime now)
     {
@@ -573,7 +594,9 @@ public sealed class AutoBook
                 "ip" => s.Transport == L4Kind.Tcp && s.Addresses.Any(a => string.Equals(a.Ip, key, StringComparison.OrdinalIgnoreCase)),
                 _ => false,
             };
-            if (!match || s.Status is not (AutoStatus.Watching or AutoStatus.Fallback or AutoStatus.Suspected)
+            // an applied strategy too, once it had time to settle: the probe with its bypass then decides
+            bool applied = s.Status == AutoStatus.Applied && s.Strategy is not null && s.AppliedAt is { } at && now - at >= AutoRules.DetectorHold;
+            if (!match || s.Status is not (AutoStatus.Watching or AutoStatus.Fallback or AutoStatus.Suspected) && !applied
                 && !(s.Status is AutoStatus.NotBlocked && (s.NextCheck is null || now >= s.NextCheck)))
                 continue;
             // one mark a minute keeps the suspicion alive; only a new one is reported
@@ -595,6 +618,40 @@ public sealed class AutoBook
         .Where(s => s.Status is AutoStatus.Suspected or AutoStatus.Degraded && (s.NextCheck is null || now >= s.NextCheck)
             && (s.Status == AutoStatus.Degraded || !_noSearch.Matches(s))), now)
         .FirstOrDefault();
+
+    /// <summary>
+    /// An applied service due for its routine check with the strategy on (<see cref="AutoRules.RoutineCheck"/>): in use
+    /// lately, not pinned, judged by a probe; the most important and the longest unchecked first. A bypass that weakened
+    /// shows here even when the slices and the detector miss it (the user's "Проверить сейчас", done by the mode).
+    /// </summary>
+    public AutoService? NextRoutineCheck(DateTime now, Func<AutoService, bool>? allowed = null) => _services.Values
+        .Where(s => s.Status == AutoStatus.Applied && s.Strategy is not null && !s.Pinned && s.Probeable
+            && now - s.LastSeen <= AutoRules.RoutineCheck && now - LastChecked(s) >= AutoRules.RoutineCheck
+            && (allowed is null || allowed(s)))
+        .OrderBy(s => AutoPriorities.Effective(s, now))
+        .ThenBy(LastChecked)
+        .FirstOrDefault();
+
+    private static DateTime LastChecked(AutoService s) =>
+        s.CheckedAt is { } c && (s.AppliedAt is null || c > s.AppliedAt) ? c : s.AppliedAt ?? DateTime.MinValue;
+
+    /// <summary>
+    /// The routine check's verdict on <paramref name="strategy"/> (<see cref="NextRoutineCheck"/>): passed, the strategy stays; failed, the service is
+    /// degraded and the next probe with its bypass decides (one failed probe is not enough to drop a strategy).
+    /// Returns the line for the log, empty when there is nothing to say.
+    /// </summary>
+    public string RoutineChecked(string key, string strategy, bool ok, DateTime now)
+    {
+        // the verdict is about the strategy that was probed: one replaced meanwhile (the user's own, a new search) is not judged
+        if (Find(key) is not { } s || s.Status != AutoStatus.Applied || s.Strategy != strategy)
+            return "";
+        s.CheckedAt = now;
+        if (ok)
+            return "";
+        Move(s, AutoStatus.Degraded, now, "плановая проверка с обходом не прошла");
+        s.NextCheck = null;
+        return $"{s.Name}: плановая проверка с обходом не прошла, проверяю ещё раз / the routine check with the bypass failed, checking again";
+    }
 
     /// <summary>
     /// The blocked service to search next: the most important first; within a level sites, DNS, QUIC, servers,
@@ -795,6 +852,7 @@ public sealed class AutoBook
             return;
         s.Strategy = null;
         s.AppliedAt = null;
+        s.CheckedAt = null;
         s.NextCheck = null;
         s.Attempts = 0;
         s.Pinned = false;

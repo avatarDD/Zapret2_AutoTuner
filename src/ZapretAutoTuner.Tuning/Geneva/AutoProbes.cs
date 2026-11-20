@@ -67,8 +67,10 @@ public sealed class AutoProbes : IAutoProbes
         {
             // also a shaper and the 16 KB cut-off behind a small page (dpi-diagnostics §2.16, §2.8): what is found
             // stays with the service, and the search and the trials judge by it. Learned once, on the confirmation
-            // without a bypass, and again when geneva's detector raised the suspicion; trials only judge
-            bool learn = s.Status == AutoStatus.Suspected && (s.Criteria is null || s.Detected.Count > 0);
+            // without a bypass, and again when geneva's detector raised the suspicion (also on an applied strategy: a
+            // shaper or a freeze the bypass no longer gets past); trials only judge
+            bool learn = s.Status == AutoStatus.Suspected && (s.Criteria is null || s.Detected.Count > 0)
+                || s.Status == AutoStatus.Degraded && s.Detected.Count > 0;
             var check = await PageCheck.RunAsync(PageOptions(s, address, 0), s.Criteria ?? ProbeCriteria.Default, learn, ct).ConfigureAwait(false);
             if (Passes(check))
                 return AutoConfirm.NotBlocked;

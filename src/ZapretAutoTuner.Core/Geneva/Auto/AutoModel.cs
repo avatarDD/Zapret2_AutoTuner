@@ -146,6 +146,24 @@ public static class AutoRules
     /// <summary>DHT asks many peers, and dead peers are normal: only many questions and no answer at all count.</summary>
     public const int PeerFailsToSuspect = 20;
 
+    /// <summary>
+    /// An applied strategy is weakened when its failures in the window reach this many times
+    /// <see cref="FailsToSuspect"/> (per transport) and are at least as many as its successes.
+    /// </summary>
+    public const int WeakFactor = 2;
+
+    /// <summary>
+    /// geneva's detector judges an applied strategy only after it held this long: a probe with the bypass that passed
+    /// is not repeated at every mark of the same shaper.
+    /// </summary>
+    public static TimeSpan DetectorHold { get; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// An applied service in use within this time is checked with its bypass this often (the probe and the browser's
+    /// handshakes, as the user's "Проверить сейчас").
+    /// </summary>
+    public static TimeSpan RoutineCheck { get; } = TimeSpan.FromMinutes(30);
+
     /// <summary>A service the probe found open is not suspected again before this.</summary>
     public static TimeSpan NotBlockedPause { get; } = TimeSpan.FromHours(1);
 

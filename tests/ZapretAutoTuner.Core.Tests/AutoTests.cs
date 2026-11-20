@@ -237,6 +237,91 @@ public class AutoTests
         Assert.False(s.IsActive);
     }
 
+    private static AutoBook AppliedSite(out AutoService s, DateTime at)
+    {
+        var book = new AutoBook();
+        book.Feed([Sample("web:a.com", AutoHealth.Failed, at)], at);
+        book.Applied("web:a.com", AutoCandidates.Tcp[0], 400, at);
+        s = book.Find("web:a.com")!;
+        return book;
+    }
+
+    [Fact]
+    public void A_weakened_strategy_is_checked_although_some_connections_still_pass()
+    {
+        var book = AppliedSite(out var s, T0);
+        var t = T0.AddMinutes(1);
+        // two of five fail: a bad network, not a weakened bypass
+        book.Feed([.. Enumerable.Range(0, 3).Select(i => Sample("web:a.com", AutoHealth.Ok, t.AddSeconds(i))),
+            .. Enumerable.Range(3, 2).Select(i => Sample("web:a.com", AutoHealth.Failed, t.AddSeconds(i)))], t.AddSeconds(5));
+        book.Evaluate(t.AddSeconds(5));
+        Assert.Equal(AutoStatus.Applied, s.Status);
+
+        // six of nine fail: the old rule ("not one success") would keep it for good
+        book.Feed([.. Enumerable.Range(10, 4).Select(i => Sample("web:a.com", AutoHealth.Failed, t.AddSeconds(i)))], t.AddSeconds(15));
+        var log = book.Evaluate(t.AddSeconds(15));
+        Assert.Equal(AutoStatus.Degraded, s.Status);
+        Assert.StartsWith("обход ослаб: не прошли 6 из 9", s.Why, StringComparison.Ordinal);
+        Assert.Contains(log, l => l.Contains("обход ослаб", StringComparison.Ordinal));
+        Assert.Same(s, book.NextToConfirm(t.AddSeconds(16)));
+    }
+
+    [Fact]
+    public void A_pinned_weakened_strategy_only_warns()
+    {
+        var book = AppliedSite(out var s, T0);
+        book.Pin("web:a.com", true);
+        var t = T0.AddMinutes(1);
+        book.Feed([.. Enumerable.Range(0, 6).Select(i => Sample("web:a.com", AutoHealth.Failed, t.AddSeconds(i))),
+            Sample("web:a.com", AutoHealth.Ok, t.AddSeconds(7))], t.AddSeconds(8));
+        book.Evaluate(t.AddSeconds(8));
+        Assert.Equal(AutoStatus.Applied, s.Status);
+        Assert.StartsWith("закреплена", s.Why, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_applied_strategy_is_checked_routinely_while_the_service_is_used()
+    {
+        var book = AppliedSite(out var s, T0);
+        // not before its time
+        Assert.Null(book.NextRoutineCheck(T0.AddMinutes(29)));
+        var t = T0 + AutoRules.RoutineCheck;
+        // not used for a while: nothing to check
+        Assert.Null(book.NextRoutineCheck(t.AddMinutes(1)));
+        book.Feed([Sample("web:a.com", AutoHealth.Ok, t)], t);
+        Assert.Same(s, book.NextRoutineCheck(t.AddMinutes(1)));
+        // a search on its addresses holds them: not now
+        Assert.Null(book.NextRoutineCheck(t.AddMinutes(1), _ => false));
+
+        // passed: the next one in half an hour
+        Assert.Equal("", book.RoutineChecked("web:a.com", AutoCandidates.Tcp[0], true, t.AddMinutes(1)));
+        Assert.Equal(AutoStatus.Applied, s.Status);
+        Assert.Null(book.NextRoutineCheck(t.AddMinutes(2)));
+
+        // failed: degraded, and the probe with the bypass decides once more
+        book.Feed([Sample("web:a.com", AutoHealth.Ok, t.AddMinutes(30))], t.AddMinutes(30));
+        var u = t.AddMinutes(1) + AutoRules.RoutineCheck;
+        Assert.Same(s, book.NextRoutineCheck(u));
+        // the verdict on a strategy replaced meanwhile says nothing
+        Assert.Equal("", book.RoutineChecked("web:a.com", AutoCandidates.Tcp[1], false, u));
+        Assert.Equal(AutoStatus.Applied, s.Status);
+        Assert.Contains("плановая проверка", book.RoutineChecked("web:a.com", AutoCandidates.Tcp[0], false, u), StringComparison.Ordinal);
+        Assert.Equal(AutoStatus.Degraded, s.Status);
+        Assert.Same(s, book.NextToConfirm(u));
+        Assert.Contains("оставляю", book.Confirmed("web:a.com", AutoConfirm.NotBlocked, u.AddSeconds(30)), StringComparison.Ordinal);
+        Assert.Equal(AutoStatus.Applied, s.Status);
+    }
+
+    [Fact]
+    public void A_pinned_strategy_is_not_checked_routinely()
+    {
+        var book = AppliedSite(out _, T0);
+        book.Pin("web:a.com", true);
+        var t = T0 + AutoRules.RoutineCheck;
+        book.Feed([Sample("web:a.com", AutoHealth.Ok, t)], t);
+        Assert.Null(book.NextRoutineCheck(t.AddMinutes(1)));
+    }
+
     [Fact]
     public void A_search_that_found_nothing_backs_off_doubling_up_to_a_day()
     {

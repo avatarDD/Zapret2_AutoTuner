@@ -115,6 +115,9 @@ public sealed class GenevaAuto : IAsyncDisposable
     private readonly Lock _lock = new();
     private readonly SemaphoreSlim _applyGate = new(1, 1);
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    /// <summary>One browser check at a time (<see cref="OpensInBrowserAsync"/>).</summary>
+    private readonly SemaphoreSlim _browserGate = new(1, 1);
     private readonly List<string> _log = [];
     private readonly AutoBook _book;
     private CancellationTokenSource? _loopCts;
@@ -712,7 +715,7 @@ public sealed class GenevaAuto : IAsyncDisposable
         List<string> log;
         lock (_lock)
         {
-            _book.Feed(samples, end);
+            _book.Feed(WithoutOwnLoads(samples, end), end);
             log = _book.Evaluate(end);
             _slices++;
             _flows = flows.Count;
@@ -722,14 +725,20 @@ public sealed class GenevaAuto : IAsyncDisposable
             AddLog(l);
     }
 
-    /// <summary>The probe of one suspected (without a bypass) or degraded (with it) service.</summary>
+    /// <summary>
+    /// The probe of one suspected (without a bypass) or degraded (with it) service; when none is due, the routine check
+    /// of one applied service with its bypass.
+    /// </summary>
     private async Task ConfirmAsync(CancellationToken ct)
     {
         AutoService? s;
         lock (_lock)
             s = _book.NextToConfirm(_now())?.Clone();
         if (s is null)
+        {
+            await RoutineCheckAsync(ct).ConfigureAwait(false);
             return;
+        }
         var result = s.Probeable ? await _probes.CheckAsync(s, ct).ConfigureAwait(false) : AutoConfirm.Unknown;
         // with the bypass on, the browser's own handshakes must get through as well: the page load alone passed while
         // the browser kept failing (issue 28)
@@ -754,6 +763,32 @@ public sealed class GenevaAuto : IAsyncDisposable
         if (s.Status == AutoStatus.Degraded && result != AutoConfirm.NotBlocked)
             await ApplyAsync(ct, force: true).ConfigureAwait(false);
         Save(force: true);
+    }
+
+    /// <summary>
+    /// The routine check of an applied service (<see cref="AutoBook.NextRoutineCheck"/>): the probe and the browser's
+    /// handshakes with its bypass on, as the user's "Проверить сейчас". A bypass that weakened is found even when its
+    /// flows still look fine to the slices. Not on the addresses of a service searched now: its trials hold them.
+    /// </summary>
+    private async Task RoutineCheckAsync(CancellationToken ct)
+    {
+        AutoService? s;
+        lock (_lock)
+        {
+            var busy = _works.Keys.Select(_book.Find).Where(x => x is not null).Select(x => x!).ToList();
+            s = _book.NextRoutineCheck(_now(), x => !busy.Any(b => AutoBook.Overlap(x, b)))?.Clone();
+        }
+        if (s is null)
+            return;
+        // Unknown (no address to probe yet): nothing to hold against the strategy, and the next one waits its turn
+        bool ok = await _probes.CheckAsync(s, ct).ConfigureAwait(false) is AutoConfirm.NotBlocked or AutoConfirm.Unknown
+            && await _probes.HandshakesAsync(s, ct).ConfigureAwait(false);
+        string line;
+        lock (_lock)
+            line = _book.RoutineChecked(s.Key, s.Strategy!, ok, _now());
+        if (line.Length > 0)
+            AddLog(line);
+        Save(force: !ok);
     }
 
     /// <summary>
@@ -1196,6 +1231,73 @@ public sealed class GenevaAuto : IAsyncDisposable
         if (s.Kind != AutoKind.Web || s.Address is not { } address || s.Port is not (80 or 443) || _controller.BrowserNow is not { } browser)
             return true;
         var host = s.Host.Length > 0 ? s.Host : s.Name;
+        // one page at a time: browsers side by side (searches in parallel) slow each other past the check's time limit,
+        // and a strategy would fail for that
+        await _browserGate.WaitAsync(ct).ConfigureAwait(false);
+        // the program's own page load is not the user's traffic: its flows say nothing about the services. Open from the
+        // start (a slice may end while the page loads); the names the page fetched join when it is read
+        var own = new OwnLoad(_now() - OwnLoadSlack, host);
+        lock (_lock)
+            _ownLoads.Add(own);
+        try
+        {
+            GenevaOpenPage open = async (h, port, tls, a, t) =>
+            {
+                var load = await browser.Open(h, port, tls, a, t).ConfigureAwait(false);
+                if (load is not null)
+                {
+                    lock (_lock)
+                        own.Hosts.UnionWith(load.Requests.Select(r => r.Host).Where(x => x.Length > 0));
+                }
+                return load;
+            };
+            return await CheckInBrowserAsync(s, strategy, host, address, open, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_lock)
+                own.To = _now() + OwnLoadSlack;
+            _browserGate.Release();
+        }
+    }
+
+    /// <summary>One browser check: from when, until when (open while it runs) and the names it loaded (under the lock).</summary>
+    internal sealed class OwnLoad(DateTime from, params IEnumerable<string> hosts)
+    {
+        public DateTime From { get; } = from;
+
+        public DateTime To { get; set; } = DateTime.MaxValue;
+
+        public HashSet<string> Hosts { get; } = new(hosts, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The time around a browser check whose flows to the names it loaded are taken for its own.</summary>
+    private static readonly TimeSpan OwnLoadSlack = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// The browser checks of the last <see cref="AutoRules.Window"/>: when and which names (under the lock). The capture
+    /// sees the whole PC, the program's own Chromium too: without this its page loads (and every ad or counter they
+    /// fetch) would become services, suspicions and searches, and a success of its own would hide a weakened bypass.
+    /// </summary>
+    private readonly List<OwnLoad> _ownLoads = [];
+
+    /// <summary>The samples of a slice without the flows of the program's own browser checks (under the lock).</summary>
+    private List<AutoSample> WithoutOwnLoads(List<AutoSample> samples, DateTime end)
+    {
+        _ownLoads.RemoveAll(o => end - o.To > AutoRules.Window);
+        return WithoutOwnLoads(samples, _ownLoads);
+    }
+
+    /// <summary>
+    /// The samples without those of the program's own page loads: a flow to a name a load fetched, started while it ran.
+    /// A flow without a name (an address only) is kept: the browser check always names its hosts.
+    /// </summary>
+    internal static List<AutoSample> WithoutOwnLoads(List<AutoSample> samples, IReadOnlyList<OwnLoad> loads) =>
+        loads.Count == 0 ? samples : [.. samples.Where(x => x.Host is not { Length: > 0 } h
+            || !loads.Any(o => x.Time >= o.From && x.Time <= o.To && o.Hosts.Contains(h)))];
+
+    private async Task<bool> CheckInBrowserAsync(AutoService s, string strategy, string host, System.Net.IPAddress address, GenevaOpenPage open, CancellationToken ct)
+    {
         // the page's related resources (YouTube's googlevideo.com, ytimg.com) go through the tried strategy by name for
         // the check, as they will once it is applied; without the name-based process only the site itself is judged
         IReadOnlyList<string> related = [];
@@ -1227,7 +1329,7 @@ public sealed class GenevaAuto : IAsyncDisposable
                     hostsVersion = _hostsVersion;
             }
             // what the user's "не трогать" keeps out of geneva says nothing about the strategy
-            var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, host, s.Port, s.Port == 443, address, ct,
+            var verdict = await GenevaBrowserCheck.RunAsync(open, host, s.Port, s.Port == 443, address, ct,
                 h => related.Any(d => GenevaBrowserCheck.Under(h, d)) && !excluded.MatchesName(h),
                 (h, t) => GenevaBrowserCheck.ExcludedAsync(excluded, h, t)).ConfigureAwait(false);
             // no browser any more, or a root it does not know: the probes' verdict stands, as without the switch
@@ -1589,5 +1691,6 @@ public sealed class GenevaAuto : IAsyncDisposable
         }
         _gate.Dispose();
         _applyGate.Dispose();
+        _browserGate.Dispose();
     }
 }

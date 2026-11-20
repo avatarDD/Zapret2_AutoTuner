@@ -142,7 +142,11 @@ public sealed record ProbeResult
     /// <summary>"1.2" or "1.3".</summary>
     public string? TlsVersion { get; init; }
 
-    /// <summary>The certificate is valid for <see cref="Host"/> and chains to a trusted root.</summary>
+    /// <summary>
+    /// The certificate is valid for <see cref="Host"/> and chains to a trusted root: the system's, or Russia's national
+    /// root (Минцифры) bundled with the program (<see cref="CertNationalRoot"/>), so a genuine .ru site is never taken for
+    /// a forged certificate.
+    /// </summary>
     public bool CertValid { get; init; }
 
     /// <summary>
@@ -194,10 +198,11 @@ public sealed record ProbeResult
     /// national one the user's browser may have (Russia's Минцифры CA of many .ru sites).
     /// The "Авто" mode asks this, so a working .ru site is never searched. The chain must really build to that root
     /// (<see cref="CertNationalRoot"/>): any other untrusted chain, a MITM's own certificate that only names the
-    /// national issuer included, still fails.
+    /// national issuer included, still fails. The HTTP probe already counts such a chain in <see cref="CertValid"/>;
+    /// this also covers a result that only carries the flag.
     /// </summary>
     public bool PassesNameOnly(ProbeLevel level, long minBytes = 64 * 1024) =>
-        Passes(level, minBytes) || (Tls && !CertValid && CertNameOk && CertNationalRoot && (this with { CertValid = true }).Passes(level, minBytes));
+        Passes(level, minBytes) || (Tls && !CertValid && CertNameOk && CertNationalRoot && NationalZone.Covers(Host) && (this with { CertValid = true }).Passes(level, minBytes));
 
     public override string ToString()
     {

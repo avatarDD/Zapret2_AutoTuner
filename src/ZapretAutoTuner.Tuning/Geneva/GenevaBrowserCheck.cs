@@ -50,7 +50,7 @@ public static class GenevaBrowserCheck
         if (!FinalCheck.TargetPartLoads(load, domains))
         {
             if (load.Error is { Length: > 0 } error)
-                return new(error.Contains("ERR_CERT_AUTHORITY_INVALID", StringComparison.Ordinal) ? null : false, error);
+                return new(NationalZone.BrowserLacksRoot(load, host) ? null : false, error);
             var main = domains.FirstOrDefault(d => d.IsMain && d.Broken);
             return new(false, main is null ? "failed" : Describe(main));
         }

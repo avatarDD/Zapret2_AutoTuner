@@ -21,6 +21,9 @@ public static class NationalRoots
 
     private static readonly Lazy<(X509Certificate2 Root, X509Certificate2 Sub)> Certs = new(Load);
 
+    /// <summary>The sites the national root is trusted for (<see cref="Core.Diagnostics.NationalZone"/>).</summary>
+    public static bool Covers(string host) => Core.Diagnostics.NationalZone.Covers(host);
+
     public static X509Certificate2 Root => Certs.Value.Root;
 
     public static X509Certificate2 Sub => Certs.Value.Sub;
@@ -46,12 +49,17 @@ public static class NationalRoots
     /// works where the CRL hosts may be blocked). A missing intermediate is never downloaded: a server must send it, as
     /// browsers without AIA fetching (Firefox) need too. <paramref name="serverAuth"/>: the leaf must be for TLS servers.
     /// </summary>
-    public static bool Chains(X509Certificate2 leaf, IEnumerable<X509Certificate2>? presented = null, bool serverAuth = true)
+    public static bool Chains(X509Certificate2 leaf, IEnumerable<X509Certificate2>? presented = null, bool serverAuth = true) =>
+        Chains(leaf, presented, serverAuth, Root, Sub);
+
+    /// <summary><see cref="Chains(X509Certificate2, IEnumerable{X509Certificate2}?, bool)"/> to another root (tests stand in a CA of their own).</summary>
+    internal static bool Chains(X509Certificate2 leaf, IEnumerable<X509Certificate2>? presented, bool serverAuth, X509Certificate2 root, X509Certificate2? sub)
     {
         using var chain = new X509Chain();
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-        chain.ChainPolicy.CustomTrustStore.Add(Root);
-        chain.ChainPolicy.ExtraStore.Add(Sub);
+        chain.ChainPolicy.CustomTrustStore.Add(root);
+        if (sub is not null)
+            chain.ChainPolicy.ExtraStore.Add(sub);
         foreach (var c in presented ?? [])
         {
             if (!c.RawData.AsSpan().SequenceEqual(leaf.RawData))

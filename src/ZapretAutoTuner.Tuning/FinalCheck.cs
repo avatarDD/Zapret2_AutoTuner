@@ -50,7 +50,10 @@ public static class FinalCheck
                         return new FinalCheckResult(f, l2, null, [], null);
                     var load = await openPage(ct).ConfigureAwait(false);
                     var domains = SecondaryDomains.Analyze(load, mainHost);
-                    return new FinalCheckResult(f, l2, TargetPartLoads(load, domains), domains, null);
+                    // a Russian site on the Минцифры root, which the L2 series checked and the program's browser lacks: the
+                    // load says nothing about the strategy (no page verdict); on any other site it is a failure
+                    bool? pageOk = NationalZone.BrowserLacksRoot(load, mainHost) ? null : TargetPartLoads(load, domains);
+                    return new FinalCheckResult(f, l2, pageOk, domains, null);
                 }, ct).ConfigureAwait(false));
             }
             catch (EngineRefusedException e)

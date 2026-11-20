@@ -569,6 +569,49 @@ public sealed class GenevaAutoTests
     }
 
     [Fact]
+    public async Task An_important_service_failing_with_its_bypass_is_checked_before_a_less_important_suspicion()
+    {
+        // YouTube's strategy is on and most flows pass, but three stalled since: not "weakened", and the half-hour check
+        // is far; a resolver waits for its probe meanwhile
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 30, DateTimeKind.Utc);
+        var yt = new AutoService
+        {
+            Key = "web:youtube.com", Kind = AutoKind.Web, Transport = Core.Model.L4Kind.Tcp, Name = "youtube.com", Host = "www.youtube.com", App = "tls",
+            Addresses = [new AutoAddress("203.0.113.8", t0)], Ports = [443],
+            Status = AutoStatus.Applied, Strategy = AutoCandidates.Tcp[1], AppliedAt = t0.AddMinutes(-8),
+            FirstSeen = t0.AddHours(-2), LastSeen = t0, Priority = AutoPriority.Important, Why = "соединение есть, данных нет",
+            Fails = [t0.AddMinutes(-3), t0.AddMinutes(-2), t0.AddMinutes(-1)],
+            Oks = [.. Enumerable.Range(1, 8).Select(i => t0.AddSeconds(-10 * i))],
+        };
+        var dns = new AutoService
+        {
+            Key = "dns:8.8.8.8", Kind = AutoKind.Dns, Transport = Core.Model.L4Kind.Udp, Name = "8.8.8.8", App = "dns",
+            Addresses = [new AutoAddress("8.8.8.8", t0)], Ports = [53],
+            Status = AutoStatus.Suspected, Suspicions = 1, FirstSeen = t0.AddMinutes(-5), LastSeen = t0,
+            NoConnections = [t0.AddMinutes(-1)], Fails = [t0.AddMinutes(-1), t0.AddSeconds(-30)],
+        };
+        var (controller, auto, _, probes, _) = Make(saved: new GenevaState { Auto = new GenevaAutoState { Services = [yt, dns] } });
+        probes.Answer = (s, _) => s.Key == "web:youtube.com" ? AutoConfirm.NotBlocked : null;
+        await using var _ = controller;
+        await using var __ = auto;
+        await auto.EnableAsync(default);
+        await Until(() => { lock (probes.Checks) return probes.Checks.Any(c => c.Key == "dns:8.8.8.8"); });
+        Assert.Contains(auto.Log, l => l.Contains("youtube.com: важный сервис, с обходом не прошли 3 из 11", StringComparison.Ordinal));
+        lock (probes.Checks)
+        {
+            Assert.Equal("web:youtube.com", probes.Checks[0].Key);
+            Assert.Equal(AutoCandidates.Tcp[1], probes.Checks[0].Applied);
+        }
+        // passed: the row says so instead of the old failure, and the same failures do not call for another check
+        var row = auto.View.Services.Single(x => x.Key == "web:youtube.com");
+        Assert.Equal(AutoStatus.Applied, row.Status);
+        Assert.NotNull(row.CheckedAt);
+        Assert.Equal((0, 0), AutoBook.SinceChecked(row, t0));
+        lock (probes.Checks)
+            Assert.Single(probes.Checks, c => c.Key == "web:youtube.com");
+    }
+
+    [Fact]
     public void The_programs_own_page_loads_are_not_the_users_traffic()
     {
         var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);

@@ -2247,6 +2247,14 @@
   "Действия с сервисом",
   "Service actions"
  ],
+ "auto.applied_errors": [
+  "с обходом есть ошибки: не прошли {0} из {1} соединений, последняя — {2}",
+  "errors with the bypass: {0} of {1} connections failed, the last — {2}"
+ ],
+ "auto.applied_checked": [
+  "проверка с обходом прошла в {0}",
+  "the check with the bypass passed at {0}"
+ ],
  "auto.by_name": [
   "по имени",
   "by name"

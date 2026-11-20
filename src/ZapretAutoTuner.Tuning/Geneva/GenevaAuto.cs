@@ -732,13 +732,25 @@ public sealed class GenevaAuto : IAsyncDisposable
     private async Task ConfirmAsync(CancellationToken ct)
     {
         AutoService? s;
+        AutoService? routine;
         lock (_lock)
-            s = _book.NextToConfirm(_now())?.Clone();
-        if (s is null)
         {
-            await RoutineCheckAsync(ct).ConfigureAwait(false);
+            var now = _now();
+            s = _book.NextToConfirm(now)?.Clone();
+            routine = NextRoutineCheck(now);
+            // an important service whose flows fail with its bypass goes before a less important suspicion: its user
+            // waits for it, and the suspicion's probe comes in the next turn
+            if (s is not null && routine is not null
+                && !(AutoBook.Troubled(routine, now) && AutoPriorities.Effective(routine, now) < AutoPriorities.Effective(s, now)))
+                routine = null;
+        }
+        if (routine is not null)
+        {
+            await RoutineCheckAsync(routine, ct).ConfigureAwait(false);
             return;
         }
+        if (s is null)
+            return;
         var result = s.Probeable ? await _probes.CheckAsync(s, ct).ConfigureAwait(false) : AutoConfirm.Unknown;
         // with the bypass on, the browser's own handshakes must get through as well: the page load alone passed while
         // the browser kept failing (issue 28)
@@ -770,16 +782,11 @@ public sealed class GenevaAuto : IAsyncDisposable
     /// handshakes with its bypass on, as the user's "Проверить сейчас". A bypass that weakened is found even when its
     /// flows still look fine to the slices. Not on the addresses of a service searched now: its trials hold them.
     /// </summary>
-    private async Task RoutineCheckAsync(CancellationToken ct)
+    private async Task RoutineCheckAsync(AutoService s, CancellationToken ct)
     {
-        AutoService? s;
-        lock (_lock)
-        {
-            var busy = _works.Keys.Select(_book.Find).Where(x => x is not null).Select(x => x!).ToList();
-            s = _book.NextRoutineCheck(_now(), x => !busy.Any(b => AutoBook.Overlap(x, b)))?.Clone();
-        }
-        if (s is null)
-            return;
+        var (fails, oks) = AutoBook.SinceChecked(s, _now());
+        if (AutoBook.Troubled(s, _now()))
+            AddLog($"{s.Name}: важный сервис, с обходом не прошли {fails} из {fails + oks} соединений — проверяю сейчас / an important service, {fails} of {fails + oks} connections failed with the bypass: checking now");
         // the check's own connections are not the user's traffic: counted, they would keep the service "in use" (checked
         // again every half hour forever) and their successes would hide the user's failing flows
         var own = new OwnLoad(_now() - OwnLoadSlack, new[] { s.Host, s.Name }.Where(x => x.Length > 0));
@@ -803,6 +810,13 @@ public sealed class GenevaAuto : IAsyncDisposable
         if (line.Length > 0)
             AddLog(line);
         Save(force: !ok);
+    }
+
+    /// <summary>The applied service whose check with the bypass is due (under the lock), not on the addresses a search holds.</summary>
+    private AutoService? NextRoutineCheck(DateTime now)
+    {
+        var busy = _works.Keys.Select(_book.Find).Where(x => x is not null).Select(x => x!).ToList();
+        return _book.NextRoutineCheck(now, x => !busy.Any(b => AutoBook.Overlap(x, b)))?.Clone();
     }
 
     /// <summary>

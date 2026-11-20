@@ -313,6 +313,69 @@ public class AutoTests
     }
 
     [Fact]
+    public void An_important_service_failing_with_its_bypass_is_checked_at_once_and_first()
+    {
+        var book = new AutoBook();
+        book.Feed([Sample("web:youtube.com", AutoHealth.Failed, T0), Sample("web:a.com", AutoHealth.Failed, T0)], T0);
+        book.Applied("web:youtube.com", AutoCandidates.Tcp[0], 400, T0);
+        book.Applied("web:a.com", AutoCandidates.Tcp[1], 400, T0);
+        var yt = book.Find("web:youtube.com")!;
+        var a = book.Find("web:a.com")!;
+        Assert.Equal(AutoPriority.Important, yt.Priority);
+        Assert.Equal(AutoPriority.Normal, a.Priority);
+
+        // stalls among many passing flows: too few for "weakened" (6 and at least as many as the successes)
+        var t = T0.AddMinutes(6);
+        book.Feed([.. Enumerable.Range(0, 3).Select(i => Sample("web:youtube.com", AutoHealth.Failed, t.AddSeconds(i))),
+            .. Enumerable.Range(3, 10).Select(i => Sample("web:youtube.com", AutoHealth.Ok, t.AddSeconds(i))),
+            .. Enumerable.Range(0, 3).Select(i => Sample("web:a.com", AutoHealth.Failed, t.AddSeconds(i))),
+            .. Enumerable.Range(3, 10).Select(i => Sample("web:a.com", AutoHealth.Ok, t.AddSeconds(i)))], t.AddSeconds(15));
+        book.Evaluate(t.AddSeconds(15));
+        Assert.Equal(AutoStatus.Applied, yt.Status);
+        Assert.Equal((3, 10), AutoBook.SinceChecked(yt, t.AddSeconds(15)));
+
+        // the important one does not wait for the half-hour turn; the other one does
+        Assert.True(AutoBook.Troubled(yt, t.AddSeconds(16)));
+        Assert.False(AutoBook.Troubled(a, t.AddSeconds(16)));
+        Assert.Same(yt, book.NextRoutineCheck(t.AddSeconds(16)));
+        Assert.Null(book.NextRoutineCheck(t.AddSeconds(16), x => x != yt));
+
+        // three stalls among a hundred passing flows: noise, not trouble
+        var busy = book.Find("web:youtube.com")!.Clone();
+        busy.Oks.AddRange(Enumerable.Range(0, 30).Select(i => t.AddSeconds(i)));
+        Assert.False(AutoBook.Troubled(busy, t.AddSeconds(16)));
+        // nor failures older than the window, when the service went quiet
+        Assert.False(AutoBook.Troubled(yt, t + AutoRules.Window + TimeSpan.FromMinutes(1)));
+
+        // checked and passed: the same failures do not call for it again, and new ones wait TroubleRecheck
+        var c = t.AddSeconds(20);
+        Assert.Equal("", book.RoutineChecked("web:youtube.com", AutoCandidates.Tcp[0], true, c));
+        Assert.Equal((0, 0), AutoBook.SinceChecked(yt, c));
+        book.Feed([.. Enumerable.Range(0, 3).Select(i => Sample("web:youtube.com", AutoHealth.Failed, c.AddSeconds(30 + i)))], c.AddMinutes(1));
+        Assert.False(AutoBook.Troubled(yt, c.AddMinutes(1)));
+        Assert.Null(book.NextRoutineCheck(c.AddMinutes(1)));
+        Assert.True(AutoBook.Troubled(yt, c + AutoRules.TroubleRecheck));
+
+        // failed: degraded, and its probe with the bypass comes before a less important suspicion
+        Assert.Contains("плановая проверка", book.RoutineChecked("web:youtube.com", AutoCandidates.Tcp[0], false, c + AutoRules.TroubleRecheck), StringComparison.Ordinal);
+        Assert.Equal(AutoStatus.Degraded, yt.Status);
+        Assert.Same(yt, book.NextToConfirm(c + AutoRules.TroubleRecheck));
+    }
+
+    [Fact]
+    public void A_pinned_important_strategy_is_never_troubled()
+    {
+        var book = new AutoBook();
+        book.Feed([Sample("web:youtube.com", AutoHealth.Failed, T0)], T0);
+        book.Applied("web:youtube.com", AutoCandidates.Tcp[0], 400, T0);
+        book.Pin("web:youtube.com", true);
+        var t = T0.AddMinutes(6);
+        book.Feed([.. Enumerable.Range(0, 3).Select(i => Sample("web:youtube.com", AutoHealth.Failed, t.AddSeconds(i)))], t.AddSeconds(5));
+        Assert.False(AutoBook.Troubled(book.Find("web:youtube.com")!, t.AddSeconds(5)));
+        Assert.Null(book.NextRoutineCheck(t.AddSeconds(5)));
+    }
+
+    [Fact]
     public void A_pinned_strategy_is_not_checked_routinely()
     {
         var book = AppliedSite(out _, T0);

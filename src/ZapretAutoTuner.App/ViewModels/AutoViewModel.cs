@@ -244,6 +244,9 @@ public sealed partial class AutoViewModel : PageViewModel
         {
             var g = _host.Geneva;
             notes.Add(g.AutoSearches > 1 ? L.F("auto.split_note", g.AutoSearches, g.AutoWorkers) : L["auto.split_note_one"]);
+            // the working strategies hold the groups the searches need for their trials: fewer run side by side
+            if (_host.GenevaAuto.View is { Running: true, SearchSlots: var now } && now < g.AutoSearches)
+                notes.Add(L.F("auto.split_limited", now, AutoRules.MaxGroups));
         }
         if ((Workers ?? 1) > 1 && !_workersSupported)
             notes.Add(L["auto.workers_old"]);
@@ -622,9 +625,9 @@ public sealed partial class AutoViewModel : PageViewModel
         int split = _host.Geneva.AutoSplit ? 1 : 0;
         if (split != SplitIndex)
             SplitIndex = split;
-        WorkersNote = WorkersText();
         bool en = Loc.Loc.I.English;
         var a = _host.GenevaAuto.View;
+        var searches = _host.Geneva.Searches;
         AutoOn = a.Running;
         FirstRun = !a.Running && a.Services.Count == 0;
         AutoPhase = a.Running ? (en ? a.Phase.En : a.Phase.Ru) : a.Enabled ? L["engine.auto_waiting"] : L["engine.auto_off"];
@@ -643,8 +646,10 @@ public sealed partial class AutoViewModel : PageViewModel
             .Select(x =>
             {
                 var (status, brush) = AutoStatusText(x.Status);
-                var detail = x.Status == AutoStatus.Searching && a.Searches.FirstOrDefault(w => w.Key == x.Key)?.Trying is { } t
-                    ? L.F("engine.auto_trying", t)
+                var work = x.Status == AutoStatus.Searching ? a.Searches.FirstOrDefault(w => w.Key == x.Key) : null;
+                var evolve = work?.SearchId is { } sid ? searches.FirstOrDefault(v => v.Id == sid) : null;
+                var detail = work?.Trying is { } t ? L.F("engine.auto_trying", t)
+                    : evolve is not null ? L.F("auto.evolving", Math.Max(0, evolve.Generation + 1), evolve.Generations, evolve.Probing, evolve.Workers, evolve.Evaluated)
                     : x.Why;
                 var tags = new List<string>();
                 if (x.Priority == AutoPriority.Important)
@@ -658,6 +663,7 @@ public sealed partial class AutoViewModel : PageViewModel
             }).ToList();
         SyncRows(rows, _resort);
         _resort = false;
+        WorkersNote = WorkersText();
         Sync(AutoGroups, Groups(a));
         var state = _host.Geneva.State;
         Sync(Imported, [.. state.Imported.AsEnumerable().Reverse().Select(i => new ImportedRow(i.Strategy, string.Join(", ", i.Services),

@@ -155,6 +155,31 @@ public sealed class GenevaControllerTests
     }
 
     [Fact]
+    public async Task The_search_view_counts_the_strategies_being_checked_at_once()
+    {
+        var agent = new FakeGenevaAgent();
+        agent.Strategies.Add("[TCP:flags:PA]-fragment{tcp:-1:False}-| \\/");
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int calls = 0;
+        await using var g = new GenevaController(_ => Task.FromResult<IGenevaAgent>(agent), new MemoryGenevaStore(), async (host, port, tls, local, _, ct) =>
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+                return Reset(host); // the baseline, alone
+            await release.Task.WaitAsync(ct);
+            return Loaded(host);
+        });
+        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3, Workers = 3 }, default);
+
+        // the page shows all three workers busy, not one strategy at a time
+        await Until(() => g.Search.Probing == 3);
+        Assert.Equal(3, g.Search.Workers);
+        Assert.Equal(3, Assert.Single(g.Searches).Probing);
+        release.SetResult();
+        await Until(() => !g.SearchRunning);
+        Assert.Equal(0, g.Search.Probing);
+    }
+
+    [Fact]
     public async Task The_auto_mode_runs_searches_side_by_side_and_stops_them_one_by_one()
     {
         var rig = new Rig { Probe = (n, host) => Reset(host) };

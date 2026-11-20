@@ -172,6 +172,10 @@ public sealed partial class EngineViewModel : PageViewModel
     [ObservableProperty]
     private string _searchBaseline = "";
 
+    /// <summary>The other searches running now (the "Авто" mode's, side by side), one line each; empty with one search.</summary>
+    [ObservableProperty]
+    private string _searchOthers = "";
+
     [ObservableProperty]
     private string _searchBest = "";
 
@@ -462,7 +466,11 @@ public sealed partial class EngineViewModel : PageViewModel
         SearchProgress = search.BrowserChecking ? L["engine.browser_checking"]
             : search.Running || search.Generation >= 0
             ? L.F("engine.progress", Math.Max(0, search.Generation + 1), search.Generations, search.Evaluated, search.Succeeded, search.Host)
+                + (search.Running ? " · " + L.F("engine.probing", search.Probing, search.Workers) : "")
             : "";
+        var others = g.Searches.Where(x => x.Id != search.Id).ToList();
+        SearchOthers = others.Count == 0 ? "" : L["engine.others"] + "\n" + string.Join("\n", others.Select(x =>
+            L.F("engine.progress", Math.Max(0, x.Generation + 1), x.Generations, x.Evaluated, x.Succeeded, x.Host) + " · " + L.F("engine.probing", x.Probing, x.Workers)));
         SearchBaseline = search.Blocked switch
         {
             true => L.F("engine.baseline_blocked", Pick(GenevaText.Outcome(search.BaselineOutcome), en)),

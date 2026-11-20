@@ -549,7 +549,7 @@ public static class Classifier
     }
 
     /// <summary>Approximate registrable domain: the last two labels, three for known second-level suffixes.</summary>
-    internal static string Registrable(string host)
+    public static string Registrable(string host)
     {
         var parts = host.TrimEnd('.').Split('.');
         if (parts.Length <= 2)

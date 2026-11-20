@@ -74,7 +74,12 @@ WireGuard, OpenVPN, DHT торрентов и любыми другими про
 geneva не идёт. Если обход перестал работать, стратегия подбирается заново.
 С галочкой «Итоговая проверка в браузере» (включена по умолчанию) стратегия
 для сайта применяется, только если сайт с ней открылся и во встроенном
-браузере программы; не открылся — пробуется следующая.
+браузере программы; не открылся — пробуется следующая. Проверяется не только
+сам сайт, но и связанные ресурсы его семейства: на время проверки YouTube
+стратегия по имени (geneva_c 2.0) действует и на googlevideo.com, ytimg.com и
+т. п., и они тоже должны загрузиться. Прочие ресурсы страницы, которые не
+грузятся, записываются в журнал: у них своя блокировка, и «Авто» займётся ими
+отдельно.
 Если заблокирован сам адрес (соединение не устанавливается вовсе),
 программа так и пишет: здесь поможет только туннель.
 
@@ -258,8 +263,11 @@ geneva не идёт. Если обход перестал работать, с�
    включённый обход перезапускается. Галочка «Итоговая проверка в браузере»
    (общая с «Авто»): когда подбор закончится, три лучшие найденные стратегии
    по очереди ненадолго включаются на порту сайта, и встроенный браузер
-   программы открывает сайт через каждую; в «Найденных» рядом с оценкой видно
-   «открылся в браузере» или «не открылся в браузере». На время проверки (до
+   программы открывает сайт через каждую (на порту 443 должны загрузиться и
+   связанные ресурсы: другие имена сайта и его семейства, для YouTube —
+   googlevideo.com, ytimg.com; реклама и счётчики не в счёт, а чужие ресурсы,
+   которые не грузятся, только записываются в журнал); в «Найденных» рядом с оценкой видно
+   «открылся в браузере» или «не прошёл проверку в браузере». На время проверки (до
    минуты на стратегию) стратегия действует на весь трафик порта сайта. Пока работает обход
    geneva («Авто» или одна стратегия), проверка пропускается. Одновременно работает
    только один движок: geneva (авто или вручную) или zapret2.
@@ -446,6 +454,10 @@ ports, or a torrent's local port); the rest of the traffic never goes through
 geneva. When a bypass stops working, a new one is searched. With "Final check
 in the browser" (on by default) a site's strategy is applied only if the site
 also opens with it in the program's own browser; if not, the next one is tried.
+The site's related resources are checked too: during a YouTube check the
+strategy also reaches googlevideo.com, ytimg.com and the like by name (geneva_c
+2.0), and they must load as well. Other resources of the page that fail go to
+the log: they have a block of their own, which Auto handles separately.
 When the address
 itself is blocked (no connection at all), the program says so: only a tunnel
 helps there.
@@ -543,8 +555,11 @@ geneva_c 1.1 or newer.
    touch" list applies here too: a change restarts a running bypass. "Final
    check in the browser" (shared with Auto): when the search ends, the three
    best strategies found are turned on in turn on the site's port for a moment
-   and the program's browser opens the site through each; Found then says
-   "opened in the browser" or "did not open in the browser" next to the score.
+   and the program's browser opens the site through each (on 443 its related
+   resources must load too: the site's other names and its family, such as
+   googlevideo.com and ytimg.com for YouTube; ads and counters do not count, and
+   other sites' resources that fail only go to the log); Found then says
+   "opened in the browser" or "failed the check in the browser" next to the score.
    During the check (up to a minute per strategy) the strategy applies to all
    traffic on the site's port.
    The check is skipped while a geneva bypass runs (Auto or a single

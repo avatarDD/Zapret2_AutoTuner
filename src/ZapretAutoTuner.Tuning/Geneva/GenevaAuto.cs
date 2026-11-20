@@ -120,6 +120,9 @@ public sealed class GenevaAuto : IAsyncDisposable
     private bool _byName;
     private bool _ext;
     private bool _hostUp;
+
+    /// <summary>The trials whose family went to the name-based process with the last apply: service key → domains.</summary>
+    private Dictionary<string, IReadOnlyList<string>> _relatedSent = new(StringComparer.Ordinal);
     private string? _observerId;
     private IReadOnlyList<string> _blobs = [];
     private List<AutoGroupView> _groups = [];
@@ -150,6 +153,9 @@ public sealed class GenevaAuto : IAsyncDisposable
 
         /// <summary>geneva's search for the service while it runs.</summary>
         public string? SearchId { get; set; }
+
+        /// <summary>The browser checks <see cref="Trying"/>: it also goes by name to the site's family (<see cref="AutoPlan.TrialFamilies"/>).</summary>
+        public bool Related { get; set; }
     }
 
     private void SetTrying(string key, string? strategy)
@@ -1156,14 +1162,58 @@ public sealed class GenevaAuto : IAsyncDisposable
         if (s.Kind != AutoKind.Web || s.Address is not { } address || s.Port is not (80 or 443) || _controller.BrowserNow is not { } browser)
             return true;
         var host = s.Host.Length > 0 ? s.Host : s.Name;
-        var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, host, s.Port, s.Port == 443, address, ct).ConfigureAwait(false);
-        // no browser any more, or a root it does not know: the probes' verdict stands, as without the switch
-        if (verdict is not { Ok: { } ok } v)
-            return true;
-        if (!ok)
-            AddLog($"{s.Name}: стратегия прошла проверки, но сайт не открылся во встроенном браузере ({v.Detail}) — пробую дальше / the strategy passed the probes, but the site did not open in the program's browser, trying on: {strategy}");
-        return ok;
+        // the page's related resources (YouTube's googlevideo.com, ytimg.com) go through the tried strategy by name for
+        // the check, as they will once it is applied; without the name-based process only the site itself is judged
+        IReadOnlyList<string> related = [];
+        bool marked = false;
+        lock (_lock)
+        {
+            if (_controller.ByName && _byName && _works.TryGetValue(s.Key, out var w))
+                marked = w.Related = true;
+        }
+        try
+        {
+            if (marked)
+            {
+                await ApplyAsync(ct, force: true).ConfigureAwait(false);
+                lock (_lock)
+                    related = _relatedSent.TryGetValue(s.Key, out var d) ? d : [];
+                // a new strategy restarts the name-based process: let it take the next connections first
+                if (related.Count > 0)
+                    await Task.Delay(RelatedSettle, ct).ConfigureAwait(false);
+            }
+            var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, host, s.Port, s.Port == 443, address, ct,
+                h => related.Any(d => GenevaBrowserCheck.Under(h, d))).ConfigureAwait(false);
+            // no browser any more, or a root it does not know: the probes' verdict stands, as without the switch
+            if (verdict is not { Ok: { } ok } v)
+                return true;
+            if (!ok)
+            {
+                AddLog(v.SiteOpened
+                    ? $"{s.Name}: сайт открылся во встроенном браузере, но не загрузились связанные ресурсы ({v.Detail}) — пробую дальше / the site opened in the program's browser, but its related resources did not load, trying on: {strategy}"
+                    : $"{s.Name}: стратегия прошла проверки, но сайт не открылся во встроенном браузере ({v.Detail}) — пробую дальше / the strategy passed the probes, but the site did not open in the program's browser, trying on: {strategy}");
+            }
+            else if (v.RelatedOk.Count > 0)
+                AddLog($"{s.Name}: во встроенном браузере открылись сайт и связанные ресурсы: {string.Join(", ", v.RelatedOk)} / the site and its related resources opened in the program's browser");
+            if (v.NotCovered.Count > 0)
+                AddLog($"{s.Name}: на странице не грузятся и другие ресурсы, у них своя блокировка: {string.Join(", ", v.NotCovered)} / other resources of the page fail too, a block of their own");
+            return ok;
+        }
+        finally
+        {
+            if (marked)
+            {
+                lock (_lock)
+                {
+                    if (_works.TryGetValue(s.Key, out var w))
+                        w.Related = false;
+                }
+            }
+        }
     }
+
+    /// <summary>The pause after the family went to the name-based process (it restarts) before the browser opens the page.</summary>
+    public TimeSpan RelatedSettle { get; init; } = TimeSpan.FromSeconds(2);
 
     // ---- applying
 
@@ -1189,6 +1239,7 @@ public sealed class GenevaAuto : IAsyncDisposable
             List<AutoHostProfile> hosts;
             AutoNameList excluded;
             HashSet<string> trialKeys;
+            Dictionary<string, IReadOnlyList<string>> relatedNow;
             bool byName = _controller.ByName;
             lock (_lock)
             {
@@ -1198,6 +1249,14 @@ public sealed class GenevaAuto : IAsyncDisposable
                 trialKeys = [.. trials.Select(t => t.Item1.Key)];
                 // asked for while geneva may still say it cannot (the first apply learns it): the Agent then ignores them
                 hosts = byName ? AutoPlan.HostProfiles(_book.Services, trialKeys, quic: true) : [];
+                // a trial the browser checks: its family by name too, unless that would push an applied profile out
+                var related = byName ? AutoPlan.TrialFamilies(_book.Services,
+                    trials.Where(t => _works.TryGetValue(t.Item1.Key, out var w) && w.Related), hosts) : [];
+                if (hosts.Count + related.Count > AutoRules.MaxHostProfiles)
+                    related = [];
+                relatedNow = related.ToDictionary(r => r.Key, r => r.Profile.Domains, StringComparer.Ordinal);
+                // after the applied ones: a name both match stays with the applied profile (the first match wins)
+                hosts = [.. hosts, .. related.Select(r => r.Profile)];
                 // shared addresses go to the names only once the name-based process runs: until then (or if it failed)
                 // the address groups keep every site's traffic
                 var covered = byName && _byName && _hostUp ? AutoPlan.ByNameCovers(_book.Services, hosts) : null;
@@ -1236,6 +1295,7 @@ public sealed class GenevaAuto : IAsyncDisposable
                 // the first answer tells what this geneva_c can do: a change means the plan differs, so it goes again
                 learned = _byName != reply.ByName || _ext != reply.Ext || _hostUp != (reply.Host is not null);
                 _hostUp = reply.Host is not null;
+                _relatedSent = _hostUp ? relatedNow : new(StringComparer.Ordinal);
                 _book.ByName = _hostUp ? AutoPlan.ByNameCovers(_book.Services, hosts) : new HashSet<string>();
                 _observerId = reply.Observer?.Id;
                 _byName = reply.ByName;

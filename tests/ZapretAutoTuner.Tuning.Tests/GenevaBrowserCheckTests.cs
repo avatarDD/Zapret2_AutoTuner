@@ -50,4 +50,59 @@ public sealed class GenevaBrowserCheckTests
         await cts.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => GenevaBrowserCheck.RunAsync((_, _, _, _, ct) => Task.FromCanceled<PageLoad?>(ct), "a.example", 443, true, null, cts.Token));
     }
+
+    private static PageLoad YouTube(bool videoOk, bool adsOk = true) => new()
+    {
+        Url = "https://www.youtube.com/",
+        LoadFired = true,
+        Requests =
+        [
+            new PageRequest { Url = "https://www.youtube.com/", ResourceType = "document", Status = 200, Bytes = 500_000, Duration = TimeSpan.FromSeconds(1) },
+            new PageRequest { Url = "https://i.ytimg.com/vi/x/hq.jpg", ResourceType = "image", Status = 200, Bytes = 40_000, Duration = TimeSpan.FromSeconds(1) },
+            videoOk
+                ? new PageRequest { Url = "https://rr1---sn-abc.googlevideo.com/videoplayback", ResourceType = "media", Status = 200, Bytes = 900_000, Duration = TimeSpan.FromSeconds(2) }
+                : new PageRequest { Url = "https://rr1---sn-abc.googlevideo.com/videoplayback", ResourceType = "media", Error = "net::ERR_CONNECTION_RESET" },
+            adsOk
+                ? new PageRequest { Url = "https://cdn.other.example/app.js", ResourceType = "script", Status = 200, Bytes = 9_000, Duration = TimeSpan.FromSeconds(1) }
+                : new PageRequest { Url = "https://cdn.other.example/app.js", ResourceType = "script", Error = "net::ERR_CONNECTION_RESET" },
+        ],
+    };
+
+    [Fact]
+    public void Related_resources_the_strategy_reaches_must_load_too()
+    {
+        static bool Family(string h) => GenevaBrowserCheck.Under(h, "googlevideo.com") || GenevaBrowserCheck.Under(h, "ytimg.com");
+        var ok = GenevaBrowserCheck.Judge(YouTube(videoOk: true), "www.youtube.com", Family);
+        Assert.True(ok.Ok);
+        Assert.Contains("rr1---sn-abc.googlevideo.com", ok.RelatedOk);
+        Assert.Contains("i.ytimg.com", ok.RelatedOk);
+
+        var cut = GenevaBrowserCheck.Judge(YouTube(videoOk: false), "www.youtube.com", Family);
+        Assert.False(cut.Ok);
+        Assert.Contains("googlevideo.com", cut.Detail, StringComparison.Ordinal);
+
+        // not reached by the strategy: another service's block, named but not failed
+        var other = GenevaBrowserCheck.Judge(YouTube(videoOk: true, adsOk: false), "www.youtube.com", Family);
+        Assert.True(other.Ok);
+        Assert.Contains("cdn.other.example", other.NotCovered);
+        // and without anything reached only the site itself counts, as before
+        Assert.True(GenevaBrowserCheck.Judge(YouTube(videoOk: false), "www.youtube.com").Ok);
+    }
+
+    [Theory]
+    [InlineData("googlevideo.com", true)]
+    [InlineData("rr1---sn-abc.googlevideo.com", true)]
+    [InlineData("notgooglevideo.com", false)]
+    [InlineData("googlevideo.com.evil.example", false)]
+    public void Under_takes_the_domain_and_its_subdomains(string host, bool under) => Assert.Equal(under, GenevaBrowserCheck.Under(host, "googlevideo.com"));
+
+    [Fact]
+    public void A_video_still_streaming_when_the_page_is_read_is_not_a_failure()
+    {
+        var load = YouTube(videoOk: true) with
+        {
+            Requests = [.. YouTube(videoOk: true).Requests, new PageRequest { Url = "https://rr1---sn-abc.googlevideo.com/videoplayback?2", ResourceType = "media" }],
+        };
+        Assert.True(GenevaBrowserCheck.Judge(load, "www.youtube.com", h => GenevaBrowserCheck.Under(h, "googlevideo.com")).Ok);
+    }
 }

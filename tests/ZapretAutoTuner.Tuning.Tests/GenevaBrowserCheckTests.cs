@@ -105,4 +105,46 @@ public sealed class GenevaBrowserCheckTests
         };
         Assert.True(GenevaBrowserCheck.Judge(load, "www.youtube.com", h => GenevaBrowserCheck.Under(h, "googlevideo.com")).Ok);
     }
+
+    [Fact]
+    public void The_site_and_its_family_come_from_the_host_itself()
+    {
+        Assert.Equal(["youtube.com", "youtube.com", "youtu.be", "googlevideo.com", "ytimg.com", "ggpht.com", "youtube-nocookie.com", "youtubei.googleapis.com", "yt.be"],
+            GenevaBrowserCheck.SiteAndFamily("www.youtube.com"));
+        // a family member under a shared domain: not the whole googleapis.com
+        var api = GenevaBrowserCheck.SiteAndFamily("youtubei.googleapis.com");
+        Assert.DoesNotContain("googleapis.com", api);
+        Assert.Contains("googlevideo.com", api);
+        Assert.Empty(GenevaBrowserCheck.SiteAndFamily("1.2.3.4"));
+        Assert.Equal(["example.com"], GenevaBrowserCheck.SiteAndFamily("www.example.com"));
+    }
+
+    [Fact]
+    public async Task What_the_user_keeps_out_of_geneva_is_not_judged()
+    {
+        var excluded = Core.Geneva.Auto.AutoNameList.Exclusions(["ytimg.com"]);
+        Assert.True(await GenevaBrowserCheck.ExcludedAsync(excluded, "i.ytimg.com", default));
+        Assert.False(await GenevaBrowserCheck.ExcludedAsync(excluded, "googlevideo.com", default));
+
+        // a covered domain that failed and turns out to be kept out of geneva (by a subnet): not held against the strategy
+        var load = new PageLoad
+        {
+            Url = "https://www.youtube.com/",
+            LoadFired = true,
+            Requests =
+            [
+                new PageRequest { Url = "https://www.youtube.com/", ResourceType = "document", Status = 200, Duration = TimeSpan.FromSeconds(1) },
+                new PageRequest { Url = "https://rr1.googlevideo.com/v", ResourceType = "media", Error = "net::ERR_CONNECTION_RESET" },
+            ],
+        };
+        var family = GenevaBrowserCheck.SiteAndFamily("www.youtube.com");
+        bool Covered(string h) => family.Any(d => GenevaBrowserCheck.Under(h, d));
+        var asked = new List<string>();
+        var judged = await GenevaBrowserCheck.RunAsync((_, _, _, _, _) => Task.FromResult<PageLoad?>(load), "www.youtube.com", 443, true, null, default, Covered,
+            (h, _) => { asked.Add(h); return Task.FromResult(h.EndsWith("googlevideo.com", StringComparison.Ordinal)); });
+        Assert.True(judged!.Ok);
+        Assert.Equal(["rr1.googlevideo.com"], asked);
+        // without it the failure counts
+        Assert.False((await GenevaBrowserCheck.RunAsync((_, _, _, _, _) => Task.FromResult<PageLoad?>(load), "www.youtube.com", 443, true, null, default, Covered))!.Ok);
+    }
 }

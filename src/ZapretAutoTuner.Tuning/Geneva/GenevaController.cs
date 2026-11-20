@@ -746,14 +746,21 @@ public sealed class GenevaController : IAsyncDisposable
     }
 
     /// <summary>
-    /// One more (or one less) of the search's strategies being judged now: the pages show how many run at once. No
-    /// <see cref="Changed"/> of its own (the pages see it with the next eval); none after geneva exited, whose probes
-    /// still running answer nobody.
+    /// One more (or one less) of the search's strategies being judged now: the pages show how many run at once. A probe
+    /// starting raises <see cref="Changed"/> (with one worker the answer's own refresh comes after it ended, so the pages
+    /// would never see it); one ending waits for the eval's refresh. Nothing after geneva exited, whose probes still
+    /// running answer nobody.
     /// </summary>
     private void Probing(SearchSlot slot, int delta)
     {
+        bool exited;
         lock (_lock)
-            slot.View = slot.View with { Probing = slot.Exited ? 0 : Math.Max(0, slot.View.Probing + delta) };
+        {
+            exited = slot.Exited;
+            slot.View = slot.View with { Probing = exited ? 0 : Math.Max(0, slot.View.Probing + delta) };
+        }
+        if (delta > 0 && !exited)
+            Changed?.Invoke();
     }
 
     /// <summary>
@@ -842,7 +849,8 @@ public sealed class GenevaController : IAsyncDisposable
                 // and ytimg.com) go through the strategy and must load, except what the user's "не трогать" keeps out.
                 // Other domains of the page may fail for reasons of their own (blocked by address, down): only logged
                 var verdict = await GenevaBrowserCheck.RunAsync(browser.Open, settings.Host, settings.Port, settings.Tls, null, both.Token,
-                    h => settings.Port == 443 && !excluded.MatchesName(h) && family.Any(d => GenevaBrowserCheck.Under(h, d))).ConfigureAwait(false);
+                    h => settings.Port == 443 && family.Any(d => GenevaBrowserCheck.Under(h, d)) && !excluded.MatchesName(h),
+                    (h, t) => GenevaBrowserCheck.ExcludedAsync(excluded, h, t)).ConfigureAwait(false);
                 if (verdict is null)
                 {
                     AddLog("Итоговая проверка в браузере пропущена: встроенного браузера программы нет / the final check in the browser is skipped: the program has no browser of its own");
@@ -863,7 +871,7 @@ public sealed class GenevaController : IAsyncDisposable
                     ? $"{settings.Host} открылся во встроенном браузере, но не загрузились связанные ресурсы ({verdict.Detail}): {f.Strategy} / opened in the program's browser, but its related resources did not load"
                     : $"{settings.Host} не открылся во встроенном браузере ({verdict.Detail}): {f.Strategy} / did not open in the program's browser");
                 if (verdict.NotCovered.Count > 0)
-                    AddLog($"{settings.Host}: на странице не грузятся и другие ресурсы, их стратегия сайта не касается: {string.Join(", ", verdict.NotCovered)} / other resources of the page fail too, not the site's strategy's business");
+                    AddLog($"{settings.Host}: на странице не грузятся и другие ресурсы, по ним стратегию не судим: {string.Join(", ", verdict.NotCovered)} / other resources of the page fail too, the strategy is not judged by them");
             }
             catch (OperationCanceledException)
             {

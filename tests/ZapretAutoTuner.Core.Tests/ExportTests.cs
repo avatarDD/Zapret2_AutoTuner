@@ -397,6 +397,71 @@ public sealed class ExportTests
     }
 
     [Fact]
+    public void A_bundle_written_by_zapret_gui_comes_in_with_its_files()
+    {
+        // written by zapret-gui's export (core/bundle_export.py); zapret-gui's tests check the same file
+        var text = File.ReadAllText(RepoPaths.Testdata("export", "from-zapret-gui", "zapret-gui-bundle.json"));
+        var r = StrategyImporter.Import(text);
+        Assert.Equal("zapret-autotuner-bundle", r.Kind);
+        var s = r.Solution;
+        Assert.Equal(2, s.Profiles.Count);               // the disabled QUIC profile stays out
+        Assert.Contains(s.Hostlists.Values, l => l.SequenceEqual(["youtube.com", "googlevideo.com"]));
+        Assert.Equal(Encoding.ASCII.GetBytes("\u0016\u0003\u0001\0\u0005hello"), s.Blobs["my_tls"]);
+        // a catalog name of the GUI comes with the file behind it, an inline --blob declaration with its
+        // bytes (the declaration itself is dropped from the args)
+        Assert.True(s.Blobs.ContainsKey("fake_tls_1"));
+        Assert.Equal(Convert.FromHexString("1603010000"), s.Blobs["my_hex"]);
+        // the user's script and the GUI's own one it loads by function (fakemultisplit)
+        Assert.True(s.LuaFiles.ContainsKey("my-twice.lua"));
+        Assert.True(s.LuaFiles.ContainsKey("fakemultisplit.lua"));
+        Assert.Equal("Моя: YouTube", s.Meta.Title);
+        // lists/other.txt is the GUI's built-in list: not in the bundle, so a warning, not a failure
+        Assert.Contains(r.Warnings, w => w.Contains("lists/other.txt", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_zapret_gui_backup_carries_its_ipsets_entries()
+    {
+        const string backup = """
+            {"format":"zapret-gui-backup","format_version":1,
+             "strategies":[{"id":"x","name":"x","profiles":[{"id":"p1","name":"p1","enabled":true,
+               "args":"--filter-tcp=443 --ipset=lists/ipset-yt.txt --lua-desync=multisplit:pos=1"}]}],
+             "ipsets":[{"name":"ipset-yt","entries":["142.250.0.0/15"]}]}
+            """;
+        var s = StrategyImporter.Import(backup).Solution;
+        Assert.Contains(s.Ipsets.Values, l => l.SequenceEqual(["142.250.0.0/15"]));
+    }
+
+    [Fact]
+    public void A_clone_variable_from_zapret_gui_is_not_a_missing_blob()
+    {
+        const string bundle = """
+            {"format":"zapret-autotuner-bundle","format_version":1,
+             "strategy":{"id":"x","name":"x","profiles":[{"id":"p1","name":"p1","enabled":true,
+               "args":"--filter-tcp=443 --lua-desync=tls_client_hello_clone:blob=ch:fallback=fb --lua-desync=fake:blob=ch --lua-desync=fakemultisplit:pos=1:fake_blob=gone"}]},
+             "blobs":[{"name":"fb","base64":"FgMB"}]}
+            """;
+        var r = StrategyImporter.Import(bundle);
+        Assert.DoesNotContain(r.Warnings, w => w.Contains("ch.bin", StringComparison.Ordinal));
+        // fake_blob= names a blob of the GUI's registry: a missing one is reported
+        Assert.Contains(r.Warnings, w => w.Contains("gone", StringComparison.Ordinal));
+        Assert.Equal(new byte[] { 0x16, 0x03, 0x01 }, r.Solution.Blobs["fb"]);
+    }
+
+    [Fact]
+    public void Fake_default_udp_of_zapret_gui_comes_as_a_declaration()
+    {
+        const string bundle = """
+            {"format":"zapret-autotuner-bundle","format_version":1,
+             "strategy":{"id":"x","name":"x","profiles":[{"id":"p1","name":"p1","enabled":true,
+               "args":"--blob=fake_default_udp:0x00000000000000000000000000000000 --filter-udp=443 --lua-desync=fake:blob=fake_default_udp:repeats=6"}]}}
+            """;
+        var r = StrategyImporter.Import(bundle);
+        Assert.Equal(new byte[16], r.Solution.Blobs["fake_default_udp"]);
+        Assert.DoesNotContain(r.Warnings, w => w.Contains("fake_default_udp", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Malformed_json_is_a_failed_import_not_a_crash()
     {
         Assert.Empty(StrategyImporter.Import("""{"format":"zapret-autotuner-bundle","strategy":{"profiles":[]},"blobs":[{"name":"b","base64":"!!"}]}""").Solution.Profiles);

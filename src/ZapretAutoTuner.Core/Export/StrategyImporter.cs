@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using ZapretAutoTuner.Core.Catalog;
 using ZapretAutoTuner.Core.Engine;
 using ZapretAutoTuner.Core.Model;
 
@@ -236,7 +237,7 @@ public static partial class StrategyImporter
         if (registryBlobs)
         {
             foreach (var name in parsed.Profiles.SelectMany(RegistryBlobRefs).Distinct()
-                .Where(n => Identifiers.IsLuaIdentifier(n) && !n.StartsWith("fake_default_", StringComparison.Ordinal) && !parsed.Blobs.ContainsKey(n)).ToList())
+                .Where(n => Identifiers.IsLuaIdentifier(n) && !LuaCatalog.Default.BuiltinBlobs.Contains(n) && !parsed.Blobs.ContainsKey(n)).ToList())
                 parsed.Blobs[name] = $"@{name}.bin";
         }
         foreach (var (tok, why) in parsed.Problems)

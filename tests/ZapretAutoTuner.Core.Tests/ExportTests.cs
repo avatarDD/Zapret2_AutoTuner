@@ -449,6 +449,19 @@ public sealed class ExportTests
     }
 
     [Fact]
+    public void Fake_default_udp_of_zapret_gui_comes_as_a_declaration()
+    {
+        const string bundle = """
+            {"format":"zapret-autotuner-bundle","format_version":1,
+             "strategy":{"id":"x","name":"x","profiles":[{"id":"p1","name":"p1","enabled":true,
+               "args":"--blob=fake_default_udp:0x00000000000000000000000000000000 --filter-udp=443 --lua-desync=fake:blob=fake_default_udp:repeats=6"}]}}
+            """;
+        var r = StrategyImporter.Import(bundle);
+        Assert.Equal(new byte[16], r.Solution.Blobs["fake_default_udp"]);
+        Assert.DoesNotContain(r.Warnings, w => w.Contains("fake_default_udp", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Malformed_json_is_a_failed_import_not_a_crash()
     {
         Assert.Empty(StrategyImporter.Import("""{"format":"zapret-autotuner-bundle","strategy":{"profiles":[]},"blobs":[{"name":"b","base64":"!!"}]}""").Solution.Profiles);

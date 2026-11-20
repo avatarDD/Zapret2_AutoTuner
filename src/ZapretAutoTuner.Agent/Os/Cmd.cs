@@ -35,6 +35,17 @@ internal static class Cmd
         }
         using (p)
         {
+            // a command given up on must not keep running behind the caller's back
+            using var kill = ct.Register(() =>
+            {
+                try
+                {
+                    p.Kill(entireProcessTree: true);
+                }
+                catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+                {
+                }
+            });
             var outTask = p.StandardOutput.ReadToEndAsync(ct);
             var errTask = p.StandardError.ReadToEndAsync(ct);
             if (stdin is not null)

@@ -12,6 +12,13 @@ public sealed class GenevaBrowserCheckTests
     [InlineData(8443, "https://a.example:8443/")]
     public void The_url_follows_the_port(int port, string url) => Assert.Equal(url, GenevaBrowserCheck.Url("a.example", port));
 
+    [Theory]
+    [InlineData(8080, false, "http://a.example:8080/")]
+    [InlineData(80, true, "https://a.example:80/")]
+    [InlineData(443, true, "https://a.example/")]
+    [InlineData(80, false, "http://a.example/")]
+    public void The_url_follows_the_search_scheme(int port, bool tls, string url) => Assert.Equal(url, GenevaBrowserCheck.Url("a.example", port, tls));
+
     [Fact]
     public void A_page_whose_document_failed_did_not_open()
     {
@@ -31,8 +38,8 @@ public sealed class GenevaBrowserCheckTests
     [Fact]
     public async Task No_browser_is_no_verdict_and_a_load_that_throws_is_a_failure()
     {
-        Assert.Null(await GenevaBrowserCheck.RunAsync((_, _, _, _) => Task.FromResult<PageLoad?>(null), "a.example", 443, null, default));
-        var failed = await GenevaBrowserCheck.RunAsync((_, _, _, _) => throw new InvalidOperationException("crashed"), "a.example", 443, null, default);
+        Assert.Null(await GenevaBrowserCheck.RunAsync((_, _, _, _, _) => Task.FromResult<PageLoad?>(null), "a.example", 443, true, null, default));
+        var failed = await GenevaBrowserCheck.RunAsync((_, _, _, _, _) => throw new InvalidOperationException("crashed"), "a.example", 443, true, null, default);
         Assert.Equal(new GenevaBrowserVerdict(false, "crashed"), failed);
     }
 
@@ -41,7 +48,7 @@ public sealed class GenevaBrowserCheckTests
     {
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => GenevaBrowserCheck.RunAsync((_, _, _, ct) => Task.FromCanceled<PageLoad?>(ct), "a.example", 443, null, cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => GenevaBrowserCheck.RunAsync((_, _, _, _, ct) => Task.FromCanceled<PageLoad?>(ct), "a.example", 443, true, null, cts.Token));
     }
 
     private static PageLoad YouTube(bool videoOk, bool adsOk = true) => new()

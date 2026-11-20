@@ -9,5 +9,6 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Data\*.json" LogicalName="ZapretAutoTuner.Probes.Data.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Data\*.pem" LogicalName="ZapretAutoTuner.Probes.Data.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

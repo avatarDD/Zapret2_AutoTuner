@@ -151,6 +151,12 @@ public sealed record ProbeResult
     /// </summary>
     public bool CertNameOk { get; init; }
 
+    /// <summary>
+    /// The chain builds to Russia's national root (Минцифры), which this system does not trust but the user's browser may:
+    /// checked by the signatures against the root bundled and pinned by SHA-256, not by the issuer's name.
+    /// </summary>
+    public bool CertNationalRoot { get; init; }
+
     public string? CertSubject { get; init; }
 
     public string? CertIssuer { get; init; }
@@ -185,16 +191,13 @@ public sealed record ProbeResult
 
     /// <summary>
     /// <see cref="Passes"/> with a certificate whose only fault is that this system lacks its root, when that root is a
-    /// national one the user's browser may have (<see cref="NationalRoot"/>: Russia's Минцифры CA of many .ru sites).
-    /// The "Авто" mode asks this, so a working .ru site is never searched. Any other untrusted chain (a self-made
-    /// certificate of a MITM, which can name any host) still fails.
+    /// national one the user's browser may have (Russia's Минцифры CA of many .ru sites).
+    /// The "Авто" mode asks this, so a working .ru site is never searched. The chain must really build to that root
+    /// (<see cref="CertNationalRoot"/>): any other untrusted chain, a MITM's own certificate that only names the
+    /// national issuer included, still fails.
     /// </summary>
     public bool PassesNameOnly(ProbeLevel level, long minBytes = 64 * 1024) =>
-        Passes(level, minBytes) || (Tls && !CertValid && CertNameOk && NationalRoot(CertIssuer) && (this with { CertValid = true }).Passes(level, minBytes));
-
-    /// <summary>The issuers of Russia's national CA (Минцифры): "Russian Trusted Root CA" and its "Russian Trusted Sub CA".</summary>
-    public static bool NationalRoot(string? issuer) =>
-        issuer is not null && (issuer.Contains("CN=Russian Trusted Sub CA", StringComparison.Ordinal) || issuer.Contains("CN=Russian Trusted Root CA", StringComparison.Ordinal));
+        Passes(level, minBytes) || (Tls && !CertValid && CertNameOk && CertNationalRoot && (this with { CertValid = true }).Passes(level, minBytes));
 
     public override string ToString()
     {

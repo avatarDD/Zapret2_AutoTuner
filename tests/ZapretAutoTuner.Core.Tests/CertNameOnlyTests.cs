@@ -5,7 +5,7 @@ namespace ZapretAutoTuner.Core.Tests;
 /// <summary>A site whose root this system does not trust (the national CA of many .ru sites) is not a block.</summary>
 public sealed class CertNameOnlyTests
 {
-    private static ProbeResult Page(bool certValid, bool nameOk, string issuer = "CN=Russian Trusted Sub CA, O=The Ministry of Digital Development and Communications, C=RU") => new()
+    private static ProbeResult Page(bool certValid, bool nameOk, bool national = true, string issuer = "CN=Russian Trusted Sub CA, O=The Ministry of Digital Development and Communications, C=RU") => new()
     {
         Host = "www.sberbank.ru",
         Address = "203.0.113.7",
@@ -17,6 +17,7 @@ public sealed class CertNameOnlyTests
         CertValid = certValid,
         CertNameOk = nameOk,
         CertIssuer = issuer,
+        CertNationalRoot = national,
     };
 
     [Fact]
@@ -28,7 +29,9 @@ public sealed class CertNameOnlyTests
         // a certificate for another name is what a MITM shows: still a failure
         Assert.False(Page(certValid: false, nameOk: false).PassesNameOnly(ProbeLevel.L2Body));
         // any other untrusted root may be a MITM's own certificate, which can name any host
-        Assert.False(Page(certValid: false, nameOk: true, issuer: "CN=Some Proxy CA").PassesNameOnly(ProbeLevel.L2Body));
+        Assert.False(Page(certValid: false, nameOk: true, national: false, issuer: "CN=Some Proxy CA").PassesNameOnly(ProbeLevel.L2Body));
+        // the national issuer's name alone, without the chain to its root, is what a forgery shows
+        Assert.False(Page(certValid: false, nameOk: true, national: false).PassesNameOnly(ProbeLevel.L2Body));
         // the page itself must still come whole
         Assert.False((p with { Complete = false, BodyBytes = 1000 }).PassesNameOnly(ProbeLevel.L2Body));
         Assert.True(Page(certValid: true, nameOk: true).PassesNameOnly(ProbeLevel.L2Body));

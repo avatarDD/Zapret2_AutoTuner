@@ -528,8 +528,8 @@
   "Final check in the browser"
  ],
  "engine.browser_check_tip": [
-  "Когда подбор закончится, три лучшие найденные стратегии по очереди включаются на порту сайта, и встроенный браузер программы открывает сайт через каждую. На время проверки (до минуты на стратегию) она действует на весь трафик этого порта. Ваши браузеры и их профили не используются. Без встроенного браузера проверка пропускается.",
-  "When the search ends, the three best strategies found are turned on in turn on the site's port, and the program's own browser opens the site through each. During the check (up to a minute per strategy) it applies to all traffic on that port. Your browsers and their profiles are not used. Without the program's browser the check is skipped."
+  "Когда подбор закончится, три лучшие найденные стратегии по очереди включаются на порту сайта, и встроенный браузер программы открывает сайт через каждую: должны загрузиться и сам сайт, и его связанные ресурсы: другие имена сайта и его семейства (для YouTube — googlevideo.com, ytimg.com). На время проверки (до минуты на стратегию) она действует на весь трафик этого порта. Ваши браузеры и их профили не используются. Без встроенного браузера проверка пропускается.",
+  "When the search ends, the three best strategies found are turned on in turn on the site's port, and the program's own browser opens the site through each: the site and its related resources must load: the site's other names and its family (googlevideo.com, ytimg.com for YouTube). During the check (up to a minute per strategy) it applies to all traffic on that port. Your browsers and their profiles are not used. Without the program's browser the check is skipped."
  ],
  "engine.browser_checking": [
   "Итоговая проверка: открываю сайт во встроенном браузере…",
@@ -540,12 +540,12 @@
   "opened in the browser"
  ],
  "engine.browser_failed": [
-  "не открылся в браузере",
-  "did not open in the browser"
+  "не прошёл проверку в браузере",
+  "failed the check in the browser"
  ],
  "auto.browser_check_tip": [
-  "Прежде чем применить найденную для сайта стратегию, «Авто» открывает сайт через неё во встроенном браузере программы; не открылся — пробует следующую. Ваши браузеры и их профили не используются. Без встроенного браузера проверка пропускается.",
-  "Before applying a strategy found for a site, the \"Auto\" mode opens the site through it in the program's own browser; if it does not open, the next one is tried. Your browsers and their profiles are not used. Without the program's browser the check is skipped."
+  "Прежде чем применить найденную для сайта стратегию, «Авто» открывает сайт через неё во встроенном браузере программы, и стратегия на время проверки действует и на связанные ресурсы (для YouTube — googlevideo.com, ytimg.com): должны загрузиться и они; не открылся — пробует следующую. Ваши браузеры и их профили не используются. Без встроенного браузера проверка пропускается.",
+  "Before applying a strategy found for a site, the \"Auto\" mode opens the site through it in the program's own browser, the strategy also reaching the related resources for the check (googlevideo.com, ytimg.com for YouTube), which must load too; if it does not open, the next one is tried. Your browsers and their profiles are not used. Without the program's browser the check is skipped."
  ],
  "engine.library_zapret2_row": [
   "Метод zapret2: {0}",

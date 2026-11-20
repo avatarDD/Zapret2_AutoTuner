@@ -483,4 +483,28 @@ public sealed class GenevaControllerTests
             Assert.Null(Assert.Single(GenevaState.Parse(rig.Store.Json).Found).Browser);
         }
     }
+
+    [Fact]
+    public async Task On_443_the_sites_related_resources_go_through_the_strategy_and_must_load()
+    {
+        var rig = new Rig();
+        await using var g = rig.Make();
+        g.Browser = new GenevaBrowser(() => true, (host, port, _, _, _) => Task.FromResult<PageLoad?>(new PageLoad
+        {
+            Url = GenevaBrowserCheck.Url(host, port),
+            LoadFired = true,
+            Requests =
+            [
+                new PageRequest { Url = "https://blocked.example/", ResourceType = "document", Status = 200, Duration = TimeSpan.FromSeconds(1) },
+                new PageRequest { Url = "https://video.blocked.example/v.mp4", ResourceType = "media", Error = "net::ERR_CONNECTION_RESET" },
+                // another site's resource: its own business, only logged
+                new PageRequest { Url = "https://cdn.other.example/app.js", ResourceType = "script", Error = "net::ERR_CONNECTION_RESET" },
+            ],
+        }));
+        await g.StartSearchAsync(new GenevaSearchSettings { Host = "blocked.example", Population = 10, Generations = 3 }, default);
+        await Until(() => !g.SearchRunning);
+        Assert.False(Assert.Single(GenevaState.Parse(rig.Store.Json).Found).Browser);
+        Assert.Contains(g.Log, l => l.Contains("не загрузились связанные ресурсы", StringComparison.Ordinal) && l.Contains("video.blocked.example", StringComparison.Ordinal));
+        Assert.Contains(g.Log, l => l.Contains("их стратегия сайта не касается", StringComparison.Ordinal) && l.Contains("cdn.other.example", StringComparison.Ordinal));
+    }
 }

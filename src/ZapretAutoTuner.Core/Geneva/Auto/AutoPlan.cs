@@ -200,6 +200,51 @@ public static class AutoPlan
     }
 
     /// <summary>
+    /// The strategy on trial by name while the browser checks it (geneva_c 2.0, name-based process): the site's own
+    /// names on other addresses and its family (<see cref="AutoFamilies"/>: YouTube's googlevideo.com, ytimg.com…), so
+    /// the page's related resources go through the strategy under test, as they will once it is applied
+    /// (<see cref="HostProfiles(IEnumerable{AutoService}, IReadOnlyCollection{string}, bool, bool)"/> adds the family then).
+    /// A family member with a life of its own in the book, or a domain an applied profile already names
+    /// (<paramref name="taken"/>), keeps what it has. The profiles name no service: the site itself stays with its
+    /// address group (<see cref="ByNameCovers"/>).
+    /// </summary>
+    public static List<(string Key, AutoHostProfile Profile)> TrialFamilies(IEnumerable<AutoService> services,
+        IEnumerable<(AutoService Service, string Strategy)> trials, IEnumerable<AutoHostProfile> taken)
+    {
+        var all = services.ToList();
+        var claimed = taken.Where(p => !p.Udp).SelectMany(p => p.Domains).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var own = all.Where(s => s.Kind == AutoKind.Web && OwnLife(s)).ToList();
+        var result = new List<(string, AutoHostProfile)>();
+        foreach (var (s, strategy) in trials)
+        {
+            if (s.Kind != AutoKind.Web)
+                continue;
+            var site = AutoFamilies.SiteOf(s);
+            var names = AutoFamilies.Of(s) is { } family ? [site, .. AutoFamilies.Domains(family)] : new List<string> { site };
+            var domains = names.Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(d => d.Equals(site, StringComparison.OrdinalIgnoreCase)
+                    || !own.Any(o => o.Key != s.Key && AutoFamilies.SiteOf(o).Equals(d, StringComparison.OrdinalIgnoreCase)))
+                // geneva's lists take subdomains: a name over or under one a profile already has would take its traffic
+                .Where(d => !claimed.Any(c => Nested(d, c)))
+                .ToList();
+            claimed.UnionWith(domains);
+            if (domains.Count > 0)
+                result.Add((s.Key, new AutoHostProfile(strategy, false, domains, [])));
+        }
+        return result;
+    }
+
+    /// <summary>One name is the other or under it, either way.</summary>
+    private static bool Nested(string a, string b) =>
+        a.Equals(b, StringComparison.OrdinalIgnoreCase)
+        || a.EndsWith("." + b, StringComparison.OrdinalIgnoreCase)
+        || b.EndsWith("." + a, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A service the mode is busy with: applied, or being confirmed, searched or found nothing yet.</summary>
+    private static bool OwnLife(AutoService s) =>
+        s.IsActive || s.Status is AutoStatus.Searching or AutoStatus.Blocked or AutoStatus.Suspected or AutoStatus.NotFound or AutoStatus.Degraded;
+
+    /// <summary>
     /// The sites the name-based process covers: those named in <paramref name="profiles"/> whose ports are all ones it
     /// catches (<see cref="AutoRules.HostTcpPorts"/>).
     /// </summary>

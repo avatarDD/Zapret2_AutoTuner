@@ -156,9 +156,9 @@ public static class HttpProbe
                 // The probe must see what the server (or a MITM) sends: the certificate is judged into CertValid,
                 // and nothing secret goes over this connection.
 #pragma warning disable CA5359
-                ssl = new SslStream(raw, leaveInnerStreamOpen: true, (_, cert, _, errors) =>
+                ssl = new SslStream(raw, leaveInnerStreamOpen: true, (_, cert, chain, errors) =>
                 {
-                    r.Certificate(o, cert, errors);
+                    r.Certificate(o, cert, chain, errors);
                     return true;
                 });
 #pragma warning restore CA5359
@@ -531,7 +531,7 @@ public static class HttpProbe
         public int Port;
         public bool Tls;
         public string? Sni;
-        public bool ConnectOk, TlsOk, Complete, RstSeen, CertValid, CertNameOk, Head;
+        public bool ConnectOk, TlsOk, Complete, RstSeen, CertValid, CertNameOk, CertNationalRoot, Head;
         public int? HttpStatus;
         public long BytesIn, BodyBytes;
         public long? ContentLength, StalledAt;
@@ -545,7 +545,7 @@ public static class HttpProbe
         public RateReading? Rate;
         public required SpeedMeter Speed;
 
-        public void Certificate(HttpProbeOptions o, X509Certificate? cert, SslPolicyErrors errors)
+        public void Certificate(HttpProbeOptions o, X509Certificate? cert, X509Chain? presented, SslPolicyErrors errors)
         {
             if (cert is null)
             {
@@ -572,8 +572,25 @@ public static class HttpProbe
             bool nameOk = c.MatchesHostname(o.Host, allowWildcards: true, allowCommonName: false);
             CertValid = chainOk && nameOk;
             CertNameOk = nameOk;
+            string? rootProblem = null;
+            // not trusted here, but perhaps by the user's browser: the national root (Минцифры), checked by the chain itself
+            if (!chainOk && o.TrustedRoots is not { Count: > 0 })
+            {
+                try
+                {
+                    // what the server sent (the system's build may have taken another path) and what that build found
+                    IEnumerable<X509Certificate2> sent = presented is null ? [] : [.. presented.ChainPolicy.ExtraStore, .. presented.ChainElements.Select(e => e.Certificate)];
+                    CertNationalRoot = NationalRoots.Chains(c, sent);
+                }
+                catch (Exception e) when (e is CryptographicException or InvalidOperationException)
+                {
+                    // the bundled root unusable (a damaged build): no leniency, and the reason stays with the probe
+                    CertNationalRoot = false;
+                    rootProblem = "корень Минцифры не загружен / the national root is not loaded: " + e.Message;
+                }
+            }
             if (!chainOk)
-                CertError = "цепочка сертификата не доверенная";
+                CertError = "цепочка сертификата не доверенная" + (rootProblem is null ? "" : "; " + rootProblem);
             else if (!nameOk)
                 CertError = $"сертификат не для {o.Host}";
         }
@@ -638,6 +655,7 @@ public static class HttpProbe
             TlsVersion = TlsVersion,
             CertValid = CertValid,
             CertNameOk = CertNameOk,
+            CertNationalRoot = CertNationalRoot,
             CertSubject = CertSubject,
             CertIssuer = CertIssuer,
             CertNames = CertNames,

@@ -165,6 +165,10 @@ public class HttpProbeTests
         var r = await HttpProbe.RunAsync(Opts(s, o => o with { TrustedRoots = null }));
         Assert.True(r.TlsOk);
         Assert.False(r.CertValid);
+        // nor does it chain to the national root: the "Авто" mode's lenient check refuses it too
+        Assert.True(r.CertNameOk);
+        Assert.False(r.CertNationalRoot);
+        Assert.False(r.PassesNameOnly(ProbeLevel.L1Handshake));
     }
 
     [Fact]

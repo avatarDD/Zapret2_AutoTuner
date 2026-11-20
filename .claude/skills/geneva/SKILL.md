@@ -438,7 +438,9 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
 12. **Ложные блокировки.** Без обхода `AutoProbes.CheckAsync` для сайта
     смотрит дважды (пауза `Recheck`, 2 с): `Blocked` только если оба раза не
     прошло. Сертификат с верным именем от национального корня, которого нет
-    в системе (Минцифры: `ProbeResult.NationalRoot`), проходит
+    в системе (Минцифры: `ProbeResult.CertNationalRoot` — цепочка реально
+    строится к корню, встроенному в `Probes/Data` и закреплённому по SHA-256
+    в `NationalRoots`; сертификаты взяты с gosuslugi.ru/crt), проходит
     (`PassesNameOnly`, `CertNameOk`); любой другой недоверенный — нет (MITM
     может выписать сертификат на любое имя). Подбор,
     начатый позже `BaselineFresh` (5 мин) после последнего «заблокирован»

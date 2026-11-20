@@ -1464,7 +1464,7 @@
     "name": "geneva_auto_lists",
     "scope": "control",
     "confirms": false,
-    "description": "Reads or replaces the user's lists for geneva: important and unimportant services of the \"Авто\" mode, no_search — services no bypass is looked for (they leave the problems; an applied strategy stays), and excluded — never touched by any geneva bypass (a VPN or proxy server). important, unimportant and no_search take domains (with subdomains), zones (*.ru), patterns (*google*), addresses, subnets and AS numbers (AS12389, its announced prefixes are fetched from RIPEstat, only the number is sent); excluded takes domains, addresses and subnets only. A list left out stays as it is. Also whether site strategies are applied by name (geneva_c 2.0), and whether the search threads are split between several services searched at once.",
+    "description": "Reads or replaces the user's lists for geneva: important and unimportant services of the \"Авто\" mode, no_search — services no bypass is looked for (they leave the problems; an applied strategy stays), and excluded — never touched by any geneva bypass (a VPN or proxy server). important, unimportant and no_search take domains (with subdomains), zones (*.ru), patterns (*google*), addresses, subnets and AS numbers (AS12389, its announced prefixes are fetched from RIPEstat, only the number is sent); excluded takes domains, addresses and subnets only. A list left out stays as it is. Also whether site strategies are applied by name (geneva_c 2.0), whether the search threads are split between several services searched at once, and how many strategies are applied at once.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1519,6 +1519,12 @@
         "split_workers": {
           "type": "boolean",
           "description": "Split the search threads between up to 4 services searched at once (true), or give them all to one service at a time (false, default)"
+        },
+        "max_groups": {
+          "type": "integer",
+          "description": "Strategies applied at once, one geneva process each (default 16, up to the 300 services the mode keeps); each search side by side needs one for its trials",
+          "minimum": 1,
+          "maximum": 300
         }
       },
       "additionalProperties": false

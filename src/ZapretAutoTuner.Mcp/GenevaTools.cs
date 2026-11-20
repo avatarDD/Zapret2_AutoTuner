@@ -83,7 +83,7 @@ public sealed class GenevaTools(McpSession session)
             "Pins (or unpins) the strategy applied to a service: a pinned strategy stays even when the service fails again, and no new search replaces it.",
             S.Obj([("key", S.Str("The service's key", 300)), ("pinned", S.Bool("true pins, false unpins"))], "key", "pinned")),
         new("geneva_auto_lists", McpScope.Control,
-            "Reads or replaces the user's lists for geneva: important and unimportant services of the \"Авто\" mode, no_search — services no bypass is looked for (they leave the problems; an applied strategy stays), and excluded — never touched by any geneva bypass (a VPN or proxy server). important, unimportant and no_search take domains (with subdomains), zones (*.ru), patterns (*google*), addresses, subnets and AS numbers (AS12389, its announced prefixes are fetched from RIPEstat, only the number is sent); excluded takes domains, addresses and subnets only. A list left out stays as it is. Also whether site strategies are applied by name (geneva_c 2.0), and whether the search threads are split between several services searched at once.",
+            "Reads or replaces the user's lists for geneva: important and unimportant services of the \"Авто\" mode, no_search — services no bypass is looked for (they leave the problems; an applied strategy stays), and excluded — never touched by any geneva bypass (a VPN or proxy server). important, unimportant and no_search take domains (with subdomains), zones (*.ru), patterns (*google*), addresses, subnets and AS numbers (AS12389, its announced prefixes are fetched from RIPEstat, only the number is sent); excluded takes domains, addresses and subnets only. A list left out stays as it is. Also whether site strategies are applied by name (geneva_c 2.0), whether the search threads are split between several services searched at once, and how many strategies are applied at once.",
             S.Obj([
                 ("important", S.Arr("Important services", S.Str("A domain, an address or a subnet", 260), 200)),
                 ("unimportant", S.Arr("Unimportant services", S.Str("A domain, an address or a subnet", 260), 200)),
@@ -92,6 +92,7 @@ public sealed class GenevaTools(McpSession session)
                 ("known_important", S.Bool("YouTube, Discord, Telegram, WhatsApp, Instagram and X count as important (default true)")),
                 ("by_name", S.Bool("Apply site strategies by name too (geneva_c 2.0; default true)")),
                 ("split_workers", S.Bool("Split the search threads between up to 4 services searched at once (true), or give them all to one service at a time (false, default)")),
+                ("max_groups", S.Int("Strategies applied at once, one geneva process each (default 16, up to the 300 services the mode keeps); each search side by side needs one for its trials", 1, Core.Geneva.Auto.AutoRules.MaxServices)),
             ])),
     ];
 
@@ -230,9 +231,12 @@ public sealed class GenevaTools(McpSession session)
             ["services_total"] = v.Services.Count,
             ["searching"] = v.Current,
             ["trying"] = v.Trying,
-            ["searches"] = new JsonArray([.. v.Searches.Select(w => (JsonNode)new JsonObject { ["service"] = w.Name, ["key"] = w.Key, ["trying"] = w.Trying })]),
+            ["searches"] = new JsonArray([.. v.Searches.Select(w => (JsonNode)new JsonObject { ["service"] = w.Name, ["key"] = w.Key, ["trying"] = w.Trying, ["known_step"] = w.Step, ["known_steps"] = w.Steps })]),
+            ["search_slots"] = v.SearchSlots,
+            ["waiting"] = v.Waiting,
             ["split_workers"] = session.Host.Geneva?.AutoSplit,
             ["searches_at_once"] = session.Host.Geneva?.AutoSearches,
+            ["max_groups"] = session.Host.Geneva?.AutoGroups,
             ["by_name"] = v.ByName,
             ["x_actions"] = v.Ext,
             ["limited"] = v.Limited ? "Windows with geneva_c older than 1.1: strategies are found but not applied" : null,
@@ -299,6 +303,8 @@ public sealed class GenevaTools(McpSession session)
             g.ByName = byName;
         if ((bool?)a["split_workers"] is { } split)
             g.AutoSplit = split;
+        if ((int?)a["max_groups"] is { } maxGroups)
+            g.AutoGroups = maxGroups;
         return new JsonObject
         {
             ["ok"] = true,
@@ -311,6 +317,7 @@ public sealed class GenevaTools(McpSession session)
             ["known_important"] = lists.KnownImportant,
             ["by_name"] = g.ByName,
             ["split_workers"] = g.AutoSplit,
+            ["max_groups"] = g.AutoGroups,
         };
     }
 

@@ -36,7 +36,9 @@ public sealed record AutoGroupView
 /// One service the "Авто" mode searches now, and the strategy it tries on the service's traffic; <paramref name="SearchId"/>
 /// is geneva's search for it while that runs (its progress is <see cref="GenevaController.Searches"/>).
 /// </summary>
-public sealed record AutoSearchView(string Key, string Name, string? Trying, string? SearchId = null);
+/// <para><paramref name="Step"/> of <paramref name="Steps"/>: the place of <paramref name="Trying"/> among the known
+/// strategies tried one by one before geneva's search (0: not that stage).</para>
+public sealed record AutoSearchView(string Key, string Name, string? Trying, string? SearchId = null, int Step = 0, int Steps = 0);
 
 /// <summary>The "Авто" mode as the page and MCP see it.</summary>
 public sealed record GenevaAutoView
@@ -70,9 +72,12 @@ public sealed record GenevaAutoView
 
     /// <summary>
     /// Searches that may run side by side now: the setting's, fewer when the working strategies hold the groups a
-    /// search needs for its trials (<see cref="AutoRules.MaxGroups"/>).
+    /// search needs for its trials (<see cref="GenevaController.AutoGroups"/>).
     /// </summary>
     public int SearchSlots { get; init; } = 1;
+
+    /// <summary>Blocked services whose search is due and waits for a free place (<see cref="AutoBook.Waiting"/>).</summary>
+    public int Waiting { get; init; }
 
     public IReadOnlyList<string> Problems { get; init; } = [];
 
@@ -132,6 +137,9 @@ public sealed class GenevaAuto : IAsyncDisposable
     private IReadOnlyList<string> _blobs = [];
     private List<AutoGroupView> _groups = [];
     private List<string> _problems = [];
+
+    /// <summary>The last line logged about strategies left without a group: logged again only when it changes.</summary>
+    private string _leftLogged = "";
     private bool _limited;
     private string _applied = "";
     private DateTime _appliedAt;
@@ -156,6 +164,11 @@ public sealed class GenevaAuto : IAsyncDisposable
 
         public string? Trying { get; set; }
 
+        /// <summary>The place of <see cref="Trying"/> among the known strategies (from 1), and how many there are.</summary>
+        public int Step { get; set; }
+
+        public int Steps { get; set; }
+
         /// <summary>geneva's search for the service while it runs.</summary>
         public string? SearchId { get; set; }
 
@@ -169,6 +182,18 @@ public sealed class GenevaAuto : IAsyncDisposable
         {
             if (_works.TryGetValue(key, out var w))
                 w.Trying = strategy;
+        }
+    }
+
+    private void SetStep(string key, int step, int steps)
+    {
+        lock (_lock)
+        {
+            if (_works.TryGetValue(key, out var w))
+            {
+                w.Step = step;
+                w.Steps = steps;
+            }
         }
     }
 
@@ -322,7 +347,8 @@ public sealed class GenevaAuto : IAsyncDisposable
                     Groups = [.. _groups],
                     Current = _works.Values.FirstOrDefault()?.Name,
                     Trying = _works.Values.FirstOrDefault()?.Trying,
-                    Searches = [.. _works.Values.Select(w => new AutoSearchView(w.Key, w.Name, w.Trying, w.SearchId))],
+                    Searches = [.. _works.Values.Select(w => new AutoSearchView(w.Key, w.Name, w.Trying, w.SearchId, w.Trying is null ? 0 : w.Step, w.Steps))],
+                    Waiting = _book.Waiting(_now()),
                     SearchSlots = SearchSlots(),
                     Problems = [.. _problems],
                     Limited = _limited,
@@ -784,12 +810,12 @@ public sealed class GenevaAuto : IAsyncDisposable
 
     /// <summary>
     /// Searches side by side now (under the lock): the setting's, but each needs a group of its own for its trials,
-    /// and the working strategies keep theirs (<see cref="AutoRules.MaxGroups"/>).
+    /// and the working strategies keep theirs (<see cref="GenevaController.AutoGroups"/>).
     /// </summary>
     private int SearchSlots()
     {
         int applied = _groups.Count(g => !g.Trial && !g.ByName);
-        return Math.Max(1, Math.Min(_controller.AutoSearches, AutoRules.MaxGroups - applied));
+        return Math.Max(1, Math.Min(_controller.AutoSearches, _controller.AutoGroups - applied));
     }
 
     /// <summary>
@@ -969,9 +995,11 @@ public sealed class GenevaAuto : IAsyncDisposable
         AddLog(wide
             ? $"{s.Name}: обычный подбор не помог {s.Attempts} раза — расширенный круг: {candidates.Count} стратегий, затем подбор шире"
             : $"{s.Name}: пробую известные стратегии ({candidates.Count})");
-        foreach (var c in candidates)
+        for (int i = 0; i < candidates.Count; i++)
         {
+            var c = candidates[i];
             ct.ThrowIfCancellationRequested();
+            SetStep(s.Key, i + 1, candidates.Count);
             if (await TrialAsync(s, c, ct).ConfigureAwait(false))
             {
                 Applied(s, c, 400, "известная стратегия");
@@ -979,6 +1007,7 @@ public sealed class GenevaAuto : IAsyncDisposable
             }
         }
         SetTrying(s.Key, null);
+        SetStep(s.Key, 0, 0);
         await ApplyAsync(ct, force: true).ConfigureAwait(false);
 
         if (!s.Probeable)
@@ -1269,6 +1298,7 @@ public sealed class GenevaAuto : IAsyncDisposable
             HashSet<string> trialKeys;
             Dictionary<string, IReadOnlyList<string>> relatedNow;
             int appliedHosts;
+            List<string> left = [];
             bool byName = _controller.ByName;
             lock (_lock)
             {
@@ -1290,7 +1320,8 @@ public sealed class GenevaAuto : IAsyncDisposable
                 // shared addresses go to the names only once the name-based process runs: until then (or if it failed)
                 // the address groups keep every site's traffic
                 var covered = byName && _byName && _hostUp ? AutoPlan.ByNameCovers(_book.Services, hosts) : null;
-                groups = AutoPlan.Groups(_book.Services, trials, covered);
+                groups = AutoPlan.Groups(_book.Services, trials, covered, left, _controller.AutoGroups);
+                left = [.. left.Select(k => _book.Find(k)?.Name ?? k)];
                 excluded = _book.Excluded;
             }
             // geneva's detector beside the groups (geneva_c 2.0, ext_auto): a shaper and a freeze the slices miss
@@ -1345,6 +1376,10 @@ public sealed class GenevaAuto : IAsyncDisposable
                 _applied = json;
                 _appliedAt = _now();
                 _problems = [.. reply.Problems];
+                // more working strategies than groups: the smallest ones run nowhere, and the page must not keep
+                // calling them working without a word
+                if (left.Count > 0)
+                    _problems.Add(LeftOut(left));
                 _limited = reply.Limited;
                 _groups = [.. reply.Groups.Select(rg =>
                 {
@@ -1384,6 +1419,23 @@ public sealed class GenevaAuto : IAsyncDisposable
                 again = true;
             foreach (var p in reply.Problems)
                 AddLog(p);
+            if (left.Count == 0)
+            {
+                lock (_lock)
+                    _leftLogged = "";
+            }
+            else
+            {
+                var line = LeftOut(left);
+                bool fresh;
+                lock (_lock)
+                {
+                    fresh = line != _leftLogged;
+                    _leftLogged = line;
+                }
+                if (fresh)
+                    AddLog(line);
+            }
             Changed?.Invoke();
             return (reply, again);
         }
@@ -1391,6 +1443,13 @@ public sealed class GenevaAuto : IAsyncDisposable
         {
             _applyGate.Release();
         }
+    }
+
+    private string LeftOut(IReadOnlyCollection<string> names)
+    {
+        int max = _controller.AutoGroups;
+        return $"Разных работающих стратегий больше {max} (настройка «Стратегий одновременно»): для {string.Join(", ", names.Take(5))}{(names.Count > 5 ? $" и ещё {names.Count - 5}" : "")} обход сейчас не применён"
+            + $" / more than {max} different working strategies (the \"Strategies at once\" setting): no bypass applied now for {names.Count} service(s)";
     }
 
     /// <summary>

@@ -36,7 +36,7 @@ public sealed record AutoHostProfile(string Strategy, bool Udp, IReadOnlyList<st
 public static class AutoPlan
 {
     /// <summary>
-    /// The groups: the active services by strategy, the biggest groups first, at most <see cref="AutoRules.MaxGroups"/>.
+    /// The groups: the active services by strategy, the biggest groups first, at most <c>maxGroups</c> (<see cref="AutoRules.DefaultMaxGroups"/> by default).
     /// <paramref name="trial"/> adds a strategy being tried on one service (the quick check of known strategies).
     /// </summary>
     /// <para><paramref name="byName"/>: the sites the running name-based process covers (<see cref="ByNameCovers"/>). An
@@ -48,11 +48,13 @@ public static class AutoPlan
 
     /// <summary>
     /// The groups with several strategies on trial at once (the "Авто" mode's searches side by side), one per service.
-    /// The tried strategies come first: an address two trials share goes to the first.
+    /// The tried strategies come first: an address two trials share goes to the first. <paramref name="left"/> gets the
+    /// applied services whose group did not fit in <paramref name="maxGroups"/>: their strategy runs nowhere.
     /// </summary>
     public static List<AutoGroup> Groups(IEnumerable<AutoService> services, IReadOnlyList<(AutoService Service, string Strategy)> trials,
-        IReadOnlySet<string>? byName = null)
+        IReadOnlySet<string>? byName = null, List<string>? left = null, int maxGroups = AutoRules.DefaultMaxGroups)
     {
+        maxGroups = Math.Max(1, maxGroups);
         var tried = trials.Select(t => t.Service.Key).ToHashSet(StringComparer.Ordinal);
         var triedPairs = trials.Select(t => (t.Strategy, t.Service.Key)).ToHashSet();
         var active = services.Where(s => s.IsActive && !tried.Contains(s.Key))
@@ -120,6 +122,11 @@ public static class AutoPlan
             }
             if (targets.Count == 0)
                 continue;
+            if (result.Count >= maxGroups)
+            {
+                left?.AddRange(g.Services.Where(k => !tried.Contains(k)));
+                continue;
+            }
             foreach (var t in targets.Where(t => !t.ByLocalPort))
             {
                 foreach (var a in t.Addresses)
@@ -131,8 +138,6 @@ public static class AutoPlan
                 }
             }
             result.Add(g with { Targets = targets });
-            if (result.Count == AutoRules.MaxGroups)
-                break;
         }
         return result;
     }

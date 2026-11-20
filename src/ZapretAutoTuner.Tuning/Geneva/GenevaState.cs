@@ -127,6 +127,12 @@ public sealed record GenevaState
     /// </summary>
     public bool AutoSplit { get; init; }
 
+    /// <summary>
+    /// Strategies the "Авто" mode applies at once, one group (<c>geneva run</c>) each: <see cref="AutoRules.DefaultMaxGroups"/>
+    /// by default, any number the user sets. The searches' trials need groups of their own too.
+    /// </summary>
+    public int AutoGroups { get; init; } = AutoRules.DefaultMaxGroups;
+
     /// <summary>Imported strategies, oldest first: added next to the working ones, never replacing them.</summary>
     public List<GenevaImportedStrategy> Imported { get; init; } = [];
 

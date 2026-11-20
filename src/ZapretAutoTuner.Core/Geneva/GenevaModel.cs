@@ -88,7 +88,7 @@ public sealed record GenevaSearchSettings
     /// </summary>
     public int Workers { get; init; } = 1;
 
-    public static (int Min, int Max) WorkersRange => (1, 8);
+    public static (int Min, int Max) WorkersRange => (1, GenevaArgv.MaxWorkers);
 
     public static IReadOnlySet<string> Layers { get; } = new HashSet<string>(StringComparer.Ordinal) { "IP", "TCP", "UDP", "DNS", "DNSQR" };
 
@@ -203,7 +203,12 @@ public static class GenevaArgv
 {
     public const int RunQueue = 330;
     public const int EvalQueue = 331;
-    public const int LocalPortsBase = 30000;
+    /// <summary>
+    /// The first local port of the searches' workers: every slot's block (<see cref="AllLocalPorts"/>, 29184–32767) ends
+    /// right below Linux's ephemeral ports (32768 on), so no ordinary connection takes a probe's port, and the range
+    /// the observation of "Авто" leaves to the probes stays narrow.
+    /// </summary>
+    public const int LocalPortsBase = 32768 - (MaxWorkers + (MaxSearches - 1) * SideSlotWorkers) * LocalPortsCount;
 
     /// <summary>The block of local ports of one worker: the probe connects from these, the strategy applies only to them.</summary>
     public const int LocalPortsCount = 64;
@@ -215,15 +220,28 @@ public static class GenevaArgv
     /// </summary>
     public const int MaxSearches = 4;
 
-    /// <summary>The most workers one search has (the 1–8 of the page): the size of a slot's port range.</summary>
-    public const int MaxWorkers = 8;
+    /// <summary>
+    /// The most workers one search has (the 1–32 of the page): geneva_c's own limit (<c>EVAL_MAX_WORKERS</c>), and the
+    /// size of the first slot's port range.
+    /// </summary>
+    public const int MaxWorkers = 32;
+
+    /// <summary>
+    /// The workers of a slot after the first: searches side by side share the threads (at most 32 / 4 each), so their
+    /// blocks are smaller and the whole range stays narrow.
+    /// </summary>
+    public const int SideSlotWorkers = 8;
 
     public static int EvalQueueOf(int slot) => EvalQueue + slot;
 
-    public static int LocalPortsOf(int slot) => LocalPortsBase + slot * MaxWorkers * LocalPortsCount;
+    /// <summary>The most workers the slot's block of ports holds: <see cref="MaxWorkers"/> for the first, <see cref="SideSlotWorkers"/> after it.</summary>
+    public static int SlotWorkers(int slot) => slot == 0 ? MaxWorkers : SideSlotWorkers;
+
+    public static int LocalPortsOf(int slot) =>
+        LocalPortsBase + (slot == 0 ? 0 : MaxWorkers + (slot - 1) * SideSlotWorkers) * LocalPortsCount;
 
     /// <summary>The local ports of every slot's workers: the observation of "Авто" leaves them to the searches.</summary>
-    public static (int From, int To) AllLocalPorts => (LocalPortsBase, LocalPortsOf(MaxSearches - 1) + MaxWorkers * LocalPortsCount - 1);
+    public static (int From, int To) AllLocalPorts => (LocalPortsBase, LocalPortsOf(MaxSearches - 1) + SlotWorkers(MaxSearches - 1) * LocalPortsCount - 1);
 
     public const int MaxSeeds = 50;
 
@@ -274,6 +292,9 @@ public static class GenevaArgv
     {
         if (slot is < 0 or >= MaxSearches)
             throw new ArgumentOutOfRangeException(nameof(slot));
+        // a slot's workers stay in its block of ports (the next slot's begins after it)
+        if (s.Workers > SlotWorkers(slot))
+            s = s with { Workers = SlotWorkers(slot) };
         var bad = s.Problems();
         if (bad.Count > 0)
             throw new FormatException(string.Join("; ", bad));

@@ -603,9 +603,15 @@ public sealed class AutoBook
     /// </summary>
     public AutoService? NextToSearch(DateTime now) => NextToSearch(now, _ => true);
 
+    /// <summary>The blocked services whose search is due now: what <see cref="NextToSearch(DateTime)"/> picks from.</summary>
+    public int Waiting(DateTime now) => _services.Values.Count(s => Due(s, now));
+
+    private bool Due(AutoService s, DateTime now) =>
+        s.Status == AutoStatus.Blocked && (s.NextCheck is null || now >= s.NextCheck) && !_noSearch.Matches(s);
+
     /// <summary>The next service to search among those <paramref name="allowed"/> lets through (searches side by side).</summary>
     public AutoService? NextToSearch(DateTime now, Func<AutoService, bool> allowed) => Queue(_services.Values
-        .Where(s => s.Status == AutoStatus.Blocked && (s.NextCheck is null || now >= s.NextCheck) && !_noSearch.Matches(s) && allowed(s)), now)
+        .Where(s => Due(s, now) && allowed(s)), now)
         .FirstOrDefault();
 
     /// <summary>

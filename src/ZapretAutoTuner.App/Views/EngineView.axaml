@@ -44,7 +44,7 @@
               </StackPanel>
               <StackPanel Margin="0,0,12,6" Spacing="2">
                 <TextBlock Text="{l:T auto.workers}" FontSize="12" />
-                <NumericUpDown Width="110" Minimum="1" Maximum="8" Increment="1" FormatString="0" Value="{Binding Workers}" />
+                <NumericUpDown Width="110" Minimum="1" Maximum="32" Increment="1" FormatString="0" Value="{Binding Workers}" />
               </StackPanel>
             </WrapPanel>
             <CheckBox Content="{l:T engine.seed}" IsChecked="{Binding SeedLibrary}" />

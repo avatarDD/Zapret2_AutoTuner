@@ -2083,6 +2083,30 @@
   "подбор geneva: поколение {0} из {1} · проверяется сейчас {2} из {3} потоков · проверено {4}",
   "geneva search: generation {0} of {1} · checking now: {2} of {3} threads · checked {4}"
  ],
+ "auto.max_groups": [
+  "Стратегий одновременно",
+  "Strategies at once"
+ ],
+ "help.max_groups": [
+  "Сколько разных стратегий «Авто» применяет одновременно: на каждую запускается свой процесс geneva. Подбору тоже нужно место: пока стратегия проверяется, она занимает одно из них. Если работающих стратегий больше, самые редкие не применяются, и страница об этом предупреждает. По умолчанию 16, можно поднять до 300 — столько сервисов «Авто» вообще помнит.\nПример: 16 и 14 работающих стратегий — рядом идут не больше 2 подборов.",
+  "How many different strategies \"Auto\" applies at once: each gets a geneva process of its own. A search needs a place too: a strategy on trial takes one. With more working strategies the rarest ones are not applied, and the page warns about it. 16 by default, up to 300 — as many services as \"Auto\" keeps at all.\nExample: 16 and 14 working strategies — at most 2 searches side by side."
+ ],
+ "auto.trying_known": [
+  "пробую известные стратегии по одной: {1} из {2} · {0}",
+  "trying the known strategies one by one: {1} of {2} · {0}"
+ ],
+ "auto.known_stage": [
+  "Известные стратегии проверяются по одной, потоки им не нужны: они включаются на следующем этапе, в подборе geneva.",
+  "The known strategies are checked one by one and need no threads: those start at the next stage, geneva's search."
+ ],
+ "auto.queue_waiting": [
+  "Ждут подбора: {0}.",
+  "Waiting for a search: {0}."
+ ],
+ "auto.queue_empty": [
+  "Других сервисов для подбора нет: у остальных обход уже работает или их проверка отложена.",
+  "No other service to search: the rest already work or wait for a later check."
+ ],
  "auto.split_note_one": [
   "С одним потоком подбирается один сервис: добавьте потоков, чтобы делить их.",
   "With one thread one service is searched: add threads to split them."
@@ -2148,8 +2172,8 @@
   "The Auto bypass watches the PC's traffic, notices blocked sites and services (sites, QUIC, DNS, VPN, games, torrents), checks without a bypass that the block is real and finds a geneva strategy for each.\nOrder: turn on → use the internet → look at 'Working strategies'.\nExample: YouTube does not load → a minute later 'searching' → 'bypass works'."
  ],
  "help.workers": [
-  "Сколько стратегий проверяется одновременно при генетическом подборе. Больше потоков — быстрее поиск, но больше соединений к сайту. 1–2 для слабого интернета, 4 — обычно хорошо.\nПример: 4 потока проверяют поколение из 20 стратегий примерно в 4 раза быстрее.",
-  "How many strategies the genetic search checks at once. More threads search faster but open more connections to the site. 1–2 on a slow connection, 4 is usually fine.\nExample: 4 threads check a generation of 20 strategies about 4 times faster."
+  "Сколько стратегий проверяется одновременно при генетическом подборе. Больше потоков — быстрее поиск, но больше соединений к сайту. 1–2 для слабого интернета, 4 — обычно хорошо, больше 32 geneva_c не принимает.\nИзвестные стратегии перед подбором проверяются по одной, потоки работают только в генетическом подборе.\nПример: 4 потока проверяют поколение из 20 стратегий примерно в 4 раза быстрее.",
+  "How many strategies the genetic search checks at once. More threads search faster but open more connections to the site. 1–2 on a slow connection, 4 is usually fine; geneva_c takes at most 32.\nThe known strategies before the search are checked one by one; the threads work only in the genetic search.\nExample: 4 threads check a generation of 20 strategies about 4 times faster."
  ],
  "help.groups": [
   "Одна стратегия часто подходит многим сайтам. Программа объединяет их: одна стратегия — одна группа со всеми её адресами, и новые сайты сначала пробуют стратегии уже работающих групп.\nПример: youtube.com, googlevideo.com, ytimg.com — одна строка с одной стратегией.",

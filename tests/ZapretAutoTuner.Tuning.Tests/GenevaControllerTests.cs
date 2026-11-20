@@ -270,14 +270,14 @@ public sealed class GenevaControllerTests
         Assert.Equal(1, g.Workers);
         g.Workers = 4;
         g.Workers = 99;
-        Assert.Equal(8, g.Workers);
+        Assert.Equal(32, g.Workers);
         Assert.Equal(1, g.Import([new GenevaSharedStrategy { Strategy = "[TCP:flags:PA]-drop-| \\/", Services = ["a.example"] }]));
         Assert.Equal(1, g.Import([
             new GenevaSharedStrategy { Strategy = "[TCP:flags:PA]-drop-| \\/", Services = ["b.example", "A.example"] },
             new GenevaSharedStrategy { Strategy = "[UDP:sport:*]-drop-| \\/" },
         ]));
         var state = GenevaState.Parse(store.Json);
-        Assert.Equal(8, state.Workers);
+        Assert.Equal(32, state.Workers);
         Assert.Equal(2, state.Imported.Count);
         Assert.Equal(["a.example", "b.example"], state.Imported[0].Services);
         // the starting set comes after the user's imports

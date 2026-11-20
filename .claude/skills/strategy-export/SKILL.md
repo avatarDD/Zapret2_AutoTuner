@@ -394,8 +394,10 @@ zapret2 (`zapret-lib`, `-antidpi`, `-auto`, `-obfs`, `-pcap`, `-wgobfs`,
 `Solution.LuaFiles` (по имени), то есть порядок бандла не сохраняет:
 скрипты оркестратора GUI, зависящие от порядка загрузки, у AutoTuner
 могут не подняться (известное ограничение).
-Имя `init_vars` (`tls_rnd`, но и `tls_google`, `tls_youtube`…) в любом
-аргументе-блобе подключает у GUI `init_vars.lua`, и тот присваивает имя
+Имя `init_vars` (`tls_rnd`, но и `tls_google`, `tls_youtube`…) в
+`blob=`/`fake_blob=`/`pattern=`/`seqovl_pattern=` подключает у GUI
+`init_vars.lua` (в `fallback=`/`dataxor=` — нет, там это обычный блоб
+реестра), и тот присваивает имя
 заново, поверх `--blob`, — поэтому в бандл оно не идёт и файл каталога
 за ним не берётся: zapret-gui предупреждает
 при выгрузке, Validator AutoTuner такую стратегию не пропустит

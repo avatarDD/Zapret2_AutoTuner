@@ -289,6 +289,9 @@ internal sealed class GenevaManager : IDisposable
         // an older geneva_c refuses --probe external with several workers: it gets one
         if (settings.Workers > 1 && !(await FeaturesAsync(geneva, ct)).Contains(GenevaBundle.ExternalWorkersFeature))
             settings = settings with { Workers = 1 };
+        // a slot beside another search holds fewer workers in its block of ports (GenevaArgv.SlotWorkers)
+        if (settings.Workers > GenevaArgv.SlotWorkers(slot))
+            settings = settings with { Workers = GenevaArgv.SlotWorkers(slot) };
         var dir = SearchDir(settings.TargetKey);
         CreateOwnDir(Path.GetDirectoryName(dir)!);
         CreateOwnDir(dir);
@@ -531,9 +534,6 @@ internal sealed class GenevaManager : IDisposable
 
     // ---- the "Авто" mode (skill geneva, §9)
 
-    /// <summary>The queues of the "Авто" mode's groups: apart from zapret2's (300–321) and geneva's own (310, 311, 330, 331).</summary>
-    public const int AutoQueueBase = 340;
-
     /// <summary>The owner prefix of the "Авто" mode's rules in the engine firewall.</summary>
     public const string AutoOwner = "geneva-auto/";
 
@@ -595,8 +595,9 @@ internal sealed class GenevaManager : IDisposable
         var reply = new GenevaAutoApplyReply();
         if (r.Groups.Count > 0 && _running.Values.Any(i => i.Mode == "run" && !i.HasExited))
             throw new GenevaStartException("включён обход geneva с одной стратегией: сначала выключите его / the single-strategy geneva bypass is on");
-        if (r.Groups.Count > AutoRules.MaxGroups)
-            throw new GenevaStartException($"больше {AutoRules.MaxGroups} групп / more than {AutoRules.MaxGroups} groups");
+        // the user sets how many (no ceiling of its own): a group serves at least one service, so the book's size bounds it
+        if (r.Groups.Count > AutoRules.MaxServices)
+            throw new GenevaStartException($"больше {AutoRules.MaxServices} групп / more than {AutoRules.MaxServices} groups");
         var geneva = r.Groups.Count > 0 ? Prepare() : _prepared;
         bool windows = OperatingSystem.IsWindows();
         if (r.Groups.Count > 0 && windows)
@@ -667,7 +668,7 @@ internal sealed class GenevaManager : IDisposable
             }
             if (!_auto.TryGetValue(strategy, out var inst))
             {
-                int queue = Enumerable.Range(AutoQueueBase, AutoRules.MaxGroups).FirstOrDefault(q => _auto.Values.All(i => i.Queue != q));
+                int queue = Enumerable.Range(0, AutoRules.MaxServices).Select(AutoRules.GroupQueue).FirstOrDefault(q => _auto.Values.All(i => i.Queue != q));
                 if (queue == 0)
                 {
                     reply.Problems.Add("нет свободной очереди / no free queue");

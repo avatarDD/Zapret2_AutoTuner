@@ -304,6 +304,62 @@ public class AutoTests
     }
 
     [Fact]
+    public void Strategies_over_the_limit_are_named_as_left_out_and_the_trial_keeps_its_place()
+    {
+        // three working strategies on three addresses, room for two: the third runs nowhere and must be named
+        var book = new AutoBook();
+        book.Feed([Sample("web:a.com", AutoHealth.Ok, T0), Sample("web:b.com", AutoHealth.Ok, T0, ip: "203.0.113.6"),
+            Sample("web:c.com", AutoHealth.Ok, T0, ip: "203.0.113.7"), Sample("web:d.com", AutoHealth.Failed, T0, ip: "203.0.113.8")], T0);
+        book.Applied("web:a.com", AutoCandidates.Tcp[0], 400, T0);
+        book.Applied("web:b.com", AutoCandidates.Tcp[0], 400, T0);
+        book.Applied("web:c.com", AutoCandidates.Tcp[1], 400, T0);
+        List<string> left = [];
+        var groups = AutoPlan.Groups(book.Services, [], null, left, maxGroups: 1);
+        Assert.Equal(["web:a.com", "web:b.com"], Assert.Single(groups).Services.Order(StringComparer.Ordinal));
+        Assert.Equal(["web:c.com"], left);
+
+        // a trial always gets its place; the working groups give way
+        left.Clear();
+        groups = AutoPlan.Groups(book.Services, [(book.Find("web:d.com")!, AutoCandidates.Tcp[2])], null, left, maxGroups: 2);
+        Assert.Equal(2, groups.Count);
+        Assert.Equal(AutoCandidates.Tcp[2], groups[0].Strategy);
+        Assert.Equal(["web:c.com"], left);
+
+        // the default leaves room for 16
+        left.Clear();
+        Assert.Equal(2, AutoPlan.Groups(book.Services, [], null, left).Count);
+        Assert.Empty(left);
+    }
+
+    [Fact]
+    public void Group_queues_skip_the_name_based_process_and_the_detector()
+    {
+        var queues = Enumerable.Range(0, AutoRules.MaxServices).Select(AutoRules.GroupQueue).ToList();
+        Assert.Equal(340, queues[0]);
+        Assert.Equal(347, queues[7]);
+        Assert.Equal(350, queues[8]);
+        Assert.Equal(queues.Count, queues.Distinct().Count());
+        Assert.DoesNotContain(AutoRules.HostQueue, queues);
+        Assert.DoesNotContain(AutoRules.ObserveQueue, queues);
+        Assert.All(queues, q => Assert.InRange(q, 340, 65535));
+    }
+
+    [Fact]
+    public void Waiting_counts_the_blocked_services_due_for_a_search()
+    {
+        var book = new AutoBook();
+        book.Feed([Sample("web:a.com", AutoHealth.Failed, T0), Sample("web:b.com", AutoHealth.Failed, T0, ip: "203.0.113.6"),
+            Sample("web:c.com", AutoHealth.Ok, T0, ip: "203.0.113.7")], T0);
+        Assert.Equal(0, book.Waiting(T0));
+        book.Confirmed("web:a.com", AutoConfirm.Blocked, T0);
+        book.Confirmed("web:b.com", AutoConfirm.Blocked, T0);
+        Assert.Equal(2, book.Waiting(T0));
+        book.Searching("web:a.com", T0);
+        Assert.Equal(1, book.Waiting(T0));
+        Assert.Same(book.Find("web:b.com"), book.NextToSearch(T0));
+    }
+
+    [Fact]
     public void Several_services_on_trial_at_once_each_get_their_group_first()
     {
         // the "Авто" mode searching two services side by side: both tried strategies run, before the working ones
@@ -345,10 +401,17 @@ public class AutoTests
         var third = GenevaArgv.Evolve(s, "c", "d", null, slot: 2);
         string After(List<string> argv, string key) => argv[argv.IndexOf(key) + 1];
         Assert.Equal("331", After(first, "-q"));
-        Assert.Equal("30000", After(first, "--local-ports"));
+        Assert.Equal("29184", After(first, "--local-ports"));
         Assert.Equal("333", After(third, "-q"));
-        Assert.Equal("31024", After(third, "--local-ports"));
-        Assert.Equal((30000, 32047), GenevaArgv.AllLocalPorts);
+        Assert.Equal("31744", After(third, "--local-ports"));
+        Assert.Equal((29184, 32767), GenevaArgv.AllLocalPorts);
+        // every slot's workers stay below Linux's ephemeral ports; a side slot holds at most 8 of them
+        Assert.True(GenevaArgv.AllLocalPorts.To < 32768);
+        var wide = s with { Workers = 32 };
+        Assert.Equal("32", After(GenevaArgv.Evolve(wide, "c", "d", null), "--workers"));
+        Assert.Equal("8", After(GenevaArgv.Evolve(wide, "c", "d", null, slot: 1), "--workers"));
+        Assert.Equal(GenevaArgv.LocalPortsOf(0) + 32 * GenevaArgv.LocalPortsCount, GenevaArgv.LocalPortsOf(1));
+        Assert.Equal(GenevaArgv.LocalPortsOf(1) + 8 * GenevaArgv.LocalPortsCount, GenevaArgv.LocalPortsOf(2));
         // eight workers of the last slot stay below the "Авто" groups' ports and every slot's range is apart
         Assert.True(GenevaArgv.LocalPortsOf(GenevaArgv.MaxSearches - 1) + GenevaArgv.MaxWorkers * GenevaArgv.LocalPortsCount <= 65535);
         Assert.True(GenevaArgv.EvalQueueOf(GenevaArgv.MaxSearches - 1) < 340);

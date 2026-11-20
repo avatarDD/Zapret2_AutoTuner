@@ -167,8 +167,18 @@ public static class AutoRules
 
     public const int MaxAddresses = 64;
 
-    /// <summary>Strategies applied at once: one <c>geneva run</c> and one queue each (330 + 10 ...).</summary>
-    public const int MaxGroups = 8;
+    /// <summary>
+    /// Strategies applied at once by default: one <c>geneva run</c> and one queue each (<see cref="GroupQueue"/>).
+    /// The user may set any number (<c>GenevaState.AutoGroups</c>); each of the searches side by side needs a group of
+    /// its own for its trials, so the working strategies must leave room.
+    /// </summary>
+    public const int DefaultMaxGroups = 16;
+
+    /// <summary>
+    /// The queue of the group in place <paramref name="i"/>: 340–347, then from 350 on (348 and 349 are the name-based
+    /// process's and the detector's).
+    /// </summary>
+    public static int GroupQueue(int i) => i < 8 ? 340 + i : 350 + (i - 8);
 
     /// <summary>Known strategies tried on a blocked service before geneva's search.</summary>
     public const int MaxQuickCandidates = 12;
@@ -200,7 +210,7 @@ public static class AutoRules
     public const int WideGenerations = 15;
 
     /// <summary>The probes one search runs at once (geneva's workers): the user's choice, 1 by default.</summary>
-    public const int MaxWorkers = 8;
+    public const int MaxWorkers = GenevaArgv.MaxWorkers;
 
     /// <summary>
     /// Probes in a row a strategy must pass on the service before it is applied: one lucky load (a DPI that lets some
@@ -220,7 +230,7 @@ public static class AutoRules
     /// <summary>zapret2's fakes a wider round tries (<see cref="AutoCandidates.XFor"/>); the next round takes the next ones.</summary>
     public const int FakesPerRound = 8;
 
-    /// <summary>The queue of the process that applies strategies by name: after the groups' 340–347.</summary>
+    /// <summary>The queue of the process that applies strategies by name: between the groups' 340–347 and 350 on.</summary>
     public const int HostQueue = 348;
 
     /// <summary>Ports whose connections the name-based process sees (TLS and HTTP; QUIC over UDP 443).</summary>

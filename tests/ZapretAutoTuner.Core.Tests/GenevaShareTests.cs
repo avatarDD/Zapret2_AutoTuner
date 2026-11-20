@@ -159,10 +159,13 @@ public sealed class GenevaShareTests
     public void Every_workers_ports_are_the_searchs_not_the_users()
     {
         Assert.True(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase));
-        Assert.True(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase + GenevaArgv.LocalPortsCount * 7 + 63));
+        Assert.True(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase + (GenevaArgv.MaxWorkers - 1) * GenevaArgv.LocalPortsCount + 63));
         // every search slot's workers (several searches of "Авто" side by side)
-        Assert.True(AutoObserver.IsProbePort(GenevaArgv.LocalPortsOf(GenevaArgv.MaxSearches - 1) + GenevaArgv.LocalPortsCount * 7 + 63));
-        Assert.False(AutoObserver.IsProbePort(GenevaArgv.LocalPortsOf(GenevaArgv.MaxSearches - 1) + GenevaArgv.LocalPortsCount * 8));
+        int last = GenevaArgv.MaxSearches - 1;
+        Assert.True(AutoObserver.IsProbePort(GenevaArgv.LocalPortsOf(last) + (GenevaArgv.SlotWorkers(last) - 1) * GenevaArgv.LocalPortsCount + 63));
+        Assert.False(AutoObserver.IsProbePort(GenevaArgv.LocalPortsOf(last) + GenevaArgv.LocalPortsCount * GenevaArgv.SlotWorkers(last)));
+        // the user's own traffic below the probes' range (a game's 27005) stays the user's
+        Assert.False(AutoObserver.IsProbePort(27005));
         Assert.False(AutoObserver.IsProbePort(GenevaArgv.LocalPortsBase - 1));
     }
 
@@ -257,7 +260,8 @@ public sealed class GenevaShareTests
         Assert.Equal("4", argv[argv.IndexOf("--workers") + 1]);
         Assert.Empty(s.Problems());
         Assert.NotEmpty((s with { Workers = 0 }).Problems());
-        Assert.NotEmpty((s with { Workers = 9 }).Problems());
+        Assert.NotEmpty((s with { Workers = 33 }).Problems());
+        Assert.Empty((s with { Workers = 32 }).Problems());
         Assert.Equal("1", GenevaArgv.Evolve(new GenevaSearchSettings { Host = "blocked.example" }, "c", "d", null) is var a ? a[a.IndexOf("--workers") + 1] : "");
     }
 }

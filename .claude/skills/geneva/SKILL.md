@@ -51,7 +51,7 @@ action   := name ["{" params "}"] ["(" [left] "," [right] ")"]
 | режим | argv | очередь |
 |---|---|---|
 | обход | `run [--ext] -s S -p PORTS -q 330 -c tcp:PORT -e - --stats-interval 2 --quiet [--ipset-exclude-ip F --hostlist-exclude-domains D]` | 330 |
-| подбор | `evolve --probe external --host H --port P --population N --generations G --workers W --local-ports 30000+512*k -q 331+k --checkpoint C --db D --target external:H:P --top 10 -e - --quiet` + `--resume` или `--load-from seeds.txt` | 331–334 |
+| подбор | `evolve --probe external --host H --port P --population N --generations G --workers W --local-ports GenevaArgv.LocalPortsOf(k) -q 331+k --checkpoint C --db D --target external:H:P --top 10 -e - --quiet` + `--resume` или `--load-from seeds.txt` | 331–334 |
 
 `--ext` (geneva_c 2.0) ставится, когда стратегия содержит x-действие или
 триггер `[L7:|FLOW:|META:` (`GenevaStrategyText.NeedsExt`) или заданы
@@ -66,7 +66,7 @@ geneva_c, «x-действия»), без неё x-действия семян �
 zapret2-методов: `blockcheck --ext --print-grid --test tls12|http3 --level
 quick` (`GenevaBundle.GridAsync`, равномерная выборка колонки geneva).
 
-`W` — «Потоков подбора» (1–8, `GenevaSearchSettings.Workers`). Больше 1
+`W` — «Потоков подбора» (1–32, предел geneva_c `EVAL_MAX_WORKERS`, `GenevaSearchSettings.Workers`). Больше 1
 только при фиче `external_workers` (geneva_c 1.2): Agent иначе ставит 1.
 Каждый поток geneva шлёт свой `eval_request` с блоком портов
 `30000+64*i`; контроллер отвечает на них параллельно (`Task.Run`), при
@@ -103,7 +103,7 @@ JSON Lines в stdout: `start`, `eval_request`, `eval`, `baseline`,
 ## 5. Подбор: успех — полная загрузка (правило 5)
 
 `--probe external`: geneva сама не судит. На каждый кандидат она пишет
-`eval_request {id, strategy, run, lports:"30000-30063"}`, перехватывает
+`eval_request {id, strategy, run, lports:"29184-29247"}`, перехватывает
 только соединения с этих локальных портов, а UI делает L2 HttpProbe
 (полная загрузка тела) с порта из блока (`GenevaArgv.LocalPort`) и отвечает
 в stdin `{"id":N,"fitness":F,"detail":"..."}`. Первый запрос — с пустой
@@ -352,7 +352,12 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
    `HandshakesAsync`); сайт хранит два ClientHello разной длины
    (`Replay`/`ReplayAlt`, например Chrome с Kyber и без).
 6. **Применение.** Активные сервисы (`Applied`, `Degraded`) группируются
-   по стратегии; ≤ 8 групп, одна `geneva run` на группу, очереди 340–347.
+   по стратегии; групп не больше настройки «Стратегий одновременно»
+   (`GenevaState.AutoGroups`, по умолчанию `AutoRules.DefaultMaxGroups` = 16,
+   до `MaxServices` = 300), одна `geneva run`
+   на группу, очереди 340–347, затем с 350 (`AutoRules.GroupQueue`). Группы сверх
+   лимита (самые маленькие) не запускаются: их сервисы попадают в
+   `AutoPlan.Groups(…, left)`, и страница пишет об этом в «Проблемах».
    Linux: `--firewall none` + правила в таблице `inet ztuner` через
    `FirewallManager.Replace("geneva-auto/", …)`: адреса и порты сервиса
    (DNS — tcp и udp 53; DHT — по исходному порту), первые 12 исходящих и
@@ -455,7 +460,7 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
     потоки», MCP `geneva_auto_lists split_workers`). Выключено: один сервис
     за раз со всеми потоками. Включено: мест `min(потоки, 4)`
     (`GenevaController.AutoSearches`, но не больше свободных групп:
-    `GenevaAuto.SearchSlots`, `AutoRules.MaxGroups` минус рабочие), каждому
+    `GenevaAuto.SearchSlots`, `GenevaController.AutoGroups` минус рабочие), каждому
     подбору `потоки / мест` (`AutoWorkers`): сумма не больше заданного,
     когда бы подбор ни начался. `GenevaAuto._works` — по
     сервису: задача, CTS, пробуемая стратегия; все пробы сразу идут в
@@ -464,7 +469,7 @@ Agent `GenevaManager.AutoApplyAsync` (gRPC `GenevaAutoApply`).
     группа одного забрала бы адрес другого. Прерывание ради важного: если
     его держат подборы на тех же адресах — уступают они (все менее важные),
     иначе только когда заняты все места — наименее важный. Пробы подборов
-    идут с портов 30000–32047 (`GenevaArgv.AllLocalPorts`), наблюдение
+    идут с портов 29184–32767 (`GenevaArgv.AllLocalPorts`: место 0 — 32 потока, остальные по 8; ниже эфемерных портов Linux), наблюдение
     `AutoObserver.IsProbePort` их пропускает. База geneva — своя у каждой
     цели (`searches/<hash>/db.jsonl`; общий `db.jsonl` прежних версий
     копируется по цели при первом подборе и читается в `InfoAsync` для

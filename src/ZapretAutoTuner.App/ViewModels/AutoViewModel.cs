@@ -105,6 +105,7 @@ public sealed partial class AutoViewModel : PageViewModel
     {
         _host = host;
         _workers = host.Geneva.Workers;
+        _maxGroups = host.Geneva.AutoGroups;
         _splitIndex = host.Geneva.AutoSplit ? 1 : 0;
         host.Geneva.Changed += () => _dirty = true;
         host.GenevaAuto.Changed += () => _dirty = true;
@@ -226,6 +227,17 @@ public sealed partial class AutoViewModel : PageViewModel
         }
     }
 
+    /// <summary>Strategies applied at once (one group each): 16 by default, as many as the user wants.</summary>
+    [ObservableProperty]
+    private decimal? _maxGroups;
+
+    partial void OnMaxGroupsChanged(decimal? value)
+    {
+        if (value is { } v && (int)Math.Clamp(v, 1, AutoRules.MaxServices) is var n && n != _host.Geneva.AutoGroups)
+            _host.Geneva.AutoGroups = n;
+        WorkersNote = WorkersText();
+    }
+
     /// <summary>0: all threads search one service; 1: they are split between several services searched at once.</summary>
     [ObservableProperty]
     private int _splitIndex;
@@ -246,7 +258,14 @@ public sealed partial class AutoViewModel : PageViewModel
             notes.Add(g.AutoSearches > 1 ? L.F("auto.split_note", g.AutoSearches, g.AutoWorkers) : L["auto.split_note_one"]);
             // the working strategies hold the groups the searches need for their trials: fewer run side by side
             if (_host.GenevaAuto.View is { Running: true, SearchSlots: var now } && now < g.AutoSearches)
-                notes.Add(L.F("auto.split_limited", now, AutoRules.MaxGroups));
+                notes.Add(L.F("auto.split_limited", now, g.AutoGroups));
+        }
+        // what the threads do now: the known strategies go one by one, and with nothing waiting nothing more can start
+        if (_host.GenevaAuto.View is { Running: true } view && view.Searches.Count > 0)
+        {
+            if ((Workers ?? 1) > 1 && view.Searches.All(w => w.Step > 0))
+                notes.Add(L["auto.known_stage"]);
+            notes.Add(view.Waiting > 0 ? L.F("auto.queue_waiting", view.Waiting) : L["auto.queue_empty"]);
         }
         if ((Workers ?? 1) > 1 && !_workersSupported)
             notes.Add(L["auto.workers_old"]);
@@ -626,6 +645,8 @@ public sealed partial class AutoViewModel : PageViewModel
         int split = _host.Geneva.AutoSplit ? 1 : 0;
         if (split != SplitIndex)
             SplitIndex = split;
+        if (MaxGroups != _host.Geneva.AutoGroups)
+            MaxGroups = _host.Geneva.AutoGroups;
         bool en = Loc.Loc.I.English;
         var a = _host.GenevaAuto.View;
         var searches = _host.Geneva.Searches;
@@ -649,7 +670,8 @@ public sealed partial class AutoViewModel : PageViewModel
                 var (status, brush) = AutoStatusText(x.Status);
                 var work = x.Status == AutoStatus.Searching ? a.Searches.FirstOrDefault(w => w.Key == x.Key) : null;
                 var evolve = work?.SearchId is { } sid ? searches.FirstOrDefault(v => v.Id == sid) : null;
-                var detail = work?.Trying is { } t ? L.F("engine.auto_trying", t)
+                var detail = work is { Trying: { } kt, Step: > 0 } ? L.F("auto.trying_known", kt, work.Step, work.Steps)
+                    : work?.Trying is { } t ? L.F("engine.auto_trying", t)
                     : evolve is not null ? L.F("auto.evolving", Math.Max(0, evolve.Generation + 1), evolve.Generations, evolve.Probing, evolve.Workers, evolve.Evaluated)
                     : x.Why;
                 var tags = new List<string>();

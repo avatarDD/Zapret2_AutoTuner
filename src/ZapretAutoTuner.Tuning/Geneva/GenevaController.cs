@@ -1209,6 +1209,13 @@ public sealed class GenevaController : IAsyncDisposable
         set => Update(s => s with { AutoSplit = value });
     }
 
+    /// <summary>Strategies the "Авто" mode applies at once (<see cref="GenevaState.AutoGroups"/>): at least 1.</summary>
+    public int AutoGroups
+    {
+        get => Math.Clamp(State.AutoGroups, 1, AutoRules.MaxServices);
+        set => Update(s => s with { AutoGroups = Math.Clamp(value, 1, AutoRules.MaxServices) });
+    }
+
     /// <summary>Searches the "Авто" mode runs side by side now: 1, or with <see cref="AutoSplit"/> one per worker, at most <see cref="GenevaArgv.MaxSearches"/>.</summary>
     public int AutoSearches => AutoSplit ? Math.Clamp(Workers, 1, GenevaArgv.MaxSearches) : 1;
 

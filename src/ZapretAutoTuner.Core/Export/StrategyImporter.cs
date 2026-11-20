@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using ZapretAutoTuner.Core.Catalog;
 using ZapretAutoTuner.Core.Engine;
 using ZapretAutoTuner.Core.Model;
 
@@ -172,7 +173,8 @@ public static partial class StrategyImporter
         {
             foreach (var l in root[key]?.AsArray().OfType<JsonObject>() ?? [])
             {
-                var items = (l["domains"] ?? l["cidrs"])?.AsArray().Select(x => (string?)x).OfType<string>() ?? [];
+                // a bundle has "domains"/"cidrs"; a zapret-gui backup keeps an ipset's lines under "entries"
+                var items = (l["domains"] ?? l["cidrs"] ?? l["entries"])?.AsArray().Select(x => (string?)x).OfType<string>() ?? [];
                 all[$"lists/{(string?)l["name"]}.txt"] = Encoding.UTF8.GetBytes(ExportCommon.ListLines(items));
             }
         }
@@ -205,15 +207,37 @@ public static partial class StrategyImporter
         return new ImportResult(format ?? "zapret-gui-strategy", s, warnings);
     }
 
+    /// <summary>
+    /// Blob names a profile takes from the GUI's registry. tls_client_hello_clone writes its clone into the desync
+    /// variable named by blob= and reads the blob named by fallback=; later calls of the same profile use the clone
+    /// by that variable name, which is not a blob. fake_blob= (the GUI's fakemultisplit/fakemultidisorder) and
+    /// dataxor= (ippxor) name blobs too, as in zapret-gui's bundle_import.desync_blob_refs.
+    /// </summary>
+    private static IEnumerable<string> RegistryBlobRefs(Profile p)
+    {
+        var calls = p.Strategy.Calls.ToList();
+        var produced = calls.Where(c => c.Function == "tls_client_hello_clone").Select(c => c["blob"]).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        foreach (var c in calls)
+        {
+            bool clone = c.Function == "tls_client_hello_clone";
+            foreach (var a in c.Args)
+            {
+                if (a.Value is null)
+                    continue;
+                if (clone ? a.Name == "fallback" : (a.Name is "blob" or "pattern" or "seqovl_pattern" or "fake_blob" or "dataxor") && !produced.Contains(a.Value))
+                    yield return a.Value;
+            }
+        }
+    }
+
     /// <summary>The argv in the model: profiles, the lists and blobs they use read from the files.</summary>
     private static Solution FromArgv(List<string> argv, IReadOnlyDictionary<string, byte[]> files, List<string> warnings, bool registryBlobs = false)
     {
         var parsed = EngineArgsParser.Parse(argv);
         if (registryBlobs)
         {
-            foreach (var name in parsed.Profiles.SelectMany(p => p.Strategy.Calls).SelectMany(c => c.Args)
-                .Where(a => a.Name is "blob" or "pattern" or "seqovl_pattern" && Identifiers.IsLuaIdentifier(a.Value) && !a.Value!.StartsWith("fake_default_", StringComparison.Ordinal))
-                .Select(a => a.Value!).Distinct().Where(n => !parsed.Blobs.ContainsKey(n)).ToList())
+            foreach (var name in parsed.Profiles.SelectMany(RegistryBlobRefs).Distinct()
+                .Where(n => Identifiers.IsLuaIdentifier(n) && !LuaCatalog.Default.BuiltinBlobs.Contains(n) && !parsed.Blobs.ContainsKey(n)).ToList())
                 parsed.Blobs[name] = $"@{name}.bin";
         }
         foreach (var (tok, why) in parsed.Problems)

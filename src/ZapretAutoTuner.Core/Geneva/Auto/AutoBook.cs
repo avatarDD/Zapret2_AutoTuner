@@ -91,6 +91,12 @@ public sealed class AutoService
     /// <summary>Slices in a row that found it suspicious: a service no probe can judge is blocked after two.</summary>
     public int Suspicions { get; set; }
 
+    /// <summary>
+    /// Probes in a row that found a degraded service's server not answering even with its bypass: a short outage must not
+    /// cost a working strategy, so it is dropped as an address block only after <see cref="AutoRules.TimeoutsToDrop"/>.
+    /// </summary>
+    public int Timeouts { get; set; }
+
     [JsonIgnore]
     public bool CanReplay => Replay.Length > 0;
 
@@ -215,6 +221,12 @@ public sealed class AutoBook
 
     /// <summary>The traffic no bypass may touch: a VPN or proxy server, whatever the user named.</summary>
     public AutoNameList Excluded => _excluded;
+
+    /// <summary>
+    /// The applied services whose strategy got no group at the last apply («Стратегий одновременно»): their bypass is not
+    /// running, so their flows, the detector and the routine check say nothing about the strategy and are not judged.
+    /// </summary>
+    public IReadOnlySet<string> LeftOut { get; set; } = new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>
     /// Takes the user's lists: priorities are computed again, and services the exclusions now name leave the book (their
@@ -468,6 +480,10 @@ public sealed class AutoBook
                     if (!suspicious)
                         Move(s, AutoStatus.Watching, now, "");
                     break;
+                case AutoStatus.Applied when LeftOut.Contains(s.Key):
+                    // its bypass is not running: what its flows did until it gets a group again does not count
+                    s.AppliedAt = now;
+                    break;
                 case AutoStatus.Applied when s.AppliedAt is { } at:
                 {
                     // only what happened with the strategy on counts
@@ -595,7 +611,8 @@ public sealed class AutoBook
                 _ => false,
             };
             // an applied strategy too, once it had time to settle: the probe with its bypass then decides
-            bool applied = s.Status == AutoStatus.Applied && s.Strategy is not null && s.AppliedAt is { } at && now - at >= AutoRules.DetectorHold;
+            bool applied = s.Status == AutoStatus.Applied && s.Strategy is not null && !LeftOut.Contains(s.Key)
+                && s.AppliedAt is { } at && now - at >= AutoRules.DetectorHold;
             if (!match || s.Status is not (AutoStatus.Watching or AutoStatus.Fallback or AutoStatus.Suspected) && !applied
                 && !(s.Status is AutoStatus.NotBlocked && (s.NextCheck is null || now >= s.NextCheck)))
                 continue;
@@ -625,7 +642,7 @@ public sealed class AutoBook
     /// shows here even when the slices and the detector miss it (the user's "Проверить сейчас", done by the mode).
     /// </summary>
     public AutoService? NextRoutineCheck(DateTime now, Func<AutoService, bool>? allowed = null) => _services.Values
-        .Where(s => s.Status == AutoStatus.Applied && s.Strategy is not null && !s.Pinned && s.Probeable
+        .Where(s => s.Status == AutoStatus.Applied && s.Strategy is not null && !s.Pinned && s.Probeable && !LeftOut.Contains(s.Key)
             && now - s.LastSeen <= AutoRules.RoutineCheck && now - LastChecked(s) >= AutoRules.RoutineCheck
             && (allowed is null || allowed(s)))
         .OrderBy(s => AutoPriorities.Effective(s, now))
@@ -776,6 +793,7 @@ public sealed class AutoBook
         {
             case AutoConfirm.NotBlocked when degraded:
                 // the strategy still works: the failures were something else
+                s.Timeouts = 0;
                 s.Fails.Clear();
                 s.NoConnections.Clear();
                 s.Detected.Clear();
@@ -786,7 +804,15 @@ public sealed class AutoBook
                 s.NextCheck = now + AutoRules.NotBlockedPause;
                 Move(s, AutoStatus.NotBlocked, now, "без обхода открывается");
                 return $"{s.Name}: без обхода открывается, это не блокировка";
+            case AutoConfirm.IpBlocked when degraded && (s.Pinned || s.Timeouts + 1 < AutoRules.TimeoutsToDrop):
+                // the server does not answer even with the bypass: an outage or an address block; the strategy stays (a
+                // pinned one always) and the probe looks again later
+                s.Timeouts++;
+                s.NextCheck = now + AutoRules.TimeoutRecheck;
+                s.Why = "сервер не отвечает и с обходом; проверю позже";
+                return $"{s.Name}: сервер не отвечает и с обходом, оставляю стратегию и проверю позже / the server does not answer, keeping the strategy";
             case AutoConfirm.IpBlocked:
+                s.Timeouts = 0;
                 s.NextCheck = now + AutoRules.IpBlockedPause;
                 Move(s, AutoStatus.IpBlocked, now, "блокировка по адресу: geneva не поможет, нужен туннель");
                 return $"{s.Name}: блокировка по адресу, обход пакетами не поможет";
@@ -827,6 +853,7 @@ public sealed class AutoBook
         s.Fitness = fitness;
         s.AppliedAt = now;
         s.Attempts = 0;
+        s.Timeouts = 0;
         s.NextCheck = null;
         s.Fails.Clear();
         s.NoConnections.Clear();

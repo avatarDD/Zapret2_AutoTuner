@@ -170,6 +170,12 @@ public static class AutoRules
     /// <summary>An address block is looked at again after this (it may be lifted).</summary>
     public static TimeSpan IpBlockedPause { get; } = TimeSpan.FromHours(6);
 
+    /// <summary>Probes in a row with no answer even with the bypass before a degraded service is taken for an address block.</summary>
+    public const int TimeoutsToDrop = 3;
+
+    /// <summary>When a degraded service whose server did not answer with the bypass is probed again.</summary>
+    public static TimeSpan TimeoutRecheck { get; } = TimeSpan.FromMinutes(5);
+
     /// <summary>The first pause before a search that found nothing runs again; it doubles up to <see cref="MaxRetryPause"/>.</summary>
     public static TimeSpan RetryPause { get; } = TimeSpan.FromHours(1);
 

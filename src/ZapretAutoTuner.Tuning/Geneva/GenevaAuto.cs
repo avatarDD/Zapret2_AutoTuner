@@ -780,9 +780,23 @@ public sealed class GenevaAuto : IAsyncDisposable
         }
         if (s is null)
             return;
-        // Unknown (no address to probe yet): nothing to hold against the strategy, and the next one waits its turn
-        bool ok = await _probes.CheckAsync(s, ct).ConfigureAwait(false) is AutoConfirm.NotBlocked or AutoConfirm.Unknown
-            && await _probes.HandshakesAsync(s, ct).ConfigureAwait(false);
+        // the check's own connections are not the user's traffic: counted, they would keep the service "in use" (checked
+        // again every half hour forever) and their successes would hide the user's failing flows
+        var own = new OwnLoad(_now() - OwnLoadSlack, new[] { s.Host, s.Name }.Where(x => x.Length > 0));
+        lock (_lock)
+            _ownLoads.Add(own);
+        bool ok;
+        try
+        {
+            // Unknown (no address to probe yet): nothing to hold against the strategy, and the next one waits its turn
+            ok = await _probes.CheckAsync(s, ct).ConfigureAwait(false) is AutoConfirm.NotBlocked or AutoConfirm.Unknown
+                && await _probes.HandshakesAsync(s, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_lock)
+                own.To = _now() + OwnLoadSlack;
+        }
         string line;
         lock (_lock)
             line = _book.RoutineChecked(s.Key, s.Strategy!, ok, _now());
@@ -1257,7 +1271,14 @@ public sealed class GenevaAuto : IAsyncDisposable
         {
             lock (_lock)
                 own.To = _now() + OwnLoadSlack;
-            _browserGate.Release();
+            try
+            {
+                _browserGate.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // the program closed while the page loaded (DisposeAsync waits for it only so long)
+            }
         }
     }
 
@@ -1423,6 +1444,7 @@ public sealed class GenevaAuto : IAsyncDisposable
                 // the address groups keep every site's traffic
                 var covered = byName && _byName && _hostUp ? AutoPlan.ByNameCovers(_book.Services, hosts) : null;
                 groups = AutoPlan.Groups(_book.Services, trials, covered, left, _controller.AutoGroups);
+                _book.LeftOut = left.ToHashSet(StringComparer.Ordinal);
                 left = [.. left.Select(k => _book.Find(k)?.Name ?? k)];
                 excluded = _book.Excluded;
             }

@@ -69,6 +69,9 @@ public sealed record GenevaSearchView
     /// <summary>Strategies judged at once (geneva's workers) as asked; the Agent may run fewer.</summary>
     public int Workers { get; init; } = 1;
 
+    /// <summary>Strategies being judged right now (probes in flight): up to <see cref="Workers"/>.</summary>
+    public int Probing { get; init; }
+
     /// <summary>Why the last search ended, in Russian and English; null while it runs or before the first.</summary>
     public (string Ru, string En)? Ended { get; init; }
 
@@ -205,6 +208,9 @@ public sealed class GenevaController : IAsyncDisposable
         public CancellationTokenSource ProbeCts { get; } = new();
 
         public bool StopRequested { get; set; }
+
+        /// <summary>geneva exited: the probes still running are not counted.</summary>
+        public bool Exited { get; set; }
 
         public (string Ru, string En)? PortsUnavailable { get; set; }
 
@@ -469,6 +475,11 @@ public sealed class GenevaController : IAsyncDisposable
                 if (o.Exited)
                 {
                     exitCode = o.ExitCode;
+                    lock (_lock)
+                    {
+                        slot.Exited = true;
+                        slot.View = slot.View with { Probing = 0 };
+                    }
                     break;
                 }
                 if (o.Log.Length > 0)
@@ -533,7 +544,7 @@ public sealed class GenevaController : IAsyncDisposable
         GenevaSearchView view;
         lock (_lock)
         {
-            view = slot.View with { Running = false, Ended = ended, Stopped = (stopped && reason != "done") || exitCode == -1 };
+            view = slot.View with { Running = false, Probing = 0, Ended = ended, Stopped = (stopped && reason != "done") || exitCode == -1 };
             _searches.Remove(id);
             _search = view;
         }
@@ -682,6 +693,7 @@ public sealed class GenevaController : IAsyncDisposable
         var lports = e.Str("lports") ?? "";
         int fitness;
         string detail;
+        Probing(slot, +1);
         try
         {
             GenevaJudge judge = slot.Judge ?? ((port, c) => PageJudgeAsync(slot, port, lports, e.Str("strategy") ?? "", c));
@@ -719,6 +731,10 @@ public sealed class GenevaController : IAsyncDisposable
             // geneva waits for every answer: a probe that throws still gets one
             (fitness, detail) = (-400, "failed: " + ex.Message);
         }
+        finally
+        {
+            Probing(slot, -1);
+        }
         try
         {
             await agent.AnswerAsync(id, reqId, fitness, detail, ct).ConfigureAwait(false);
@@ -727,6 +743,17 @@ public sealed class GenevaController : IAsyncDisposable
         {
             // the search was stopped while the probe ran
         }
+    }
+
+    /// <summary>
+    /// One more (or one less) of the search's strategies being judged now: the pages show how many run at once. No
+    /// <see cref="Changed"/> of its own (the pages see it with the next eval); none after geneva exited, whose probes
+    /// still running answer nobody.
+    /// </summary>
+    private void Probing(SearchSlot slot, int delta)
+    {
+        lock (_lock)
+            slot.View = slot.View with { Probing = slot.Exited ? 0 : Math.Max(0, slot.View.Probing + delta) };
     }
 
     /// <summary>

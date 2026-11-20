@@ -323,6 +323,14 @@
   "Порты",
   "Ports"
  ],
+ "engine.probing": [
+  "проверяется сейчас {0} из {1} потоков",
+  "checking now: {0} of {1} threads"
+ ],
+ "engine.others": [
+  "Одновременно идут и другие подборы:",
+  "Other searches run at the same time:"
+ ],
  "engine.progress": [
   "{4}: поколение {0} из {1} · проверено стратегий {2} · загрузили сайт {3}",
   "{4}: generation {0} of {1} · strategies checked {2} · loaded the site {3}"
@@ -2066,6 +2074,14 @@
  "auto.split_note": [
   "Одновременно подбирается до {0} сервисов, по {1} потока на каждый.",
   "Up to {0} services are searched at once, {1} threads each."
+ ],
+ "auto.split_limited": [
+  "Сейчас одновременно идёт не больше {0}: каждому подбору нужна своя группа, а из {1} групп остальные заняты работающими стратегиями.",
+  "Now at most {0} run at once: each search needs a group of its own, and the working strategies hold the rest of the {1} groups."
+ ],
+ "auto.evolving": [
+  "подбор geneva: поколение {0} из {1} · проверяется сейчас {2} из {3} потоков · проверено {4}",
+  "geneva search: generation {0} of {1} · checking now: {2} of {3} threads · checked {4}"
  ],
  "auto.split_note_one": [
   "С одним потоком подбирается один сервис: добавьте потоков, чтобы делить их.",

@@ -32,8 +32,11 @@ public sealed record AutoGroupView
     public bool Trial { get; init; }
 }
 
-/// <summary>One service the "Авто" mode searches now, and the strategy it tries on the service's traffic.</summary>
-public sealed record AutoSearchView(string Key, string Name, string? Trying);
+/// <summary>
+/// One service the "Авто" mode searches now, and the strategy it tries on the service's traffic; <paramref name="SearchId"/>
+/// is geneva's search for it while that runs (its progress is <see cref="GenevaController.Searches"/>).
+/// </summary>
+public sealed record AutoSearchView(string Key, string Name, string? Trying, string? SearchId = null);
 
 /// <summary>The "Авто" mode as the page and MCP see it.</summary>
 public sealed record GenevaAutoView
@@ -64,6 +67,12 @@ public sealed record GenevaAutoView
 
     /// <summary>Every service being searched now (several when the workers are split between services).</summary>
     public IReadOnlyList<AutoSearchView> Searches { get; init; } = [];
+
+    /// <summary>
+    /// Searches that may run side by side now: the setting's, fewer when the working strategies hold the groups a
+    /// search needs for its trials (<see cref="AutoRules.MaxGroups"/>).
+    /// </summary>
+    public int SearchSlots { get; init; } = 1;
 
     public IReadOnlyList<string> Problems { get; init; } = [];
 
@@ -142,6 +151,9 @@ public sealed class GenevaAuto : IAsyncDisposable
 
         public string? Trying { get; set; }
 
+        /// <summary>geneva's search for the service while it runs.</summary>
+        public string? SearchId { get; set; }
+
         /// <summary>The browser checks <see cref="Trying"/>: it also goes by name to the site's family (<see cref="AutoPlan.TrialFamilies"/>).</summary>
         public bool Related { get; set; }
     }
@@ -153,6 +165,16 @@ public sealed class GenevaAuto : IAsyncDisposable
             if (_works.TryGetValue(key, out var w))
                 w.Trying = strategy;
         }
+    }
+
+    private void SetSearchId(string key, string? id)
+    {
+        lock (_lock)
+        {
+            if (_works.TryGetValue(key, out var w))
+                w.SearchId = id;
+        }
+        Changed?.Invoke();
     }
 
     /// <param name="capture">The Agent's capture of the whole PC (AGENTS.md rule 6).</param>
@@ -295,7 +317,8 @@ public sealed class GenevaAuto : IAsyncDisposable
                     Groups = [.. _groups],
                     Current = _works.Values.FirstOrDefault()?.Name,
                     Trying = _works.Values.FirstOrDefault()?.Trying,
-                    Searches = [.. _works.Values.Select(w => new AutoSearchView(w.Key, w.Name, w.Trying))],
+                    Searches = [.. _works.Values.Select(w => new AutoSearchView(w.Key, w.Name, w.Trying, w.SearchId))],
+                    SearchSlots = SearchSlots(),
                     Problems = [.. _problems],
                     Limited = _limited,
                     ByName = _byName && _controller.ByName,
@@ -1024,6 +1047,7 @@ public sealed class GenevaAuto : IAsyncDisposable
                 : restartWide ? $"{s.Name}: подбор geneva шире: популяция {settings.Population}, слои {settings.Protos}"
                 : $"{s.Name}: подбор geneva");
             var id = await _controller.StartSearchAsync(settings, ct, _probes.Judge(s), auto: true).ConfigureAwait(false);
+            SetSearchId(s.Key, id);
             GenevaSearchView view;
             try
             {
@@ -1074,6 +1098,7 @@ public sealed class GenevaAuto : IAsyncDisposable
         finally
         {
             _controller.SearchEnded -= OnEnded;
+            SetSearchId(s.Key, null);
         }
     }
 

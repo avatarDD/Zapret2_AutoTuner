@@ -391,6 +391,10 @@ public sealed class GenevaAutoTests
         lock (agent.Started)
             Assert.All(agent.Started.Where(r => r.Mode == "evolve"), r => Assert.Equal(2, r.Workers));
         Assert.Equal(2, auto.View.Searches.Count);
+        // 8 threads split: up to 4 side by side, nothing holds the groups; each service names its geneva search
+        Assert.Equal(4, auto.View.SearchSlots);
+        await Until(() => auto.View.Searches.All(x => x.SearchId is not null), seconds: 10);
+        Assert.Equal(controller.Searches.Select(x => x.Id).ToHashSet(), auto.View.Searches.Select(x => x.SearchId!).ToHashSet());
         Assert.Contains("8.8.8.8", auto.CurrentPhase.En, StringComparison.Ordinal);
         Assert.Contains("1.1.1.1", auto.CurrentPhase.En, StringComparison.Ordinal);
         agent.Hold.SetResult();
